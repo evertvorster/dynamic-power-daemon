@@ -39,6 +39,7 @@ This will set up the service to run at startup and ensure the daemon is running.
 ## Configuration
 
 You can adjust the load thresholds and power profiles by editing the configuration file `/etc/dynamic-power.conf`.
+This file won't exist until the first run, when it is created. Once it is there, settings made in the file will not be overwritten.
 
 ### Example configuration:
 

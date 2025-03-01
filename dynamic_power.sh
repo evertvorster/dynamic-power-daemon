@@ -17,14 +17,15 @@ if [ ! -f "$CONFIG_FILE" ]; then
 # dynamic-power.conf
 
 # CPU load thresholds (in decimal values)
-low_threshold=1.0
-medium_threshold=2.0
-high_threshold=3.0
+LOW_LOAD=1.0
+HIGH_LOAD=2.0
+CHECK_INTERVAL=10
 #AC notification path and file
 AC_PATH="/sys/class/power_supply/ADP0/online"
 EOF
 
     echo "Default configuration created at $CONFIG_FILE"
+fi
 
 # Read config if it exists
 if [[ -f "$CONFIG_FILE" ]]; then
