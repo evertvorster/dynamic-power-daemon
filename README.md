@@ -86,5 +86,5 @@ To uninstall the daemon:
 
 ## License
 
-This project is licensed under the GPL-3.0 License.
+This project is licensed under the GPL-3.0-or-later License.
 
