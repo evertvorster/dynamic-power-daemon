@@ -8,6 +8,24 @@ CHECK_INTERVAL=10
 AC_PATH="/sys/class/power_supply/ADP0/online"
 LAST_MODE=""
 
+# Check if the configuration file exists, and create if not.
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Configuration file not found. Creating default configuration..."
+
+    # Create the configuration file with default settings
+    cat <<EOF > "$CONFIG_FILE"
+# dynamic-power.conf
+
+# CPU load thresholds (in decimal values)
+low_threshold=1.0
+medium_threshold=2.0
+high_threshold=3.0
+#AC notification path and file
+AC_PATH="/sys/class/power_supply/ADP0/online"
+EOF
+
+    echo "Default configuration created at $CONFIG_FILE"
+
 # Read config if it exists
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
