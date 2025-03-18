@@ -58,7 +58,7 @@ while true; do
     fi
     echo "Recording Mode: $RECORDING_MODE"
     
-    echo "\nPress 'q' to quit."
+    echo "Press 'q' to quit."
     read -t 1 -n 1 key
     if [[ "$key" == "q" ]]; then
         break
