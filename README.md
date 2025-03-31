@@ -9,6 +9,7 @@ This is a lightweight Linux daemon that dynamically adjusts the system's power p
 - Supports both `powerprofilesctl` and `asusctl` for power profile management.
 - Configurable thresholds and settings via `/etc/dynamic-power.conf`.
 - Monitors a configurable process (`obs` by default) for "recording mode", ensuring low-noise operation while adjusting EPP settings.
+- Montiors a configurable process ('kdenlive' by default) for "video editing more", ensuring that the CPU does not idle down completely when video editing.
 - Includes a separate real-time monitoring utility: `dynamic-power-monitor`.
 
 ## Installation
@@ -89,6 +90,9 @@ POWER_TOOL="powerprofilesctl"
 
 # Process to monitor for recording mode
 RECORDING_PROCESS="obs"
+
+# Process to monitor for video editing mode
+VIDEO_EDIT_PROCESS="kdenlive"
 
 # EPP policies for each mode
 EPP_POWER_SAVER="power"

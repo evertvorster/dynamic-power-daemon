@@ -9,6 +9,7 @@ AC_PATH="/sys/class/power_supply/ADP0/online"
 POWER_TOOL="powerprofilesctl"  # Default power tool
 LAST_MODE=""
 RECORDING_PROCESS="obs-studio"
+VIDEO_EDIT_PROCESS="kdenlive"
 EPP_POWER_SAVER="power"
 EPP_BALANCED="balance_performance"
 EPP_PERFORMANCE="performance"
@@ -35,6 +36,9 @@ POWER_TOOL="powerprofilesctl"
 
 # Process to monitor for recording mode
 RECORDING_PROCESS="obs-studio"
+
+# Process to monitor for editing
+VIDEO_EDIT_PROCESS="kdenlive"
 
 # EPP policies for each mode
 EPP_POWER_SAVER="power"
@@ -100,38 +104,46 @@ while true; do
         if grep -q "1" "$AC_PATH"; then
             LOAD=$(awk '{print $1}' /proc/loadavg)
 
-            if (( $(echo "$LOAD < $LOW_LOAD" | bc -l) )); then
-                NEW_MODE="power-saver"
-                if [[ "$EPP_SUPPORTED" == true ]]; then
-                    set_epp_policy "$EPP_POWER_SAVER"
-                fi
-            elif (( $(echo "$LOAD >= $LOW_LOAD" | bc -l) && $(echo "$LOAD < $HIGH_LOAD" | bc -l) )); then
+        if (( $(echo "$LOAD < $LOW_LOAD" | bc -l) )); then
+            if pgrep -x "$VIDEO_EDIT_PROCESS" > /dev/null; then
                 NEW_MODE="balanced"
                 if [[ "$EPP_SUPPORTED" == true ]]; then
                     set_epp_policy "$EPP_BALANCED"
                 fi
+                echo "Video editing mode active: Staying in balanced mode despite low load."
             else
-                NEW_MODE="performance"
+                NEW_MODE="power-saver"
                 if [[ "$EPP_SUPPORTED" == true ]]; then
-                    set_epp_policy "$EPP_PERFORMANCE"
+                    set_epp_policy "$EPP_POWER_SAVER"
                 fi
             fi
-        else
-            NEW_MODE="power-saver"
+        elif (( $(echo "$LOAD >= $LOW_LOAD" | bc -l) && $(echo "$LOAD < $HIGH_LOAD" | bc -l) )); then
+            NEW_MODE="balanced"
             if [[ "$EPP_SUPPORTED" == true ]]; then
-                set_epp_policy "$EPP_POWER_SAVER"
+                set_epp_policy "$EPP_BALANCED"
+            fi
+        else
+            NEW_MODE="performance"
+            if [[ "$EPP_SUPPORTED" == true ]]; then
+                set_epp_policy "$EPP_PERFORMANCE"
             fi
         fi
-    fi
-
-    if [[ "$NEW_MODE" != "$LAST_MODE" ]]; then
-        set_power_mode "$NEW_MODE"
-        echo "Switched to $NEW_MODE mode using $POWER_TOOL"
+    else
+        NEW_MODE="power-saver"
         if [[ "$EPP_SUPPORTED" == true ]]; then
-            echo "EPP set to $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference)"
+            set_epp_policy "$EPP_POWER_SAVER"
         fi
-        LAST_MODE="$NEW_MODE"
     fi
+fi
 
-    sleep $CHECK_INTERVAL
+if [[ "$NEW_MODE" != "$LAST_MODE" ]]; then
+    set_power_mode "$NEW_MODE"
+    echo "Switched to $NEW_MODE mode using $POWER_TOOL"
+    if [[ "$EPP_SUPPORTED" == true ]]; then
+        echo "EPP set to $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference)"
+    fi
+    LAST_MODE="$NEW_MODE"
+fi
+
+sleep $CHECK_INTERVAL
 done
