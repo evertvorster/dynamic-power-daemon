@@ -4,6 +4,7 @@ CONFIG_FILE="/etc/dynamic-power.conf"
 AC_PATH="/sys/class/power_supply/ADP0/online"
 EPP_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
 MONITOR_PROCESS="obs"
+VIDEO_EDIT_PROCESS="kdenlive"
 POWER_TOOL="powerprofilesctl"
 
 # Load configuration
@@ -50,16 +51,24 @@ while true; do
         echo "EPP Policy: Not Supported"
     fi
     
-    # Monitoring process
+    # Recording process status
     if pgrep -x "$MONITOR_PROCESS" > /dev/null; then
         RECORDING_MODE="Active"
     else
         RECORDING_MODE="Inactive"
     fi
     echo "Recording Mode: $RECORDING_MODE"
+
+    # Video editing process status
+    if pgrep -x "$VIDEO_EDIT_PROCESS" > /dev/null; then
+        VIDEO_EDITING_MODE="Active"
+    else
+        VIDEO_EDITING_MODE="Inactive"
+    fi
+    echo "Video Editing Mode: $VIDEO_EDITING_MODE"
     
-    echo "
-    Press 'q' to quit."
+    echo ""
+    echo "Press 'q' to quit."
     read -t 1 -n 1 key
     if [[ "$key" == "q" ]]; then
         break
