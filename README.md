@@ -1,15 +1,15 @@
 # Dynamic Power Daemon
 
-A minimalist Linux daemon that **intelligently switches power profiles** according to:
+A minimalist Linux daemon that intelligently switches power profiles based on:
 
 * live CPU load  
-* whether the machine is on AC or battery  
-* the presence of user-defined **quiet** (low‑noise) or **responsive** (snappy‑desktop) workloads  
+* AC vs battery state (auto‑detected)  
+* user‑defined **quiet** (fan‑friendly) or **responsive** (snappy) workloads  
 
-The project ships with:
+This repo contains:
 
-* **`dynamic_power.sh`** – the daemon (run by systemd)  
-* **`dynamic_power_monitor.sh`** – an interactive, real‑time dashboard  
+* **`dynamic_power.sh`** – the daemon (systemd unit)  
+* **`dynamic_power_monitor.sh`** – an interactive real‑time dashboard  
 
 ---
 
@@ -17,83 +17,87 @@ The project ships with:
 
 | Feature | Details |
 |---------|---------|
-| **Load‑aware switching** | Jumps between `power-saver`, `balanced`, and `performance` based on 1‑minute load averages. |
-| **Battery‑first safety** | Locks to `power-saver` the moment the machine is unplugged. |
-| **Quiet / Responsive modes** | *Quiet* keeps fans silent by never leaving `power-saver`.<br>*Responsive* keeps the desktop perky by never dropping below `balanced`. Each mode watches a **comma‑separated list of processes** you choose. |
-| **EPP tuning** | Optionally pins Intel / AMD *Energy Performance Preference* per profile or per mode. |
-| **Dual backend** | Works with either `powerprofilesctl` (kernel ≥ 5.11) **or** `asusctl` on ASUS laptops. |
-| **Self‑healing config** | `/etc/dynamic-power.conf` is created on first run and **won’t be overwritten** later. Any missing keys are filled with safe defaults and reported. |
-| **Journal & TUI feedback** | Gaps in the config are logged to `journalctl` and highlighted in the monitor. |
+| **Load‑aware switching** | Slides between `power-saver`, `balanced`, and `performance` using 1‑minute load averages. |
+| **Battery‑first safety** | Locks to `power-saver` when unplugged. |
+| **Quiet / Responsive modes** | *Quiet* never leaves `power-saver`; *Responsive* never drops below `balanced`. Each mode watches a comma‑separated list of processes. |
+| **EPP tuning** | Pin Intel/AMD Energy‑Performance‑Preference per profile or per mode. |
+| **Dual backend** | Works with `powerprofilesctl` (kernel ≥ 5.11) **or** `asusctl` on ASUS laptops. |
+| **Self‑healing config** | `/etc/dynamic-power.conf` is created at first run. Missing keys auto‑fill with safe defaults and are reported in the journal/TUI. |
+| **Smart AC detection** | If `AC_PATH` in the config is wrong, the daemon hunts common paths (`ADP0`, `AC`, `ACAD`, `ACPI`, `MENCHR`, …), picks the first valid one and logs what it chose. |
+| **Journal & TUI feedback** | Config gaps go to `journalctl`; the monitor highlights them plus any AC‑path mismatch. |
 
 ---
 
 ## Quick install (Arch Linux)
 
-A helper package **`dynamic-power-monitor`** is in the AUR:
-
 ```bash
-paru -S dynamic-power-monitor        # or yay -S …
+paru -S dynamic-power-monitor        # or yay -S dynamic-power-monitor
 ```
 
-The PKGBUILD places the daemon, monitor, config template and service file in the right locations.
+The AUR package installs the daemon, monitor, config template and service file.
 
 ---
 
-## Manual install (any distro)
+## Manual install
 
-1. **Dependencies**
+### 1 Dependencies
 
-   ```bash
-   sudo pacman -S bc power-profiles-daemon    # Arch example
-   # or
-   sudo apt install bc power-profiles-daemon  # Debian/Ubuntu
-   ```
+```bash
+sudo pacman -S bc power-profiles-daemon          # Arch example
+# or
+sudo apt  install bc power-profiles-daemon       # Debian/Ubuntu
+```
 
-2. **Scripts**
+### 2 Scripts
 
-   ```bash
-   sudo install -m 755 dynamic_power.sh         /usr/local/bin/
-   sudo install -m 755 dynamic_power_monitor.sh /usr/local/bin/
-   ```
+```bash
+sudo install -m 755 dynamic_power.sh         /usr/local/bin/
+sudo install -m 755 dynamic_power_monitor.sh /usr/local/bin/
+```
 
-3. **systemd service**
+### 3 systemd service
 
-   ```bash
-   sudo install -m 644 dynamic-power.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now dynamic-power.service
-   ```
-
-That’s it—the first launch seeds `/etc/dynamic-power.conf` with documented defaults.
+```bash
+sudo install -m 644 dynamic-power.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now dynamic-power.service
+```
 
 ---
 
 ## Configuration
 
-Open `/etc/dynamic-power.conf` in your editor; everything is inline‑commented.  
-A minimal example (showing only the most‑changed keys) looks like:
+Edit `/etc/dynamic-power.conf` – generated on first run and **never overwritten**.  
+Minimal snippet (only keys most folks tweak):
 
 ```ini
 #############################
 #  Dynamic-Power Daemon     #
 #############################
 
-# CPU load thresholds (float)
+# -------- Load thresholds --------
 LOW_LOAD=1.0
 HIGH_LOAD=2.0
-CHECK_INTERVAL=10          # seconds between samples
+CHECK_INTERVAL=10       # seconds
 
-# Backend: powerprofilesctl | asusctl
-POWER_TOOL="powerprofilesctl"
+# -------- Backend --------
+POWER_TOOL="powerprofilesctl"      # or "asusctl"
+
+# -------- AC adapter path --------
+# Leave empty to let the daemon auto‑detect a valid path under
+# /sys/class/power_supply/*/online
+# Examples:
+#   /sys/class/power_supply/ADP0/online
+#   /sys/class/power_supply/AC/online
+#   /sys/class/power_supply/ACAD/online
+AC_PATH=""
 
 # -------- Special modes --------
-# Comma-separated process names (pgrep −x matches)
 QUIET_PROCESSES="obs-studio,screenrec"
 RESPONSIVE_PROCESSES="kdenlive,steam"
 
-# Optional tweaks when a mode is active
-QUIET_EPP="balance_power"          # lower clocks without throttling
-RESPONSIVE_MIN_PROFILE="balanced"  # floor while responsive
+QUIET_EPP="balance_power"
+RESPONSIVE_MIN_PROFILE="balanced"
 
 # -------- EPP per standard profile --------
 EPP_POWER_SAVER="power"
@@ -101,12 +105,20 @@ EPP_BALANCED="balance_performance"
 EPP_PERFORMANCE="performance"
 ```
 
-**Tip:** remove `ffmpeg` from `QUIET_PROCESSES` if you regularly edit video—otherwise the daemon may prioritise quietness during renders.
+**Tip:** remove `ffmpeg` from `QUIET_PROCESSES` if you render video; otherwise quiet mode may override responsiveness during exports.
 
-Whenever you add or remove keys the daemon:
+### What if the path is wrong?
 
-* logs a warning once (`journalctl -t dynamic_power`)  
-* falls back to built‑in defaults so it never crashes  
+If `AC_PATH` is set but invalid, the daemon:
+
+1. tries common paths and picks the first that works  
+2. logs a line like  
+
+   ```
+   dynamic_power: Configured AC_PATH invalid; using /sys/class/power_supply/AC/online
+   ```
+
+The monitor shows the same message in yellow.
 
 ---
 
@@ -115,19 +127,17 @@ Whenever you add or remove keys the daemon:
 ### Daemon
 
 ```bash
-sudo systemctl start   dynamic-power.service
-sudo systemctl status  dynamic-power.service
-sudo systemctl stop    dynamic-power.service
+sudo systemctl restart dynamic-power.service   # after config edits
+journalctl -u dynamic-power.service -f        # live log
 ```
 
-### Real‑time monitor
+### Monitor
 
 ```bash
 dynamic_power_monitor.sh
 ```
 
-Displays AC state, load, active profile, EPP, and live status of Quiet / Responsive modes.  
-Missing‑config keys are highlighted in yellow. Press **q** to quit.
+Shows AC state, load, active profile, EPP, Quiet/Responsive status, plus any config warnings. Press **q** to quit.
 
 ---
 
@@ -144,4 +154,4 @@ sudo rm /etc/systemd/system/dynamic-power.service
 
 ## License
 
-Distributed under the **GNU GPL v3 or later**.
+Released under the **GNU GPL v3 or later**.
