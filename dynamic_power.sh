@@ -1,144 +1,81 @@
 #!/usr/bin/env bash
-# Dynamic-Power Daemon  — quiet / responsive aware + config-gap detection
 set -euo pipefail
 
-########################################
-#  0.  Auto-generate config if absent  #
-########################################
 CONFIG_FILE="/etc/dynamic-power.conf"
+[[ -f $CONFIG_FILE ]] && source "$CONFIG_FILE"
 
-create_default_config() {
-    mkdir -p "$(dirname "$CONFIG_FILE")"
-    cat >"$CONFIG_FILE"<<'EOF'
-#############################
-#  Dynamic-Power Daemon v2  #
-#  Auto-generated template  #
-#############################
+# ---------------- Default map -----------------
+declare -A DEF=(
+ [LOW_LOAD]=1.0 [HIGH_LOAD]=2.0 [CHECK_INTERVAL]=1
+ [POWER_TOOL]="powerprofilesctl"
+ [EPP_POWER_SAVER]="power" [EPP_BALANCED]="balance_performance" [EPP_PERFORMANCE]="performance"
+ [QUIET_PROCESSES]="obs-studio" [RESPONSIVE_PROCESSES]="kdenlive"
+ [QUIET_EPP]="balance_power" [RESPONSIVE_MIN_PROFILE]="balanced"
+)
+MISSING=()
+for k in "${!DEF[@]}"; do
+ [[ -z "${!k:-}" ]] && { printf -v "$k" '%s' "${DEF[$k]}"; MISSING+=("$k"); }
+done
 
-########  General settings  ########
-LOW_LOAD=1.0
-HIGH_LOAD=2.0
-CHECK_INTERVAL=10
-AC_PATH="/sys/class/power_supply/ADP0/online"
-POWER_TOOL="powerprofilesctl"   # or "asusctl"
-
-########  EPP per profile ##########
-EPP_POWER_SAVER="power"
-EPP_BALANCED="balance_performance"
-EPP_PERFORMANCE="performance"
-
-########  Special modes  ###########
-QUIET_PROCESSES="obs-studio,screenrec"
-RESPONSIVE_PROCESSES="kdenlive,shotcut,resolve,steam"
-QUIET_EPP="balance_power"
-RESPONSIVE_MIN_PROFILE="balanced"
-EOF
-    echo "[dynamic_power] Default configuration created at $CONFIG_FILE"
-}
-
-[[ -f $CONFIG_FILE ]] || create_default_config
-# shellcheck source=/etc/dynamic-power.conf
-source "$CONFIG_FILE"
-
-########################################
-#  1.  Detect missing keys / defaults  #
-########################################
-declare -a MISSING_VARS=()
-
-ensure_var() {
-    local name=$1 default=$2
-    if [[ -z "${!name:-}" ]]; then
-        printf -v "$name" '%s' "$default"
-        MISSING_VARS+=("$name")
-    fi
-}
-
-# Critical keys with their internal defaults
-ensure_var LOW_LOAD              "1.0"
-ensure_var HIGH_LOAD             "2.0"
-ensure_var CHECK_INTERVAL        "10"
-ensure_var AC_PATH               "/sys/class/power_supply/ADP0/online"
-ensure_var POWER_TOOL            "powerprofilesctl"
-ensure_var EPP_POWER_SAVER       "power"
-ensure_var EPP_BALANCED          "balance_performance"
-ensure_var EPP_PERFORMANCE       "performance"
-ensure_var QUIET_PROCESSES       "obs-studio"
-ensure_var RESPONSIVE_PROCESSES  "kdenlive"
-ensure_var QUIET_EPP             "balance_power"
-ensure_var RESPONSIVE_MIN_PROFILE "balanced"
-
-# Log once if anything was missing
-if (( ${#MISSING_VARS[@]} )); then
-    logger -t dynamic_power \
-      "Config missing keys: ${MISSING_VARS[*]}. Using built-in defaults. Update $CONFIG_FILE."
+# ------------- AC path validation -------------
+CONFIG_AC_PATH="${AC_PATH:-}"
+detected_path=""
+if [[ -n $CONFIG_AC_PATH && -f $CONFIG_AC_PATH ]]; then
+  AC_PATH=$CONFIG_AC_PATH
+else
+  for cand in /sys/class/power_supply/*/online; do
+    [[ -f $cand ]] || continue
+    if grep -qiE "mains|ac" "${cand%/*}/type"; then detected_path=$cand; break; fi
+  done
+  [[ -n $detected_path ]] && AC_PATH=$detected_path
 fi
 
-########################################
-#  2.  Helpers                         #
-########################################
-csv_to_array() { local IFS=','; read -ra "$1" <<<"$2"; }
-is_any_running() { for n in "$@"; do pgrep -x "$n" &>/dev/null && return 0; done; return 1; }
-
-set_power_mode() {
-    case "$POWER_TOOL" in
-        powerprofilesctl) powerprofilesctl set "$1" ;;
-        asusctl)
-            case "$1" in
-                power-saver) asusctl profile quiet ;;
-                balanced)    asusctl profile balanced ;;
-                performance) asusctl profile performance ;;
-            esac ;;
-        *) logger -t dynamic_power "Unknown POWER_TOOL '$POWER_TOOL'"; exit 1 ;;
-    esac
+# ----------- Helpers ------------
+csv_to_array(){ local IFS=','; read -ra "$1" <<<"$2"; }
+is_any_running(){ for p; do pgrep -x "$p" &>/dev/null && return 0; done; return 1; }
+get_profile(){
+  [[ $POWER_TOOL == powerprofilesctl ]] && powerprofilesctl get || \
+  asusctl profile -p | awk -F': *' '/Preset/ {print tolower($2)}'
 }
+csv_to_array QLIST "$QUIET_PROCESSES"
+csv_to_array RLIST "$RESPONSIVE_PROCESSES"
+EPP_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
+EPP_OK=false; [[ -f $EPP_PATH ]] && EPP_OK=true
+trap 'tput cnorm; clear; exit' SIGINT SIGTERM
+tput civis
 
-set_epp() {
-    [[ -z $1 || ! -e /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference ]] && return
-    echo "$1" | tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference >/dev/null
-}
-
-# Arrays for process checks
-csv_to_array QUIET_LIST      "$QUIET_PROCESSES"
-csv_to_array RESPONSIVE_LIST "$RESPONSIVE_PROCESSES"
-
-########################################
-#  3.  Main loop                       #
-########################################
-LAST_MODE=""
 while true; do
-    AC_ONLINE=$(<"$AC_PATH")
-    QUIET_RUN=false
-    RESP_RUN=false
-    is_any_running "${QUIET_LIST[@]}"      && QUIET_RUN=true
-    is_any_running "${RESPONSIVE_LIST[@]}" && RESP_RUN=true
+ clear
+ echo "Dynamic-Power Daemon — Live Monitor"
+ echo "=================================="
 
-    if $QUIET_RUN && [[ $AC_ONLINE == 1 ]]; then
-        MODE="power-saver"; set_epp "$QUIET_EPP"
-    else
-        if [[ $AC_ONLINE == 1 ]]; then
-            LOAD=$(awk '{print $1}' /proc/loadavg)
-            if   (( $(echo "$LOAD < $LOW_LOAD"  | bc -l) )); then MODE="power-saver"
-            elif (( $(echo "$LOAD < $HIGH_LOAD" | bc -l) )); then MODE="balanced"
-            else MODE="performance"; fi
-            # responsive floor
-            if $RESP_RUN && [[ $MODE == "power-saver" ]]; then
-                MODE="$RESPONSIVE_MIN_PROFILE"
-            fi
-        else
-            MODE="power-saver"
-        fi
-        # default EPP per profile
-        case $MODE in
-            power-saver)  set_epp "$EPP_POWER_SAVER" ;;
-            balanced)     set_epp "$EPP_BALANCED"    ;;
-            performance)  set_epp "$EPP_PERFORMANCE" ;;
-        esac
-    fi
+ if (( ${#MISSING[@]} )); then
+   echo -e "\e[33m⚠  Missing keys in $CONFIG_FILE: ${MISSING[*]}"
+   echo -e "   Defaults active — edit the file & restart.\e[0m\n"
+ fi
 
-    if [[ $MODE != $LAST_MODE ]]; then
-        set_power_mode "$MODE"
-        logger -t dynamic_power "Switched to $MODE"
-        LAST_MODE="$MODE"
-    fi
-    sleep "$CHECK_INTERVAL"
+ if [[ -n $CONFIG_AC_PATH && $CONFIG_AC_PATH != $AC_PATH ]]; then
+   echo -e "\e[33m⚠  Configured AC_PATH invalid → using $AC_PATH\e[0m\n"
+ fi
+
+ AC_STATE=$([[ -f $AC_PATH && $(<"$AC_PATH") -eq 1 ]] && echo "Plugged-In" || echo "Battery")
+ LOAD=$(awk '{print $1}' /proc/loadavg)
+ PROFILE=$(get_profile)
+ EPP=$($EPP_OK && cat "$EPP_PATH" || echo "N/A")
+
+ printf " AC Power      : %s\n" "$AC_STATE"
+ printf " CPU Load      : %s\n" "$LOAD"
+ printf " Power Profile : %s\n" "$PROFILE"
+ printf " EPP Policy    : %s\n\n" "$EPP"
+
+ QSTAT=$(is_any_running "${QLIST[@]}" && echo Active || echo Inactive)
+ RSTAT=$(is_any_running "${RLIST[@]}" && echo Active || echo Inactive)
+
+ printf " Quiet mode       : %-8s (%s)\n" "$QSTAT" "$QUIET_PROCESSES"
+ printf " Responsive mode  : %-8s (%s)\n" "$RSTAT" "$RESPONSIVE_PROCESSES"
+
+ echo -e "\nPress 'q' to quit."
+ read -t 1 -n 1 k && [[ $k == q ]] && break
 done
+
+tput cnorm; clear
