@@ -1,168 +1,147 @@
 # Dynamic Power Daemon
 
-This is a lightweight Linux daemon that dynamically adjusts the system's power profile based on CPU load and system state.
+A minimalist Linux daemon that **intelligently switches power profiles** according to:
 
-## Features
-- Dynamically switches between `power-saver`, `balanced`, and `performance` modes based on CPU load.
-- Always stays in `power-saver` mode when on battery power.
-- Uses `/sys/class/power_supply/ADP0/online` to detect whether the system is plugged into AC power.
-- Supports both `powerprofilesctl` and `asusctl` for power profile management.
-- Configurable thresholds and settings via `/etc/dynamic-power.conf`.
-- Monitors a configurable process (`obs` by default) for "recording mode", ensuring low-noise operation while adjusting EPP settings.
-- Montiors a configurable process ('kdenlive' by default) for "video editing more", ensuring that the CPU does not idle down completely when video editing.
-- Includes a separate real-time monitoring utility: `dynamic-power-monitor`.
+* live CPU load  
+* whether the machine is on AC or battery  
+* the presence of user-defined **quiet** (low‑noise) or **responsive** (snappy‑desktop) workloads  
 
-## Installation
+The project ships with:
 
-### 1. Install from AUR (Recommended for Arch Linux Users)
-The `dynamic-power-monitor` package is available in the AUR. You can install it using an AUR helper like `paru` or `yay`:
+* **`dynamic_power.sh`** – the daemon (run by systemd)  
+* **`dynamic_power_monitor.sh`** – an interactive, real‑time dashboard  
 
-```sh
-paru -S dynamic-power-monitor
-# or
-yay -S dynamic-power-monitor
+---
+
+## Key features
+
+| Feature | Details |
+|---------|---------|
+| **Load‑aware switching** | Jumps between `power-saver`, `balanced`, and `performance` based on 1‑minute load averages. |
+| **Battery‑first safety** | Locks to `power-saver` the moment the machine is unplugged. |
+| **Quiet / Responsive modes** | *Quiet* keeps fans silent by never leaving `power-saver`.<br>*Responsive* keeps the desktop perky by never dropping below `balanced`. Each mode watches a **comma‑separated list of processes** you choose. |
+| **EPP tuning** | Optionally pins Intel / AMD *Energy Performance Preference* per profile or per mode. |
+| **Dual backend** | Works with either `powerprofilesctl` (kernel ≥ 5.11) **or** `asusctl` on ASUS laptops. |
+| **Self‑healing config** | `/etc/dynamic-power.conf` is created on first run and **won’t be overwritten** later. Any missing keys are filled with safe defaults and reported. |
+| **Journal & TUI feedback** | Gaps in the config are logged to `journalctl` and highlighted in the monitor. |
+
+---
+
+## Quick install (Arch Linux)
+
+A helper package **`dynamic-power-monitor`** is in the AUR:
+
+```bash
+paru -S dynamic-power-monitor        # or yay -S …
 ```
 
-If you prefer manual installation, clone the AUR repository and build the package:
+The PKGBUILD places the daemon, monitor, config template and service file in the right locations.
 
-```sh
-git clone https://aur.archlinux.org/dynamic-power-monitor.git
-cd dynamic-power-monitor
-makepkg -si
-```
+---
 
-### 1. Install Dependencies
-Ensure that you have the required dependencies installed. This daemon requires `bc` for floating-point calculations. Install it using:
+## Manual install (any distro)
 
-```sh
-sudo pacman -S bc  # For Arch Linux users
-```
+1. **Dependencies**
 
-### 2. Copy the Scripts
-Copy the `dynamic_power_daemon.sh` script and monitoring utility to `/usr/local/bin/`:
+   ```bash
+   sudo pacman -S bc power-profiles-daemon    # Arch example
+   # or
+   sudo apt install bc power-profiles-daemon  # Debian/Ubuntu
+   ```
 
-```sh
-sudo cp dynamic_power_daemon.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/dynamic_power_daemon.sh
-sudo cp dynamic_power_monitor.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/dynamic_power_monitor.sh
-```
+2. **Scripts**
 
-### 3. Install the Configuration File
-Copy the configuration file to `/etc/`:
+   ```bash
+   sudo install -m 755 dynamic_power.sh         /usr/local/bin/
+   sudo install -m 755 dynamic_power_monitor.sh /usr/local/bin/
+   ```
 
-```sh
-sudo cp dynamic-power.conf /etc/
-```
+3. **systemd service**
 
-### 4. Install the Systemd Service (Optional)
-To have the daemon start automatically, install the systemd service file:
+   ```bash
+   sudo install -m 644 dynamic-power.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now dynamic-power.service
+   ```
 
-```sh
-sudo cp dynamic-power-daemon.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable dynamic-power-daemon.service
-sudo systemctl start dynamic-power-daemon.service
-```
+That’s it—the first launch seeds `/etc/dynamic-power.conf` with documented defaults.
 
-This will set up the service to run at startup and ensure the daemon is running.
+---
 
 ## Configuration
 
-You can adjust load thresholds, power profiles, and EPP settings by editing the configuration file `/etc/dynamic-power.conf`.
-This file is automatically created on the first run and will not be overwritten on subsequent runs.
-
-### Example Configuration:
+Open `/etc/dynamic-power.conf` in your editor; everything is inline‑commented.  
+A minimal example (showing only the most‑changed keys) looks like:
 
 ```ini
-# dynamic-power.conf
+#############################
+#  Dynamic-Power Daemon     #
+#############################
 
-# CPU load thresholds (in decimal values)
+# CPU load thresholds (float)
 LOW_LOAD=1.0
 HIGH_LOAD=2.0
-CHECK_INTERVAL=10
+CHECK_INTERVAL=10          # seconds between samples
 
-# AC notification path and file
-AC_PATH="/sys/class/power_supply/ADP0/online"
-
-# Power management tool: powerprofilesctl or asusctl
+# Backend: powerprofilesctl | asusctl
 POWER_TOOL="powerprofilesctl"
 
-# Process to monitor for recording mode
-RECORDING_PROCESS="obs"
+# -------- Special modes --------
+# Comma-separated process names (pgrep −x matches)
+QUIET_PROCESSES="obs-studio,screenrec"
+RESPONSIVE_PROCESSES="kdenlive,steam"
 
-# Process to monitor for video editing mode
-VIDEO_EDIT_PROCESS="kdenlive"
+# Optional tweaks when a mode is active
+QUIET_EPP="balance_power"          # lower clocks without throttling
+RESPONSIVE_MIN_PROFILE="balanced"  # floor while responsive
 
-# EPP policies for each mode
+# -------- EPP per standard profile --------
 EPP_POWER_SAVER="power"
 EPP_BALANCED="balance_performance"
 EPP_PERFORMANCE="performance"
-EPP_RECORDING="balance_power"
 ```
+
+**Tip:** remove `ffmpeg` from `QUIET_PROCESSES` if you regularly edit video—otherwise the daemon may prioritise quietness during renders.
+
+Whenever you add or remove keys the daemon:
+
+* logs a warning once (`journalctl -t dynamic_power`)  
+* falls back to built‑in defaults so it never crashes  
+
+---
 
 ## Usage
 
-### **Daemon Control**
-Once installed, the `dynamic-power-daemon` service will automatically adjust the system's power mode based on CPU load. You can manually control the service using `systemctl`:
+### Daemon
 
-```sh
-# Start the service
-sudo systemctl start dynamic-power-daemon.service
-
-# Stop the service
-sudo systemctl stop dynamic-power-daemon.service
-
-# Restart the service
-sudo systemctl restart dynamic-power-daemon.service
-
-# Check the status of the service
-sudo systemctl status dynamic-power-daemon.service
+```bash
+sudo systemctl start   dynamic-power.service
+sudo systemctl status  dynamic-power.service
+sudo systemctl stop    dynamic-power.service
 ```
 
-### **Monitoring Utility**
-A separate utility, `dynamic-power-monitor`, is available to track the daemon's parameters in real time. Run it in a terminal with:
+### Real‑time monitor
 
-```sh
-dynamic-power-monitor
+```bash
+dynamic_power_monitor.sh
 ```
 
-This utility will display:
-- AC power status (Plugged In / On Battery)
-- CPU load
-- Active power profile
-- EPP policy (if supported)
-- Recording mode status
+Displays AC state, load, active profile, EPP, and live status of Quiet / Responsive modes.  
+Missing‑config keys are highlighted in yellow. Press **q** to quit.
 
-Press **'q'** or **Ctrl-C** to exit.
+---
 
-## Uninstallation
+## Uninstall
 
-To uninstall the daemon:
+```bash
+sudo systemctl disable --now dynamic-power.service
+sudo rm /usr/local/bin/dynamic_power{,_monitor}.sh
+sudo rm /etc/dynamic-power.conf
+sudo rm /etc/systemd/system/dynamic-power.service
+```
 
-1. Disable and stop the systemd service:
-
-   ```sh
-   sudo systemctl disable dynamic-power-daemon.service
-   sudo systemctl stop dynamic-power-daemon.service
-   ```
-
-2. Remove the files:
-
-   ```sh
-   sudo rm /usr/local/bin/dynamic_power_daemon.sh
-   sudo rm /usr/local/bin/dynamic_power_monitor.sh
-   sudo rm /etc/dynamic-power.conf
-   sudo rm /etc/systemd/system/dynamic-power-daemon.service
-   ```
-
-3. Optionally, remove the `bc` package if you no longer need it:
-
-   ```sh
-   sudo pacman -Rns bc
-   ```
+---
 
 ## License
 
-This project is licensed under the GPL-3.0-or-later License.
-
+Distributed under the **GNU GPL v3 or later**.
