@@ -1,81 +1,57 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Live monitor for Dynamic-Power Daemon v3.1.1
+set -u
 
 CONFIG_FILE="/etc/dynamic-power.conf"
 [[ -f $CONFIG_FILE ]] && source "$CONFIG_FILE"
 
-# ---------------- Default map -----------------
+# ---------- defaults & gap detection ----------
 declare -A DEF=(
- [LOW_LOAD]=1.0 [HIGH_LOAD]=2.0 [CHECK_INTERVAL]=1
- [POWER_TOOL]="powerprofilesctl"
- [EPP_POWER_SAVER]="power" [EPP_BALANCED]="balance_performance" [EPP_PERFORMANCE]="performance"
- [QUIET_PROCESSES]="obs-studio" [RESPONSIVE_PROCESSES]="kdenlive"
- [QUIET_EPP]="balance_power" [RESPONSIVE_MIN_PROFILE]="balanced"
+ [POWER_TOOL]="powerprofilesctl" [QUIET_PROCESSES]="obs-studio"
+ [RESPONSIVE_PROCESSES]="kdenlive" [LOW_LOAD]=1.0 [HIGH_LOAD]=2.0
 )
-MISSING=()
-for k in "${!DEF[@]}"; do
- [[ -z "${!k:-}" ]] && { printf -v "$k" '%s' "${DEF[$k]}"; MISSING+=("$k"); }
-done
+GAPS=(); for k in "${!DEF[@]}"; do [[ -z "${!k:-}" ]] && { printf -v "$k" '%s' "${DEF[$k]}"; GAPS+=("$k"); }; done
 
-# ------------- AC path validation -------------
-CONFIG_AC_PATH="${AC_PATH:-}"
-detected_path=""
-if [[ -n $CONFIG_AC_PATH && -f $CONFIG_AC_PATH ]]; then
-  AC_PATH=$CONFIG_AC_PATH
-else
-  for cand in /sys/class/power_supply/*/online; do
+# ---------- AC path validation ----------
+CONFIGURED="$AC_PATH"
+if [[ -z $CONFIGURED || ! -f $CONFIGURED ]]; then
+  for cand in /sys/class/power_supply/{ADP0,AC,ACAD,ACPI,MENCHR,*/online}; do
     [[ -f $cand ]] || continue
-    if grep -qiE "mains|ac" "${cand%/*}/type"; then detected_path=$cand; break; fi
+    grep -qiE "mains|ac" "${cand%/*}/type" && { AC_PATH=$cand; break; }
   done
-  [[ -n $detected_path ]] && AC_PATH=$detected_path
+else
+  AC_PATH=$CONFIGURED
 fi
 
-# ----------- Helpers ------------
+# ---------- helpers ----------
 csv_to_array(){ local IFS=','; read -ra "$1" <<<"$2"; }
 is_any_running(){ for p; do pgrep -x "$p" &>/dev/null && return 0; done; return 1; }
-get_profile(){
-  [[ $POWER_TOOL == powerprofilesctl ]] && powerprofilesctl get || \
-  asusctl profile -p | awk -F': *' '/Preset/ {print tolower($2)}'
-}
-csv_to_array QLIST "$QUIET_PROCESSES"
-csv_to_array RLIST "$RESPONSIVE_PROCESSES"
+get_prof(){ [[ $POWER_TOOL == powerprofilesctl ]] && powerprofilesctl get || asusctl profile -p|awk -F': *' '/Preset/{print tolower($2)}'; }
+csv_to_array QLIST "$QUIET_PROCESSES"; csv_to_array RLIST "$RESPONSIVE_PROCESSES"
 EPP_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
-EPP_OK=false; [[ -f $EPP_PATH ]] && EPP_OK=true
-trap 'tput cnorm; clear; exit' SIGINT SIGTERM
+
+trap 'tput cnorm; clear; exit' INT TERM
 tput civis
-
 while true; do
- clear
- echo "Dynamic-Power Daemon — Live Monitor"
- echo "=================================="
+  clear
+  echo "Dynamic-Power Daemon — Live Monitor"
+  echo "=================================="
 
- if (( ${#MISSING[@]} )); then
-   echo -e "\e[33m⚠  Missing keys in $CONFIG_FILE: ${MISSING[*]}"
-   echo -e "   Defaults active — edit the file & restart.\e[0m\n"
- fi
+  (( ${#GAPS[@]} )) && echo -e "\e[33m⚠  Missing keys in $CONFIG_FILE: ${GAPS[*]} (defaults active)\e[0m\n"
+  [[ -n $CONFIGURED && $CONFIGURED != $AC_PATH ]] && \
+    echo -e "\e[33m⚠  Configured AC_PATH invalid → using $AC_PATH\e[0m\n"
 
- if [[ -n $CONFIG_AC_PATH && $CONFIG_AC_PATH != $AC_PATH ]]; then
-   echo -e "\e[33m⚠  Configured AC_PATH invalid → using $AC_PATH\e[0m\n"
- fi
+  AC=$([[ -f $AC_PATH && $(<"$AC_PATH") -eq 1 ]] && echo "Plugged-In" || echo "Battery")
+  LOAD=$(awk '{print $1}' /proc/loadavg)
+  PROF=$(get_prof)
+  EPP=$([[ -f $EPP_PATH ]] && cat "$EPP_PATH" || echo "N/A")
 
- AC_STATE=$([[ -f $AC_PATH && $(<"$AC_PATH") -eq 1 ]] && echo "Plugged-In" || echo "Battery")
- LOAD=$(awk '{print $1}' /proc/loadavg)
- PROFILE=$(get_profile)
- EPP=$($EPP_OK && cat "$EPP_PATH" || echo "N/A")
+  printf " AC Power      : %s\n CPU Load      : %s\n Power Profile : %s\n EPP Policy    : %s\n\n" "$AC" "$LOAD" "$PROF" "$EPP"
 
- printf " AC Power      : %s\n" "$AC_STATE"
- printf " CPU Load      : %s\n" "$LOAD"
- printf " Power Profile : %s\n" "$PROFILE"
- printf " EPP Policy    : %s\n\n" "$EPP"
+  printf " Quiet mode    : %-8s (%s)\n" "$(is_any_running "${QLIST[@]}" && echo Active || echo Inactive)" "$QUIET_PROCESSES"
+  printf " Responsive    : %-8s (%s)\n" "$(is_any_running "${RLIST[@]}" && echo Active || echo Inactive)" "$RESPONSIVE_PROCESSES"
 
- QSTAT=$(is_any_running "${QLIST[@]}" && echo Active || echo Inactive)
- RSTAT=$(is_any_running "${RLIST[@]}" && echo Active || echo Inactive)
-
- printf " Quiet mode       : %-8s (%s)\n" "$QSTAT" "$QUIET_PROCESSES"
- printf " Responsive mode  : %-8s (%s)\n" "$RSTAT" "$RESPONSIVE_PROCESSES"
-
- echo -e "\nPress 'q' to quit."
- read -t 1 -n 1 k && [[ $k == q ]] && break
+  echo -e "\nPress 'q' to quit."
+  read -t 1 -n 1 k && [[ $k == q ]] && break
 done
-
 tput cnorm; clear
