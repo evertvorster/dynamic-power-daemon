@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Live monitor for Dynamic-Power Daemon v3.1.1
+# Live monitor for Dynamic-Power Daemon  v3.2.0  (override controls)
 set -u
 
 CONFIG_FILE="/etc/dynamic-power.conf"
+OVERRIDE_FILE="/run/dynamic-power.override"
+
 [[ -f $CONFIG_FILE ]] && source "$CONFIG_FILE"
 
 # ---------- defaults & gap detection ----------
@@ -32,6 +34,7 @@ EPP_PATH="/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
 
 trap 'tput cnorm; clear; exit' INT TERM
 tput civis
+
 while true; do
   clear
   echo "Dynamic-Power Daemon — Live Monitor"
@@ -51,7 +54,20 @@ while true; do
   printf " Quiet mode    : %-8s (%s)\n" "$(is_any_running "${QLIST[@]}" && echo Active || echo Inactive)" "$QUIET_PROCESSES"
   printf " Responsive    : %-8s (%s)\n" "$(is_any_running "${RLIST[@]}" && echo Active || echo Inactive)" "$RESPONSIVE_PROCESSES"
 
-  echo -e "\nPress 'q' to quit."
-  read -t 1 -n 1 k && [[ $k == q ]] && break
+  # -------- override status --------
+  OV="dynamic"
+  [[ -f $OVERRIDE_FILE ]] && OV=$(<"$OVERRIDE_FILE")
+  [[ $OV != dynamic ]] && echo -e "\n\e[36mOverride active → $OV\e[0m"
+
+  echo -e "\nKeys:  d-dynamic  b-balanced  s-power-saver  p-performance  q-quit"
+  read -t 1 -n 1 key
+  case $key in
+    d) echo dynamic     > "$OVERRIDE_FILE" ;;
+    b) echo balanced    > "$OVERRIDE_FILE" ;;
+    s) echo power-saver > "$OVERRIDE_FILE" ;;
+    p) echo performance > "$OVERRIDE_FILE" ;;
+    q) break ;;
+  esac
 done
+
 tput cnorm; clear
