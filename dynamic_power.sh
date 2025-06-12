@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Dynamic-Power Daemon  v3.1.2
-# • Quiet / Responsive process lists
+# Dynamic-Power Daemon  v3.2.0
+# • Quiet / Responsive workload logic
 # • Smart AC-adapter auto-detect
-# • Correct profile threshold logic
-# • Safe EPP writes (no exit on busy)
+# • Override file  /run/dynamic-power.override  (wheel-writable)
+# • Correct threshold logic & safe EPP writes
 # • Accurate powerprofilesctl support check
 set -uo pipefail            # leave -e off so we can trap errors
 
 CONFIG_FILE="/etc/dynamic-power.conf"
+OVERRIDE_FILE="/run/dynamic-power.override"   # <-- NEW
 
 ###############################################################################
 # 1. create config template if missing                                        #
@@ -44,7 +45,20 @@ fi
 source "$CONFIG_FILE"
 
 ###############################################################################
-# 2. fill defaults + warn if keys missing                                     #
+# 2. ensure override file exists & is wheel-writable                          #
+###############################################################################
+if [[ ! -f $OVERRIDE_FILE ]]; then
+  echo dynamic > "$OVERRIDE_FILE"
+  if getent group wheel &>/dev/null; then
+    chgrp wheel "$OVERRIDE_FILE"
+  elif getent group sudo &>/dev/null; then
+    chgrp sudo "$OVERRIDE_FILE"
+  fi
+  chmod 664 "$OVERRIDE_FILE"
+fi
+
+###############################################################################
+# 3. fill defaults + warn if keys missing                                     #
 ###############################################################################
 declare -A DEF=(
  [LOW_LOAD]=1.0  [HIGH_LOAD]=2.0  [CHECK_INTERVAL]=10
@@ -60,7 +74,7 @@ done
 (( ${#GAPS[@]} )) && logger -t dynamic_power "Config missing keys: ${GAPS[*]} (defaults applied)"
 
 ###############################################################################
-# 3. auto-detect AC adapter path                                              #
+# 4. auto-detect AC adapter path                                              #
 ###############################################################################
 if [[ -z $AC_PATH || ! -f $AC_PATH ]]; then
   for cand in /sys/class/power_supply/{ADP0,AC,ACAD,ACPI,MENCHR,*/online}; do
@@ -72,7 +86,7 @@ fi
 [[ ! -f $AC_PATH ]] && logger -t dynamic_power "No valid AC adapter; defaulting to power-saver when on battery."
 
 ###############################################################################
-# 4. helpers                                                                  #
+# 5. helpers                                                                  #
 ###############################################################################
 command -v bc >/dev/null || { logger -t dynamic_power "bc utility missing — install bc"; exit 1; }
 
@@ -107,7 +121,7 @@ set_profile() {
 set_epp() {
   local val=$1
   [[ -z $val ]] && return
-  set +o pipefail                    # suppress tee errors
+  set +o pipefail
   for path in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
     [[ -w $path ]] && echo "$val" > "$path" 2>/dev/null
   done
@@ -115,17 +129,30 @@ set_epp() {
 }
 
 ###############################################################################
-# 5. main loop                                                                #
+# 6. main loop                                                                #
 ###############################################################################
 LAST=""
 while sleep "$CHECK_INTERVAL"; do
-  AC_ON=$([[ -f $AC_PATH && $(<"$AC_PATH") -eq 1 ]] && echo 1 || echo 0)
+  # --------- override handling ----------
+  OV=$(<"$OVERRIDE_FILE")
+  case "$OV" in
+    dynamic|"") FORCE="";;
+    powersave|power-saver) FORCE="power-saver";;
+    balanced)             FORCE="balanced";;
+    perf*|performance)    FORCE="performance";;
+    *) FORCE=""; [[ -n $OV ]] && logger -t dynamic_power "Unknown override '$OV' ignored";;
+  esac
 
+  # --------- battery / workload status ----------
+  AC_ON=$([[ -f $AC_PATH && $(<"$AC_PATH") -eq 1 ]] && echo 1 || echo 0)
   QUIET=false; RESP=false
   is_any_running "${QLIST[@]}" && QUIET=true
   is_any_running "${RLIST[@]}" && RESP=true
 
-  if $QUIET && [[ $AC_ON == 1 ]]; then
+  # --------- choose mode ----------
+  if [[ -n $FORCE ]]; then
+    MODE=$FORCE
+  elif $QUIET && [[ $AC_ON == 1 ]]; then
     MODE=power-saver; set_epp "$QUIET_EPP"
   else
     if [[ $AC_ON == 1 ]]; then
@@ -149,9 +176,10 @@ while sleep "$CHECK_INTERVAL"; do
     esac
   fi
 
+  # --------- apply if changed ----------
   if [[ $MODE != $LAST ]]; then
     set_profile "$MODE"
-    logger -t dynamic_power "Switched to $MODE (load=$(awk '{print $1}' /proc/loadavg))"
+    logger -t dynamic_power "Switched to $MODE (override=$OV, load=$(awk '{print $1}' /proc/loadavg))"
     LAST=$MODE
   fi
 done
