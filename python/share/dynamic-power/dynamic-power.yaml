@@ -1,0 +1,66 @@
+version: 3
+
+general:
+  poll_interval: 1
+  grace_period: 10
+
+power:
+  power_source:
+    ac_id: ADP0
+    battery_id: BAT0
+  profiles:
+    on_ac:
+      low: powersave
+      medium: balanced
+      high: performance
+    on_battery:
+      default: powersave
+
+epp:
+  enabled: true
+  values:
+    power-saver: power
+    balanced: balance_performance
+    performance: performance
+    quiet: balance_power
+
+process_overrides:
+  - name: recording
+    process_name: obs-studio
+    active_profile: powersave
+    active_epp: balance-power
+    priority: 100
+
+  - name: video_editing
+    process_name: kdenlive
+    prevent_powersave: true
+    priority: 90
+
+  - name: gaming
+    process_name: steam
+    active_profile: performance
+    active_epp: performance
+    priority: 80
+
+  - name: audio_editing
+    process_name: audacity
+    prevent_powersave: true
+    priority: 70
+
+  - name: arcade_emulation
+    process_name: qmc2-sdlmame
+    active_profile: performance
+    active_epp: performance
+    priority: 60
+
+  - name: wine_runtime
+    process_name: wineserver
+    prevent_powersave: true
+    priority: 50
+
+features:
+  panel_overdrive: false
+  kde_autohide_on_battery: false
+
+log:
+  level: info
