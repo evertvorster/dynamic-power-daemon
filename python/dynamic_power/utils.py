@@ -1,5 +1,6 @@
+
 import psutil
-from .debug import debug_log
+from .debug import debug_log, info_log, error_log
 
 def get_process_override(cfg):
     overrides = cfg.get("process_overrides", [])
@@ -15,7 +16,8 @@ def get_process_override(cfg):
     if matched:
         matched.sort(reverse=True)
         chosen = matched[0][1]
-        debug_log("utils", f"Chosen override: {chosen}")
+        info_log("utils", f"Applying override: {chosen}")
         return chosen
 
+    debug_log("utils", "No process overrides matched.")
     return None

@@ -7,7 +7,7 @@ import grp
 import sys
 
 from .power_profiles import normalize_profile
-from .debug import debug_log
+from .debug import debug_log, info_log, error_log
 
 DEFAULT_CONFIG_PATH = "/etc/dynamic-power.yaml"
 DEFAULT_TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power.yaml"
@@ -21,7 +21,7 @@ class Config:
 
     def load(self):
         if not os.path.exists(self.path):
-            print("[dynamic_power] No config found. Generating from default.")
+            info_log("config", "No config found. Generating from default.")
             self._generate_from_default()
         with open(self.path, "r") as f:
             self.data = yaml.safe_load(f)
@@ -44,9 +44,9 @@ class Config:
             if uid == 0:
                 os.chown(self.path, pwd.getpwnam("root").pw_uid, grp.getgrnam("root").gr_gid)
         except Exception as e:
-            print(f"[dynamic_power] Failed to generate default config: {e}")
+            error_log("config", f"Failed to generate default config: {e}")
             raise
-        print(f"[dynamic_power] Created new config at {self.path}")
+        info_log("config", f"Created new config at {self.path}")
 
     def get_profile(self, load_level, power_source):
         profiles = self.data.get("power", {}).get("profiles", {})

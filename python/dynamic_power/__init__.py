@@ -5,9 +5,11 @@ import time
 from . import config, sensors, power_profiles, utils, debug
 
 DEBUG_ENABLED = debug.DEBUG_ENABLED
+info_log = debug.info_log
+debug_log = debug.debug_log
 
 def run():
-    print("dynamic_power: starting daemon loop")
+    info_log("main", "dynamic_power: starting daemon loop")
 
     cfg = config.Config()
 
@@ -16,8 +18,7 @@ def run():
 
     grace = cfg.data.get("general", {}).get("grace_period", 0)
     if grace > 0:
-        if DEBUG_ENABLED:
-            print(f"[debug] Grace period active: {grace} seconds in 'performance' mode")
+        debug_log("main", f"Grace period active: {grace} seconds in 'performance' mode")
         time.sleep(grace)
 
     poll_interval = cfg.data.get("general", {}).get("poll_interval", 1)
@@ -27,8 +28,7 @@ def run():
 
         override = utils.get_process_override(cfg.data)
         if override:
-            if DEBUG_ENABLED:
-                print(f"[debug:main] Active override: {override}")
+            debug_log("main", f"Active override: {override}")
             profile = override.get("active_profile")
             if profile:
                 power_profiles.set_profile(profile)
@@ -39,12 +39,10 @@ def run():
         power_source = sensors.get_power_source(
             cfg.data.get("power", {}).get("power_source", {})
         )
-        if DEBUG_ENABLED:
-            print(f"[debug] Detected power source: {power_source}")
+        debug_log("main", f"Detected power source: {power_source}")
 
         load_level = sensors.get_load_level(cfg.data)
-        if DEBUG_ENABLED:
-            print(f"[debug] Detected load level: {load_level}")
+        debug_log("main", f"Detected load level: {load_level}")
 
         profile = cfg.get_profile(load_level, power_source)
 

@@ -1,6 +1,6 @@
 
 import subprocess
-from .debug import DEBUG_ENABLED
+from .debug import DEBUG_ENABLED, debug_log, info_log, error_log
 
 PROFILE_ALIASES = {
     "powersave": "power-saver",
@@ -19,19 +19,16 @@ def log_available_governors():
     try:
         with open(path, "r") as f:
             governors = f.read().strip()
-            if DEBUG_ENABLED:
-                print(f"[power_profiles] Available CPU governors: {governors}")
+            debug_log("power_profiles", f"Available CPU governors: {governors}")
     except FileNotFoundError:
-        if DEBUG_ENABLED:
-            print("[power_profiles] Could not read scaling_available_governors")
-   
+        debug_log("power_profiles", "Could not read scaling_available_governors")
+
 def get_current_profile():
     try:
         output = subprocess.check_output(["powerprofilesctl", "get"], text=True).strip()
         return output
     except Exception as e:
-        if DEBUG_ENABLED:
-            print(f"[power_profiles] Failed to get current profile: {e}")
+        error_log("power_profiles", f"Failed to get current profile: {e}")
         return None
 
 def set_profile(profile_name):
@@ -41,9 +38,9 @@ def set_profile(profile_name):
         return  # Already active
     try:
         subprocess.check_call(["powerprofilesctl", "set", actual_profile])
-        print(f"[power_profiles] Switched to profile: {actual_profile}")
+        info_log("power_profiles", f"Switched to profile: {actual_profile}")
     except Exception as e:
-        print(f"[power_profiles] Failed to set profile '{actual_profile}': {e}")
+        error_log("power_profiles", f"Failed to set profile '{actual_profile}': {e}")
 
 def set_profiles(profile_name):
     set_profile(profile_name)
