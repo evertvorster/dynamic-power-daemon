@@ -1,5 +1,5 @@
-
 import os
+from .debug import debug_log
 
 _valid_epp_modes = None
 _current_epp = None
@@ -11,7 +11,7 @@ def detect_supported_modes():
         with open(path, "r") as f:
             modes = f.read().strip().split()
             _valid_epp_modes = modes
-            print(f"[epp] Valid EPP modes: {_valid_epp_modes}")
+            debug_log("epp", f"Valid EPP modes: {_valid_epp_modes}")
     except FileNotFoundError:
         print("[epp] Warning: EPP not supported on this system")
         _valid_epp_modes = []
@@ -24,9 +24,11 @@ def set_epp(epp_value):
         detect_supported_modes()
 
     if not _valid_epp_modes:
+        debug_log("epp", "No EPP support detected on this system.")
         return
 
     if epp_value not in _valid_epp_modes:
+        debug_log("epp", f"'{epp_value}' is not a valid EPP mode on this system. Skipping.")
         return
 
     if epp_value == _current_epp:
@@ -48,7 +50,8 @@ def set_epp(epp_value):
             with open(path, "w") as f:
                 f.write(epp_value)
             success += 1
-        except Exception:
+        except Exception as e:
+            debug_log("epp", f"Failed to set EPP on {path}: {e}")
             fail += 1
 
     if success > 0:

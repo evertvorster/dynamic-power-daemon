@@ -1,22 +1,21 @@
 import psutil
+from .debug import debug_log
 
-def get_uptime_seconds():
-    with open("/proc/uptime", "r") as f:
-        return float(f.readline().split()[0])
+def get_process_override(cfg):
+    overrides = cfg.get("process_overrides", [])
+    matched = []
 
-def get_process_override(config):
-    overrides = config.get("process_overrides", [])
-    matches = []
+    for proc in psutil.process_iter(attrs=["name"]):
+        pname = proc.info["name"]
+        for override in overrides:
+            if pname == override.get("process_name"):
+                debug_log("utils", f"Matched process: {pname}")
+                matched.append((override.get("priority", 0), override))
 
-    for override in overrides:
-        name = override.get("process_name")
-        if name:
-            for proc in psutil.process_iter(attrs=["name"]):
-                if proc.info["name"] == name:
-                    matches.append(override)
-                    break
+    if matched:
+        matched.sort(reverse=True)
+        chosen = matched[0][1]
+        debug_log("utils", f"Chosen override: {chosen}")
+        return chosen
 
-    if not matches:
-        return None
-
-    return sorted(matches, key=lambda o: o.get("priority", 0), reverse=True)[0]
+    return None
