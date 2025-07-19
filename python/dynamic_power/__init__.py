@@ -1,12 +1,20 @@
 import os
+import sys
 import time
 from . import config, sensors, power_profiles, epp, utils
+
+DEBUG = "--debug" in sys.argv
+
+def debug_print(msg):
+    if DEBUG:
+        print(f"[debug] {msg}")
 
 def run():
     print("dynamic_power: starting daemon loop")
 
-    cfg = config.Config()
+    cfg = config.Config(debug=DEBUG)
 
+    power_profiles.set_profile("power-saver")
     epp.detect_supported_modes()
 
     poll_interval = cfg.data.get("general", {}).get("poll_interval", 1)
@@ -16,7 +24,7 @@ def run():
 
         override = utils.get_process_override(cfg.data)
         if override:
-            print(f"[override] Active process override: {override.get('name')}")
+            debug_print(f"Override matched: {override}")
             profile = override.get("active_profile")
             epp_value = override.get("active_epp")
 
@@ -24,19 +32,18 @@ def run():
                 power_profiles.set_profile(profile)
             if epp_value:
                 epp.set_epp(epp_value)
+        else:
+            power_source = sensors.get_power_source()
+            debug_print(f"Detected power source: {power_source}")
 
-            time.sleep(poll_interval)
-            continue
+            load_level = sensors.get_load_level(cfg.data)
+            debug_print(f"Load level: {load_level}")
 
-        power_source = sensors.get_power_source(
-            cfg.data.get("power", {}).get("power_source", {}).get("ac_id"),
-            cfg.data.get("power", {}).get("power_source", {}).get("battery_id")
-        )
-        load_level = sensors.classify_load(sensors.get_load_average())
-        profile = cfg.get_profile(load_level, power_source)
-        epp_value = cfg.get_epp(profile)
+            profile = cfg.get_profile(load_level, power_source)
+            epp_value = cfg.get_epp(profile)
 
-        power_profiles.set_profile(profile)
-        epp.set_epp(epp_value)
+            debug_print(f"Setting profile to {profile} and EPP to {epp_value}")
+            power_profiles.set_profile(profile)
+            epp.set_epp(epp_value)
 
         time.sleep(poll_interval)
