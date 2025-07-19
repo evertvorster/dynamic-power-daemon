@@ -1,3 +1,4 @@
+
 import os
 import sys
 import time
@@ -10,8 +11,14 @@ def run():
 
     cfg = config.Config()
 
-    power_profiles.set_profile("performance")
+    # Detect CPU profiles & just log for now
+    power_profiles.log_available_governors()
+    
+    # Detect EPP modes before setting any profile
     epp.detect_supported_modes()
+
+    # Now set a known initial profile (used for grace period later)
+    power_profiles.set_profiles("performance")
 
     poll_interval = cfg.data.get("general", {}).get("poll_interval", 1)
 

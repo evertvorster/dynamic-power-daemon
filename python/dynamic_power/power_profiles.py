@@ -1,3 +1,4 @@
+
 import subprocess
 from .debug import DEBUG_ENABLED
 
@@ -13,6 +14,17 @@ PROFILE_ALIASES = {
 def normalize_profile(profile):
     return PROFILE_ALIASES.get(profile, profile)
 
+def log_available_governors():
+    path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
+    try:
+        with open(path, "r") as f:
+            governors = f.read().strip()
+            if DEBUG_ENABLED:
+                print(f"[power_profiles] Available CPU governors: {governors}")
+    except FileNotFoundError:
+        if DEBUG_ENABLED:
+            print("[power_profiles] Could not read scaling_available_governors")
+   
 def get_current_profile():
     try:
         output = subprocess.check_output(["powerprofilesctl", "get"], text=True).strip()
@@ -34,15 +46,4 @@ def set_profile(profile_name):
         print(f"[power_profiles] Failed to set profile '{actual_profile}': {e}")
 
 def set_profiles(profile_name):
-    # Show available CPU profiles (e.g., platform profiles) if present
-    available_profiles_path = "/sys/firmware/acpi/platform_profile/available_profiles"
-    try:
-        with open(available_profiles_path, "r") as f:
-            profiles = f.read().strip()
-            if DEBUG_ENABLED:
-                print(f"[power_profiles] Available CPU profiles: {profiles}")
-    except FileNotFoundError:
-        if DEBUG_ENABLED:
-            print("[power_profiles] Could not read available CPU profiles (file missing)")
-
     set_profile(profile_name)
