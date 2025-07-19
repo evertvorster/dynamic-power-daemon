@@ -1,5 +1,5 @@
 import subprocess
-from .utils import DEBUG_ENABLED
+from .debug import DEBUG_ENABLED
 
 PROFILE_ALIASES = {
     "powersave": "power-saver",

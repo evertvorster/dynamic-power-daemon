@@ -1,3 +1,4 @@
+
 import os
 from .debug import debug_log
 
@@ -9,9 +10,11 @@ def detect_supported_modes():
     path = "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences"
     try:
         with open(path, "r") as f:
-            modes = f.read().strip().split()
+            content = f.read().strip()
+            modes = content.split()
+            debug_log("epp", f"Raw content of EPP file on cpu0: '{content}'")
+            debug_log("epp", f"Parsed EPP modes: {modes}")
             _valid_epp_modes = modes
-            debug_log("epp", f"Valid EPP modes: {_valid_epp_modes}")
     except FileNotFoundError:
         print("[epp] Warning: EPP not supported on this system")
         _valid_epp_modes = []

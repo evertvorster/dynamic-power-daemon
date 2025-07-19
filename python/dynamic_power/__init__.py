@@ -34,8 +34,7 @@ def run():
             continue
 
         power_source = sensors.get_power_source(
-            cfg.data.get("power", {}).get("power_source", {}).get("ac_id"),
-            cfg.data.get("power", {}).get("power_source", {}).get("battery_id")
+            cfg.data.get("power", {}).get("power_source", {})
         )
         if DEBUG_ENABLED:
             print(f"[debug] Detected power source: {power_source}")
