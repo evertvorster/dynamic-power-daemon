@@ -1,3 +1,9 @@
+
+power:
+  load_thresholds:
+    low: 1
+    high: 2
+    
 process_overrides:
   - name: recording
     process_name: obs-studio
