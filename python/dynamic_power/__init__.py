@@ -2,7 +2,7 @@
 import os
 import sys
 import time
-from . import config, sensors, power_profiles, epp, utils, debug
+from . import config, sensors, power_profiles, utils, debug
 
 DEBUG_ENABLED = debug.DEBUG_ENABLED
 
@@ -11,14 +11,14 @@ def run():
 
     cfg = config.Config()
 
-    # Detect CPU profiles & just log for now
-    power_profiles.log_available_governors()
-    
-    # Detect EPP modes before setting any profile
-    epp.detect_supported_modes()
-
-    # Now set a known initial profile (used for grace period later)
+    # Set initial profile
     power_profiles.set_profiles("performance")
+
+    grace = cfg.data.get("general", {}).get("grace_period", 0)
+    if grace > 0:
+        if DEBUG_ENABLED:
+            print(f"[debug] Grace period active: {grace} seconds in 'performance' mode")
+        time.sleep(grace)
 
     poll_interval = cfg.data.get("general", {}).get("poll_interval", 1)
 
@@ -30,12 +30,8 @@ def run():
             if DEBUG_ENABLED:
                 print(f"[debug:main] Active override: {override}")
             profile = override.get("active_profile")
-            epp_value = override.get("active_epp")
-
             if profile:
                 power_profiles.set_profile(profile)
-            if epp_value:
-                epp.set_epp(epp_value)
 
             time.sleep(poll_interval)
             continue
@@ -51,9 +47,7 @@ def run():
             print(f"[debug] Detected load level: {load_level}")
 
         profile = cfg.get_profile(load_level, power_source)
-        epp_value = cfg.get_epp(profile)
 
         power_profiles.set_profile(profile)
-        epp.set_epp(epp_value)
 
         time.sleep(poll_interval)
