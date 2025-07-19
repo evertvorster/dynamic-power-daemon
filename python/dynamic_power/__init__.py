@@ -2,11 +2,22 @@
 import os
 import sys
 import time
+import signal
 from . import config, sensors, power_profiles, utils, debug
 
 DEBUG_ENABLED = debug.DEBUG_ENABLED
 info_log = debug.info_log
 debug_log = debug.debug_log
+
+terminate = False
+
+def handle_term(signum, frame):
+    global terminate
+    info_log("main", f"Received signal {signum}, shutting down...")
+    terminate = True
+
+signal.signal(signal.SIGTERM, handle_term)
+signal.signal(signal.SIGINT, handle_term)
 
 def run():
     info_log("main", "dynamic_power: starting daemon loop")
@@ -23,7 +34,7 @@ def run():
 
     poll_interval = cfg.data.get("general", {}).get("poll_interval", 1)
 
-    while True:
+    while not terminate:
         cfg.reload_if_needed()
 
         override = utils.get_process_override(cfg.data)
@@ -49,3 +60,5 @@ def run():
         power_profiles.set_profile(profile)
 
         time.sleep(poll_interval)
+
+    info_log("main", "dynamic_power shut down cleanly.")
