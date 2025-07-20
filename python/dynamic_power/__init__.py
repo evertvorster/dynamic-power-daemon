@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import signal
-from . import config, sensors, power_profiles, utils, dbus_interface
+from . import config, sensors, power_profiles, dbus_interface
 from .debug import info_log, debug_log, error_log, DEBUG_ENABLED
 
 terminate = False
@@ -56,16 +56,6 @@ def run():
         if override_profile:
             debug_log("main", f"DBus override active: {override_profile}")
             power_profiles.set_profile(override_profile)
-            time.sleep(current_poll_interval)
-            continue
-
-        override = utils.get_process_override(cfg.data)
-        if override:
-            debug_log("main", f"Active process override: {override}")
-            profile = override.get("active_profile")
-            if profile:
-                power_profiles.set_profile(profile)
-
             time.sleep(current_poll_interval)
             continue
 
