@@ -15,6 +15,8 @@ TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 
 terminate = False
 last_seen_processes = set()
+last_sent_profile = None
+last_sent_threshold = None
 
 def log(msg):
     journal.send(f"dpu_user: {msg}")
@@ -37,31 +39,73 @@ def load_template():
         return yaml.safe_load(f) or {}
 
 def send_thresholds(bus, low, high):
+    global last_sent_threshold
+    if (low, high) == last_sent_threshold and not DEBUG:
+        return
     try:
         daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
         iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
         iface.SetLoadThresholds(float(low), float(high))
+        last_sent_threshold = (low, high)
         debug(f"Sent thresholds: low={low}, high={high}")
     except Exception as e:
         if DEBUG:
             journal.send(f"dpu_user (error): Failed to send thresholds - {e}")
 
-def check_processes(process_overrides):
+def send_profile(bus, profile):
+    global last_sent_profile
+    if profile == last_sent_profile and not DEBUG:
+        return
+    try:
+        daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+        iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+        iface.SetProfile(profile)
+        last_sent_profile = profile
+        debug(f"Sent profile override: {profile}")
+    except Exception as e:
+        if DEBUG:
+            journal.send(f"dpu_user (error): Failed to send profile override - {e}")
+
+def apply_process_policy(bus, name, policy, high_th):
+    if "active_profile" in policy:
+        send_profile(bus, policy["active_profile"])
+        if DEBUG or name not in last_seen_processes:
+            journal.send(f"dpu_user: {name} -> active_profile={policy['active_profile']}")
+    elif policy.get("prevent_powersave", False):
+        send_thresholds(bus, 0, high_th)
+        if DEBUG or name not in last_seen_processes:
+            journal.send(f"dpu_user: {name} -> prevent_powersave=true")
+
+def check_processes(bus, process_overrides, high_th):
     global last_seen_processes
     running = set(p.info["name"] for p in psutil.process_iter(attrs=["name"]))
 
+    # Normalize overrides to dict form
     if isinstance(process_overrides, list):
-        proc_list = {entry.get("process_name"): entry for entry in process_overrides}
+        proc_map = {entry.get("process_name"): entry for entry in process_overrides}
     else:
-        proc_list = process_overrides
+        proc_map = process_overrides
 
-    for proc, data in proc_list.items():
-        if proc in running:
-            if DEBUG or proc not in last_seen_processes:
-                journal.send(f"dpu_user: Detected process {proc}, profile={data.get('profile')}, epp={data.get('epp')}")
-            last_seen_processes.add(proc)
-        elif proc in last_seen_processes:
+    matched = None
+    for name, policy in proc_map.items():
+        if name in running:
+            matched = (name, policy)
+            last_seen_processes.add(name)
+            break
+
+    if matched:
+        apply_process_policy(bus, matched[0], matched[1], high_th)
+    else:
+        # No process matched, clear any active override profile
+        if last_sent_profile is not None:
+            send_profile(bus, "")
+
+    # Reset state for exited processes
+    for proc in list(last_seen_processes):
+        if proc not in running:
             last_seen_processes.remove(proc)
+            if DEBUG:
+                journal.send(f"dpu_user (debug): Process {proc} no longer running.")
 
 def handle_sigint(signum, frame):
     global terminate
@@ -97,8 +141,8 @@ def main():
                     last_mtime = mtime
                     debug("Reloaded config due to change.")
 
+            check_processes(bus, process_overrides, thresholds.get("high", 2.0))
             send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
-            check_processes(process_overrides)
             time.sleep(poll_interval)
         except Exception as e:
             if DEBUG:
