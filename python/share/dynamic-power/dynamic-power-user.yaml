@@ -6,7 +6,7 @@ power:
     
 process_overrides:
   - name: recording
-    process_name: obs-studio
+    process_name: obs
     active_profile: powersave
     active_epp: balance-power
     priority: 100
