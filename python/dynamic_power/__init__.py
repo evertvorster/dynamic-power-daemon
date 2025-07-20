@@ -10,6 +10,7 @@ override_profile = None  # Temporary profile override set via DBus
 current_poll_interval = 1  # Default, overridden at runtime
 current_threshold_low = 1.0
 current_threshold_high = 2.0
+thresholds_overridden = False  # New flag to track if thresholds were overridden via DBus
 
 def handle_term(signum, frame):
     global terminate
@@ -20,7 +21,9 @@ signal.signal(signal.SIGTERM, handle_term)
 signal.signal(signal.SIGINT, handle_term)
 
 def run():
-    global override_profile, current_poll_interval, current_threshold_low, current_threshold_high
+    global override_profile, current_poll_interval
+    global current_threshold_low, current_threshold_high
+    global thresholds_overridden
 
     info_log("main", "dynamic_power: starting daemon loop")
 
@@ -53,6 +56,11 @@ def run():
     while not terminate:
         cfg.reload_if_needed()
 
+        if not thresholds_overridden:
+            thresholds = cfg.get_thresholds()
+            current_threshold_low = thresholds.get("low", 1.0)
+            current_threshold_high = thresholds.get("high", 2.0)
+
         if override_profile:
             debug_log("main", f"DBus override active: {override_profile}")
             power_profiles.set_profile(override_profile)
@@ -68,7 +76,6 @@ def run():
         debug_log("main", f"Detected load level: {load_level}")
 
         profile = cfg.get_profile(load_level, power_source)
-
         power_profiles.set_profile(profile)
 
         time.sleep(current_poll_interval)
@@ -86,7 +93,8 @@ def set_poll_interval(interval):
     info_log("main", f"Poll interval updated via DBus: {current_poll_interval} seconds")
 
 def set_thresholds(low, high):
-    global current_threshold_low, current_threshold_high
+    global current_threshold_low, current_threshold_high, thresholds_overridden
     current_threshold_low = max(0, float(low))
-    current_threshold_high = max(current_threshold_low + 0.1, float(high))  # ensure spacing
+    current_threshold_high = max(current_threshold_low + 0.1, float(high))
+    thresholds_overridden = True
     info_log("main", f"Thresholds updated via DBus: low={current_threshold_low}, high={current_threshold_high}")

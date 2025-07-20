@@ -17,6 +17,7 @@ terminate = False
 last_seen_processes = set()
 last_sent_profile = None
 last_sent_threshold = None
+threshold_override_active = False
 
 def log(msg):
     journal.send(f"dpu_user: {msg}")
@@ -67,20 +68,22 @@ def send_profile(bus, profile):
             journal.send(f"dpu_user (error): Failed to send profile override - {e}")
 
 def apply_process_policy(bus, name, policy, high_th):
+    global threshold_override_active
     if "active_profile" in policy:
+        threshold_override_active = False
         send_profile(bus, policy["active_profile"])
         if DEBUG or name not in last_seen_processes:
             journal.send(f"dpu_user: {name} -> active_profile={policy['active_profile']}")
     elif policy.get("prevent_powersave", False):
+        threshold_override_active = True
         send_thresholds(bus, 0, high_th)
         if DEBUG or name not in last_seen_processes:
             journal.send(f"dpu_user: {name} -> prevent_powersave=true")
 
 def check_processes(bus, process_overrides, high_th):
-    global last_seen_processes
+    global last_seen_processes, threshold_override_active
     running = set(p.info["name"] for p in psutil.process_iter(attrs=["name"]))
 
-    # Normalize overrides to dict form
     if isinstance(process_overrides, list):
         proc_map = {entry.get("process_name"): entry for entry in process_overrides}
     else:
@@ -96,16 +99,15 @@ def check_processes(bus, process_overrides, high_th):
     if matched:
         apply_process_policy(bus, matched[0], matched[1], high_th)
     else:
-        # No process matched, clear any active override profile
-        if last_sent_profile is not None:
-            send_profile(bus, "")
-
-    # Reset state for exited processes
-    for proc in list(last_seen_processes):
-        if proc not in running:
-            last_seen_processes.remove(proc)
-            if DEBUG:
-                journal.send(f"dpu_user (debug): Process {proc} no longer running.")
+        # Process override is no longer active
+        if threshold_override_active:
+            threshold_override_active = False
+            debug("No override process active. Resetting thresholds to config.")
+        for proc in list(last_seen_processes):
+            if proc not in running:
+                last_seen_processes.remove(proc)
+                if DEBUG:
+                    journal.send(f"dpu_user (debug): Process {proc} no longer running.")
 
 def handle_sigint(signum, frame):
     global terminate
@@ -113,7 +115,7 @@ def handle_sigint(signum, frame):
     terminate = True
 
 def main():
-    global terminate
+    global terminate, threshold_override_active
 
     setproctitle("dynamic_power_user")
     signal.signal(signal.SIGINT, handle_sigint)
@@ -142,7 +144,10 @@ def main():
                     debug("Reloaded config due to change.")
 
             check_processes(bus, process_overrides, thresholds.get("high", 2.0))
-            send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
+
+            if not threshold_override_active:
+                send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
+
             time.sleep(poll_interval)
         except Exception as e:
             if DEBUG:
