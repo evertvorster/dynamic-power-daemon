@@ -19,16 +19,13 @@ def get_power_source(power_source_cfg=None):
         debug_log("sensors", f"Fallback detection failed, using default AC device: {ac_id}")
         return "ac"
 
-def get_load_level(cfg):
+def get_load_level(low_th=1.0, high_th=2.0):
     try:
         with open("/proc/loadavg", "r") as f:
             load_avg = float(f.read().split()[0])
     except Exception as e:
         debug_log("sensors", f"Failed to read loadavg: {e}")
         return "low"
-
-    low_th = cfg.get("power", {}).get("load_thresholds", {}).get("low", 1)
-    high_th = cfg.get("power", {}).get("load_thresholds", {}).get("high", 2)
 
     level = "low"
     if load_avg > high_th:

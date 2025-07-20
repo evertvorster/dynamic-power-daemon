@@ -11,6 +11,7 @@ OBJECT_PATH = "/org/dynamic_power/Daemon"
 
 _set_profile_override = None
 _set_poll_interval = None
+_set_thresholds = None
 
 def set_profile_override_callback(cb):
     global _set_profile_override
@@ -21,6 +22,11 @@ def set_poll_interval_callback(cb):
     global _set_poll_interval
     _set_poll_interval = cb
     debug_log("dbus", "Poll interval callback registered")
+
+def set_thresholds_callback(cb):
+    global _set_thresholds
+    _set_thresholds = cb
+    debug_log("dbus", "Thresholds callback registered")
 
 class DynamicPowerInterface(dbus.service.Object):
     def __init__(self, loop):
@@ -41,9 +47,8 @@ class DynamicPowerInterface(dbus.service.Object):
         if _set_profile_override:
             _set_profile_override(profile)
             return True
-        else:
-            error_log("dbus", "SetProfile called but no callback registered")
-            return False
+        error_log("dbus", "SetProfile called but no callback registered")
+        return False
 
     @dbus.service.method(BUS_NAME, in_signature="u", out_signature="b")
     def SetPollInterval(self, interval):
@@ -51,9 +56,17 @@ class DynamicPowerInterface(dbus.service.Object):
         if _set_poll_interval:
             _set_poll_interval(interval)
             return True
-        else:
-            error_log("dbus", "SetPollInterval called but no callback registered")
-            return False
+        error_log("dbus", "SetPollInterval called but no callback registered")
+        return False
+
+    @dbus.service.method(BUS_NAME, in_signature="dd", out_signature="b")
+    def SetLoadThresholds(self, low, high):
+        debug_log("dbus", f"SetLoadThresholds requested: low={low}, high={high}")
+        if _set_thresholds:
+            _set_thresholds(low, high)
+            return True
+        error_log("dbus", "SetLoadThresholds called but no callback registered")
+        return False
 
 def start_dbus_interface():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
