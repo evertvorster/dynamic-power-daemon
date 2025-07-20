@@ -1,3 +1,5 @@
+general:
+  poll_interval: 5
 
 power:
   load_thresholds:
