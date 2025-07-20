@@ -9,13 +9,18 @@ from .debug import info_log, debug_log, error_log
 BUS_NAME = "org.dynamic_power.Daemon"
 OBJECT_PATH = "/org/dynamic_power/Daemon"
 
-_set_profile_override = None  # Callback set by main daemon
+_set_profile_override = None
+_set_poll_interval = None
 
 def set_profile_override_callback(cb):
-    """Register a callback that will be invoked when SetProfile is called via DBus."""
     global _set_profile_override
     _set_profile_override = cb
     debug_log("dbus", "Profile override callback registered")
+
+def set_poll_interval_callback(cb):
+    global _set_poll_interval
+    _set_poll_interval = cb
+    debug_log("dbus", "Poll interval callback registered")
 
 class DynamicPowerInterface(dbus.service.Object):
     def __init__(self, loop):
@@ -40,11 +45,21 @@ class DynamicPowerInterface(dbus.service.Object):
             error_log("dbus", "SetProfile called but no callback registered")
             return False
 
+    @dbus.service.method(BUS_NAME, in_signature="u", out_signature="b")
+    def SetPollInterval(self, interval):
+        debug_log("dbus", f"SetPollInterval requested: {interval}")
+        if _set_poll_interval:
+            _set_poll_interval(interval)
+            return True
+        else:
+            error_log("dbus", "SetPollInterval called but no callback registered")
+            return False
+
 def start_dbus_interface():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     loop = GLib.MainLoop()
-    DynamicPowerInterface(loop)
+    iface = DynamicPowerInterface(loop)
 
-    thread = threading.Thread(target=loop.run, daemon=True, name="DBusMainLoop")
+    thread = threading.Thread(target=loop.run, daemon=True)
     thread.start()
     info_log("dbus", "DBus main loop started in background thread")
