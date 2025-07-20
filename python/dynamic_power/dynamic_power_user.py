@@ -60,17 +60,11 @@ def send_thresholds_to_daemon(low, high):
         journal.send(f"dynamic_power_user: Failed to send thresholds: {e}")
 
 def scan_processes(process_overrides):
-    running = list(psutil.process_iter(['name']))
-    running_names = {p.info['name'] for p in running if p.info['name']}
-
-    journal.send(f"dynamic_power_user: Running processes: {', '.join(sorted(running_names))}")
-
+    running_names = {proc.name() for proc in psutil.process_iter(['name'])}
     for override in process_overrides:
-        name = override.get("process_name")
-        matched = name in running_names
-        journal.send(f"dynamic_power_user: Checking for process '{name}' -> {'FOUND' if matched else 'not found'}")
-        if matched:
-            journal.send(f"dynamic_power_user: Matched override: {override.get('name')} (profile={override.get('active_profile')})")
+        process_name = override.get("process_name")
+        if process_name in running_names:
+            journal.send(f"dynamic_power_user: Process override matched: {process_name} (profile={override.get('active_profile')})")
 
 def main():
     journal.send("dynamic_power_user: Starting monitor")
@@ -80,12 +74,15 @@ def main():
         while True:
             config.reload_if_needed()
 
+            # Apply thresholds
             low, high = config.get_thresholds()
             send_thresholds_to_daemon(low, high)
 
+            # Scan for processes
             overrides = config.get_process_overrides()
             scan_processes(overrides)
 
+            # Wait for next interval
             time.sleep(config.get_poll_interval())
 
     except KeyboardInterrupt:
