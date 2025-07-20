@@ -8,7 +8,6 @@ process_overrides:
   - name: recording
     process_name: obs
     active_profile: powersave
-    active_epp: balance-power
     priority: 100
 
   - name: video_editing
@@ -19,7 +18,6 @@ process_overrides:
   - name: gaming
     process_name: steam
     active_profile: performance
-    active_epp: performance
     priority: 80
 
   - name: audio_editing
@@ -30,7 +28,6 @@ process_overrides:
   - name: arcade_emulation
     process_name: qmc2-sdlmame
     active_profile: performance
-    active_epp: performance
     priority: 60
 
   - name: wine_runtime
