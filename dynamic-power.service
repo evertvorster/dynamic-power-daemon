@@ -1,10 +1,10 @@
 [Unit]
 Description=Dynamic CPU Power Profile Adjuster
 After=multi-user.target
-ConditionPathExists=/usr/bin/dynamic_power.sh
+ConditionPathExists=/usr/bin/dynamic_power
 
 [Service]
-ExecStart=/usr/bin/dynamic_power.sh
+ExecStart=/usr/bin/dynamic_power
 Restart=always
 User=root
 
