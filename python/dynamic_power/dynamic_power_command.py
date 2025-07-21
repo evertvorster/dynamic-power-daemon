@@ -4,6 +4,9 @@ import os
 import time
 import subprocess
 import yaml
+import sys
+DEBUG = '--debug' in sys.argv
+
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 import psutil
@@ -82,6 +85,7 @@ class MainWindow(QtWidgets.QWidget):
         self.add_proc_button.clicked.connect(self.add_process)
         layout.addWidget(self.add_proc_button)
 
+        if DEBUG: print('[debug] Reloading config...')
         self.load_config()
         self.debug_mode = "--debug" in sys.argv
         if not self.debug_mode:
@@ -209,6 +213,8 @@ class MainWindow(QtWidgets.QWidget):
         dlg_layout.addRow(button_row)
 
         def apply():
+            if self.debug_mode:
+                print("[debug] Apply button pressed.")
             proc["process_name"] = name_edit.text()
             proc["active_profile"] = profile_button.text()
             proc["priority"] = priority_slider.value()
@@ -216,18 +222,28 @@ class MainWindow(QtWidgets.QWidget):
             dlg.accept()
 
         def delete_proc():
-            self.config["process_overrides"] = [p for p in self.config.get("process_overrides", []) if p.get("process_name") != name_edit.text()]
+            self.config["process_overrides"] = [
+                p for p in self.config.get("process_overrides", [])
+                if p.get("process_name") != name_edit.text()
+            ]
+            if DEBUG: print(f'[debug] Writing updated config to {CONFIG_PATH}')
             with open(CONFIG_PATH, "w") as f:
                 yaml.dump(self.config, f)
+            if DEBUG: print('[debug] Reloading config...')
             self.load_config()
+            dlg.accept()
 
         delete_button.clicked.connect(delete_proc)
-        button_box.accepted.connect(apply)
+        apply_button = button_box.button(QtWidgets.QDialogButtonBox.StandardButton.Apply)
+        if apply_button:
+            apply_button.clicked.connect(apply)
         button_box.rejected.connect(dlg.reject)
         dlg.exec()
 
     def save_process(self, proc):
+        if DEBUG: print(f'[debug] save_process called with: {proc}')
         overrides = self.config.setdefault("process_overrides", [])
+        if DEBUG: print(f'[debug] Current overrides before save: {overrides}')
         found = False
         for i, p in enumerate(overrides):
             if p.get("process_name") == proc["process_name"]:
@@ -236,9 +252,11 @@ class MainWindow(QtWidgets.QWidget):
         if not found:
             overrides.append(proc)
 
+        if DEBUG: print(f'[debug] Writing updated config to {CONFIG_PATH}')
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
 
+        if DEBUG: print('[debug] Reloading config...')
         self.load_config()
 
     def update_thresholds(self):
@@ -248,6 +266,7 @@ class MainWindow(QtWidgets.QWidget):
         self.config["power"].setdefault("load_thresholds", {})
         self.config["power"]["load_thresholds"]["low"] = round(new_low, 2)
         self.config["power"]["load_thresholds"]["high"] = round(new_high, 2)
+        if DEBUG: print(f'[debug] Writing updated config to {CONFIG_PATH}')
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
     def on_low_drag_finished(self):
@@ -259,6 +278,7 @@ class MainWindow(QtWidgets.QWidget):
             print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
 
+        if DEBUG: print(f'[debug] Writing updated config to {CONFIG_PATH}')
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
 def main():
@@ -284,4 +304,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
