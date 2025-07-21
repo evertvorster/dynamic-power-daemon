@@ -78,6 +78,13 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.add_proc_button)
 
         self.load_config()
+        # Create draggable threshold lines from config
+        self.low_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
+        self.high_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('r', width=1), movable=True)
+        self.graph.addItem(self.low_line)
+        self.graph.addItem(self.high_line)
+        self.low_line.sigPositionChanged.connect(self.update_thresholds)
+        self.high_line.sigPositionChanged.connect(self.update_thresholds)
 
     def update_graph(self):
         self.data[self.ptr % len(self.data)] = psutil.getloadavg()[0]
@@ -160,15 +167,13 @@ class MainWindow(QtWidgets.QWidget):
         self._threshold_lines = []
 
         self.low_line = pg.InfiniteLine(pos=self.config.get("general", {}).get("low_threshold", 1.0),
-                                        angle=0, pen=pg.mkPen('r', width=1), movable=True)
+                angle=0, pen=pg.mkPen('r', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get("general", {}).get("high_threshold", 2.0),
-                                         angle=0, pen=pg.mkPen('g', width=1), movable=True)
+                angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.graph.addItem(self.low_line)
         self.graph.addItem(self.high_line)
         self.low_line.sigPositionChanged.connect(self.update_thresholds)
         self.high_line.sigPositionChanged.connect(self.update_thresholds)
-        print("Low line position:", self.low_line.value())
-        print("High line position:", self.high_line.value())
         self._threshold_lines = [self.low_line, self.high_line]
         dlg.accept()
 
