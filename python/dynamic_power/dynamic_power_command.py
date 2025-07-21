@@ -82,12 +82,16 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.add_proc_button)
 
         self.load_config()
-        # Launch dynamic_power_user as child process
+        self.debug_mode = "--debug" in sys.argv
+        cmd = ["/usr/bin/dynamic_power_user"]
+        if self.debug_mode:
+            cmd.append("--debug")
+
         try:
-            subprocess.Popen(["/usr/bin/dynamic_power_user"],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+            self.user_proc = subprocess.Popen(cmd,
+                stdout=None if self.debug_mode else subprocess.DEVNULL,
+                stderr=None if self.debug_mode else subprocess.DEVNULL,
+                start_new_session=True)
         except Exception as e:
             print(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
@@ -234,6 +238,17 @@ def main():
     icon = QtGui.QIcon.fromTheme("battery")
     tray = PowerCommandTray(icon, app)
     tray.show()
+
+    # Ensure child process is terminated
+    def cleanup():
+        if hasattr(tray.window, "user_proc"):
+            tray.window.user_proc.terminate()
+            try:
+                tray.window.user_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                tray.window.user_proc.kill()
+
+    app.aboutToQuit.connect(cleanup)
 
     sys.exit(app.exec())
 
