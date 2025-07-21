@@ -93,6 +93,7 @@ def apply_process_policy(bus, name, policy, high_th):
             journal.send(f"dpu_user: {name} -> prevent_powersave=true")
 
 def check_processes(bus, process_overrides, high_th):
+    global last_seen_processes, threshold_override_active, active_profile_process
     override = read_control_override()
     mode = override.get("manual_override", "Dynamic")
     if mode == "Dynamic":
@@ -120,7 +121,6 @@ def check_processes(bus, process_overrides, high_th):
         send_profile(bus, mode)
     if DEBUG:
         journal.send(f"dpu_user (debug): Override -> {mode}")
-    global last_seen_processes, threshold_override_active, active_profile_process
     running = set(p.info["name"] for p in psutil.process_iter(attrs=["name"]))
 
     if isinstance(process_overrides, list):
