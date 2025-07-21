@@ -18,6 +18,7 @@ import pyqtgraph as pg
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 STATE_PATH = Path("/run/dynamic_power_state.yaml")
+MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
@@ -66,6 +67,9 @@ class MainWindow(QtWidgets.QWidget):
         self.state_timer = QtCore.QTimer()
         self.state_timer.timeout.connect(self.update_state)
         self.state_timer.start(1000)
+        self.match_timer = QtCore.QTimer()
+        self.match_timer.timeout.connect(self.update_process_matches)
+        self.match_timer.start(1000)
 
         # Power profile button
         self.profile_button = QtWidgets.QPushButton("Mode: Dynamic")
@@ -269,6 +273,34 @@ class MainWindow(QtWidgets.QWidget):
         if DEBUG: print(f'[debug] Writing updated config to {CONFIG_PATH}')
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
+
+    def update_process_matches(self):
+        try:
+            with open(MATCHES_PATH, "r") as f:
+                matches = yaml.safe_load(f) or {}
+                match_list = matches.get("matched_processes", matches if isinstance(matches, list) else [])
+
+                self.matched = {}
+                for item in match_list:
+                    name = item.get("process_name", "").lower()
+                    active = item.get("active", False)
+                    self.matched[name] = "active" if active else "inactive"
+        except Exception as e:
+            self.matched = {}
+            if DEBUG: print(f"[debug] Could not read matches file: {e}")
+
+        for i in range(self.proc_layout.count()):
+            btn = self.proc_layout.itemAt(i).widget()
+            if not isinstance(btn, QtWidgets.QPushButton):
+                continue
+            name = btn.text().lower()
+            state = self.matched.get(name)
+            if state == "active":
+                btn.setStyleSheet("background-color: #FFD700; color: black;")
+            elif state == "inactive":
+                btn.setStyleSheet("background-color: #FFFACD;")
+            else:
+                btn.setStyleSheet("")
     def on_low_drag_finished(self):
         if self.debug_mode:
             print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")

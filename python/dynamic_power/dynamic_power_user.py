@@ -126,9 +126,31 @@ def check_processes(bus, process_overrides, high_th):
     if isinstance(process_overrides, list):
         proc_map = {entry.get("process_name"): entry for entry in process_overrides}
     else:
+        # Remove matches file if it exists
+        try:
+            uid = os.getuid()
+            match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
+            if os.path.exists(match_file):
+                os.remove(match_file)
+                if DEBUG:
+                    journal.send("dpu_user (debug): Removed matches file (no active matches).")
+        except Exception as e:
+            if DEBUG:
+                journal.send(f"dpu_user (error): Failed to remove matches file - {e}")
         proc_map = process_overrides
 
     matches = []
+    # Always try to remove old matches file, even if we’ll re-create it
+    try:
+        uid = os.getuid()
+        match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
+        if os.path.exists(match_file):
+            os.remove(match_file)
+            if DEBUG:
+                journal.send("dpu_user (debug): Removed old matches file.")
+    except Exception as e:
+        if DEBUG:
+            journal.send(f"dpu_user (error): Failed to remove matches file - {e}")
     for name, policy in proc_map.items():
         if name in running:
             prio = policy.get("priority", 0)
