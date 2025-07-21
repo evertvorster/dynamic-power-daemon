@@ -70,6 +70,14 @@ def send_profile(bus, profile):
         if DEBUG:
             journal.send(f"dpu_user (error): Failed to send profile override - {e}")
 
+
+def normalize_profile(name):
+    aliases = {
+        "Powersave": "power-saver",
+        "Balanced": "balanced",
+        "Performance": "performance"
+    }
+    return aliases.get(name, name)
 def apply_process_policy(bus, name, policy, high_th):
     global threshold_override_active, active_profile_process
     if "active_profile" in policy:
@@ -86,33 +94,32 @@ def apply_process_policy(bus, name, policy, high_th):
 
 def check_processes(bus, process_overrides, high_th):
     override = read_control_override()
-    if override:
-        mode = override.get("manual_override", "Dynamic")
-        if mode == "Dynamic":
-            send_profile(bus, "")
-            if DEBUG:
-                journal.send("dpu_user (debug): Override cleared (Dynamic mode)")
-        elif mode == "Inhibit Powersave":
-            send_thresholds(bus, 0, high_th)
-            if DEBUG:
-                journal.send("dpu_user (debug): Override -> Inhibit Powersave")
-            return
-        elif mode in ["Performance", "Balanced", "Powersave"]:
-            send_profile(bus, normalize_profile(mode))
-            if DEBUG:
-                journal.send(f"dpu_user (debug): Override -> {mode}")
-            return
+    mode = override.get("manual_override", "Dynamic")
+    if mode == "Dynamic":
+        send_profile(bus, "")
+        if DEBUG:
+            journal.send("dpu_user (debug): Override cleared (Dynamic mode)")
+    elif mode == "Inhibit Powersave":
+        send_thresholds(bus, 0, high_th)
+        threshold_override_active = True
+        if DEBUG:
+            journal.send("dpu_user (debug): Override -> Inhibit Powersave")
+        return
+    elif mode in ["Performance", "Balanced", "Powersave"]:
+        send_profile(bus, normalize_profile(mode))
+        if DEBUG:
+            journal.send(f"dpu_user (debug): Override -> {mode}")
+        return
 
-            if override:
-                mode = override.get("manual_override", "Dynamic")
-            if mode == "Inhibit Powersave":
-                send_thresholds(bus, 0, thresholds.get("high", 2.0))
-            if DEBUG:
-                journal.send("dpu_user (debug): Override -> Inhibit Powersave")
-            elif mode in ["Performance", "Balanced", "Powersave"]:
-                send_profile(bus, mode)
-            if DEBUG:
-                journal.send(f"dpu_user (debug): Override -> {mode}")
+    mode = override.get("manual_override", "Dynamic")
+    if mode == "Inhibit Powersave":
+        send_thresholds(bus, 0, thresholds.get("high", 2.0))
+    if DEBUG:
+        journal.send("dpu_user (debug): Override -> Inhibit Powersave")
+    elif mode in ["Performance", "Balanced", "Powersave"]:
+        send_profile(bus, mode)
+    if DEBUG:
+        journal.send(f"dpu_user (debug): Override -> {mode}")
     global last_seen_processes, threshold_override_active, active_profile_process
     running = set(p.info["name"] for p in psutil.process_iter(attrs=["name"]))
 
