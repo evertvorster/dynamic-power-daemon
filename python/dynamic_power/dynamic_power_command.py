@@ -82,6 +82,14 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.add_proc_button)
 
         self.load_config()
+        # Launch dynamic_power_user as child process
+        try:
+            subprocess.Popen(["/usr/bin/dynamic_power_user"],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except Exception as e:
+            print(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
