@@ -7,6 +7,7 @@ import psutil
 import dbus
 from inotify_simple import INotify, flags
 import signal
+import getpass
 from systemd import journal
 from setproctitle import setproctitle
 
@@ -84,6 +85,18 @@ def apply_process_policy(bus, name, policy, high_th):
             journal.send(f"dpu_user: {name} -> prevent_powersave=true")
 
 def check_processes(bus, process_overrides, high_th):
+
+    override = read_control_override()
+    if override:
+        mode = override.get("manual_override", "Dynamic")
+        if mode == "Inhibit Powersave":
+            send_thresholds(bus, 0, thresholds.get("high", 2.0))
+            if DEBUG:
+                journal.send("dpu_user (debug): Override -> Inhibit Powersave")
+        elif mode in ["Performance", "Balanced", "Powersave"]:
+            send_profile(bus, mode)
+            if DEBUG:
+                journal.send(f"dpu_user (debug): Override -> {mode}")
     global last_seen_processes, threshold_override_active, active_profile_process
     running = set(p.info["name"] for p in psutil.process_iter(attrs=["name"]))
 
@@ -145,6 +158,18 @@ def write_state_file(profile, thresholds):
     except Exception as e:
         if DEBUG:
             journal.send(f"dpu_user (error): Failed to write state file - {e}")
+
+def read_control_override():
+    try:
+        uid = os.getuid()
+        path = f"/run/user/{uid}/dynamic_power_control.yaml"
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                return yaml.safe_load(f)
+    except Exception as e:
+        if DEBUG:
+            journal.send(f"dpu_user (error): Failed to read override file - {e}")
+    return {}
 def main():
     global terminate, threshold_override_active
 

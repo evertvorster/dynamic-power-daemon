@@ -15,7 +15,7 @@ import pyqtgraph as pg
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 STATE_PATH = Path("/run/dynamic_power_state.yaml")
-OVERRIDE_PATH = Path("/run/dynamic_power_override.yaml")
+OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -104,6 +104,19 @@ class MainWindow(QtWidgets.QWidget):
         self.graph.addItem(self.high_line)
         self.low_line.sigPositionChangeFinished.connect(self.on_low_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
+
+        # Ensure override file exists with default "Dynamic" mode
+        override_state = {"manual_override": "Dynamic"}
+        try:
+            os.makedirs(OVERRIDE_PATH.parent, exist_ok=True)
+            with open(OVERRIDE_PATH, "w") as f:
+                yaml.dump(override_state, f)
+            if self.debug_mode:
+                print(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
+        except Exception as e:
+            if self.debug_mode:
+                print(f"[debug] Failed to write override state: {e}")
+
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
@@ -241,20 +254,10 @@ class MainWindow(QtWidgets.QWidget):
         if self.debug_mode:
             print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
         self.update_thresholds()
-        print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
-        self.update_thresholds()
     def on_high_drag_finished(self):
         if self.debug_mode:
             print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
-        print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
-        self.update_thresholds()
-        new_low = float(self.low_line.value())
-        new_high = float(self.high_line.value())
-        self.config.setdefault("power", {})
-        self.config["power"].setdefault("load_thresholds", {})
-        self.config["power"]["load_thresholds"]["low"] = round(new_low, 2)
-        self.config["power"]["load_thresholds"]["high"] = round(new_high, 2)
 
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
