@@ -136,6 +136,28 @@ def check_processes(bus, process_overrides, high_th):
             last_seen_processes.add(name)
 
     if matches:
+        # Write match information to /run/user/{uid}/dynamic_power_matches.yaml
+        try:
+            uid = os.getuid()
+            match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
+            match_info = {
+                "matched_processes": [
+                    {
+                        "process_name": name,
+                        "priority": prio,
+                        "active": (name == matches[0][1])
+                    } for prio, name, _ in matches
+                ],
+                "timestamp": time.time()
+            }
+            os.makedirs(os.path.dirname(match_file), exist_ok=True)
+            with open(match_file, "w") as f:
+                yaml.dump(match_info, f)
+            if DEBUG:
+                journal.send("dpu_user (debug): Wrote matches file.")
+        except Exception as e:
+            if DEBUG:
+                journal.send(f"dpu_user (error): Failed to write matches file - {e}")
         matches.sort(reverse=True)
         _, name, policy = matches[0]
         apply_process_policy(bus, name, policy, high_th)
