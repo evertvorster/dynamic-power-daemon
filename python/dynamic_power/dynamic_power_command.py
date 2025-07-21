@@ -78,6 +78,9 @@ class MainWindow(QtWidgets.QWidget):
             self.profile_menu.addAction(mode, lambda m=mode: self.set_profile(m))
         self.profile_button.setMenu(self.profile_menu)
         layout.addWidget(self.profile_button)
+        self.power_status_label = QtWidgets.QLabel('Power status: Unknown')
+        self.power_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.insertWidget(1, self.power_status_label)
 
         # Placeholder for process monitor buttons
         self.proc_layout = QtWidgets.QVBoxLayout()
@@ -133,6 +136,38 @@ class MainWindow(QtWidgets.QWidget):
         self.plot.setData(self.data)
 
     def update_state(self):
+        if DEBUG: print("[debug] update_state() called")
+        try:
+            config_path = Path("/etc/dynamic-power.yaml")
+            if not config_path.exists():
+                if DEBUG: print(f"[debug] Config file not found: {config_path}")
+                self.power_status_label.setText("Power status: Unknown")
+                return
+            with open(config_path) as f:
+                sys_config = yaml.safe_load(f) or {}
+                power = sys_config.get("power", {})
+                source = power.get("power_source", {})
+                ac_id = source.get("ac_id", "AC")
+                battery_id = source.get("battery_id", "BAT0")
+                if DEBUG: print(f"[debug] ac_id: {ac_id}, battery_id: {battery_id}")
+            ac_path = Path(f"/sys/class/power_supply/{ac_id}/online")
+            bat_path = Path(f"/sys/class/power_supply/{battery_id}/status")
+            ac_status = "Unknown"
+            battery_status = "Unknown"
+            if ac_path.exists():
+                ac_value = ac_path.read_text().strip()
+                ac_status = "AC power is connected" if ac_value == "1" else "AC power is not connected"
+                if DEBUG: print(f"[debug] AC status: {ac_value} -> {ac_status}")
+            else:
+                if DEBUG: print(f"[debug] AC path missing: {ac_path}")
+            if bat_path.exists():
+                battery_status = bat_path.read_text().strip()
+                if DEBUG: print(f"[debug] Battery status: {battery_status}")
+            else:
+                if DEBUG: print(f"[debug] Battery path missing: {bat_path}")
+            self.power_status_label.setText(f"{ac_status}\nBattery status: {battery_status}")
+        except Exception as e:
+            if DEBUG: print(f"[debug] Failed to read power state: {e}")
         try:
             if STATE_PATH.exists():
                 with open(STATE_PATH, "r") as f:
