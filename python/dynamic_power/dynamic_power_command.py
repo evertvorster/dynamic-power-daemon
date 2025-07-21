@@ -99,7 +99,8 @@ class MainWindow(QtWidgets.QWidget):
         self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
         self.graph.addItem(self.high_line)
-        self.low_line.sigPositionChangeFinished.connect(self.update_thresholds)
+        self.low_line.sigPositionChangeFinished.connect(self.on_low_drag_finished)
+        self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
@@ -227,7 +228,26 @@ class MainWindow(QtWidgets.QWidget):
     def update_thresholds(self):
         new_low = float(self.low_line.value())
         new_high = float(self.high_line.value())
-
+        self.config.setdefault("power", {})
+        self.config["power"].setdefault("load_thresholds", {})
+        self.config["power"]["load_thresholds"]["low"] = round(new_low, 2)
+        self.config["power"]["load_thresholds"]["high"] = round(new_high, 2)
+        with open(CONFIG_PATH, "w") as f:
+            yaml.dump(self.config, f)
+    def on_low_drag_finished(self):
+        if self.debug_mode:
+            print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
+        self.update_thresholds()
+        print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
+        self.update_thresholds()
+    def on_high_drag_finished(self):
+        if self.debug_mode:
+            print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
+        self.update_thresholds()
+        print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
+        self.update_thresholds()
+        new_low = float(self.low_line.value())
+        new_high = float(self.high_line.value())
         self.config.setdefault("power", {})
         self.config["power"].setdefault("load_thresholds", {})
         self.config["power"]["load_thresholds"]["low"] = round(new_low, 2)
