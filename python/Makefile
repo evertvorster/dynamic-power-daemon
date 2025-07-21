@@ -10,6 +10,7 @@ DBUS_POLICY_DST = $(DBUSDIR)/org.dynamic_power.Daemon.conf
 
 install:
 	install -Dm755 dynamic_power/dynamic_power_user.py $(DESTDIR)/usr/bin/dynamic_power_user
+	install -Dm755 dynamic_power/dynamic_power_command.py $(DESTDIR)/usr/bin/dynamic_power_command
 	install -d $(DESTDIR)$(PYTHON_LIBDIR)/dynamic_power
 	install -m 644 dynamic_power/*.py $(DESTDIR)$(PYTHON_LIBDIR)/dynamic_power/
 	install -d $(DESTDIR)$(DATADIR)/dynamic-power
@@ -18,7 +19,7 @@ install:
 
 uninstall:
 	rm -f $(DESTDIR)/usr/bin/dynamic_power_user
-	install -Dm755 dynamic_power/dynamic_power_user.py $(DESTDIR)/usr/bin/dynamic_power_user
+	rm -f $(DESTDIR)/usr/bin/dynamic_power_command
 	rm -rf $(DESTDIR)$(PYTHON_LIBDIR)/dynamic_power
 	rm -f $(DESTDIR)$(DATADIR)/dynamic-power/dynamic-power.yaml
 	rm -f $(DESTDIR)$(DATADIR)/dynamic-power/dynamic-power-user.yaml
