@@ -76,3 +76,14 @@ def start_dbus_interface():
     thread = threading.Thread(target=loop.run, daemon=True)
     thread.start()
     info_log("dbus", "DBus main loop started in background thread")
+
+_set_user_profile = None
+
+def set_user_profile_callback(func):
+    global _set_user_profile
+    _set_user_profile = func
+
+@dbus.service.method("org.dynamic_power.Daemon", in_signature="s", out_signature="")
+def SetUserProfile(self, profile):
+    if _set_user_profile:
+        _set_user_profile(profile)
