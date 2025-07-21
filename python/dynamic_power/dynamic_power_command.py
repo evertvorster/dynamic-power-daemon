@@ -84,6 +84,9 @@ class MainWindow(QtWidgets.QWidget):
 
         self.load_config()
         self.debug_mode = "--debug" in sys.argv
+        if not self.debug_mode:
+            sys.stdout = open(os.devnull, "w")
+            sys.stderr = open(os.devnull, "w")
         cmd = ["/usr/bin/dynamic_power_user"]
         if self.debug_mode:
             cmd.append("--debug")
