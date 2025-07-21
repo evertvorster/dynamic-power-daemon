@@ -54,7 +54,7 @@ class MainWindow(QtWidgets.QWidget):
         self.plot = self.graph.plot(self.data, pen='y')
         layout.addWidget(self.graph)
 
-        # Timer for graph updates
+        
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_graph)
         self.timer.start(1000)
@@ -153,7 +153,24 @@ class MainWindow(QtWidgets.QWidget):
             with open(CONFIG_PATH, "w") as f:
                 yaml.dump(self.config, f)
             self.load_config()
-            dlg.accept()
+
+        # Recreate graph threshold lines
+        for line in getattr(self, "_threshold_lines", []):
+            self.graph.removeItem(line)
+        self._threshold_lines = []
+
+        self.low_line = pg.InfiniteLine(pos=self.config.get("general", {}).get("low_threshold", 1.0),
+                                        angle=0, pen=pg.mkPen('r', width=1), movable=True)
+        self.high_line = pg.InfiniteLine(pos=self.config.get("general", {}).get("high_threshold", 2.0),
+                                         angle=0, pen=pg.mkPen('g', width=1), movable=True)
+        self.graph.addItem(self.low_line)
+        self.graph.addItem(self.high_line)
+        self.low_line.sigPositionChanged.connect(self.update_thresholds)
+        self.high_line.sigPositionChanged.connect(self.update_thresholds)
+        print("Low line position:", self.low_line.value())
+        print("High line position:", self.high_line.value())
+        self._threshold_lines = [self.low_line, self.high_line]
+        dlg.accept()
 
         delete_button.clicked.connect(delete_proc)
         button_box.accepted.connect(apply)
@@ -174,6 +191,16 @@ class MainWindow(QtWidgets.QWidget):
             yaml.dump(self.config, f)
 
         self.load_config()
+
+
+    def update_thresholds(self):
+        new_low = float(self.low_line.value())
+        new_high = float(self.high_line.value())
+        self.config.setdefault("general", {})["low_threshold"] = round(new_low, 2)
+        self.config["general"]["high_threshold"] = round(new_high, 2)
+        with open(CONFIG_PATH, "w") as f:
+            yaml.dump(self.config, f)
+
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
