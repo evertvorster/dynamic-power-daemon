@@ -13,7 +13,7 @@ import pyqtgraph as pg
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
-STATE_PATH = Path("/run/dynamic_power_user.state.yaml")
+STATE_PATH = Path("/run/dynamic_power_state.yaml")
 OVERRIDE_PATH = Path("/run/dynamic_power_override.yaml")
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
@@ -55,10 +55,13 @@ class MainWindow(QtWidgets.QWidget):
         self.plot = self.graph.plot(self.data, pen='y')
         layout.addWidget(self.graph)
 
-        
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_graph)
         self.timer.start(1000)
+
+        self.state_timer = QtCore.QTimer()
+        self.state_timer.timeout.connect(self.update_state)
+        self.state_timer.start(1000)
 
         # Power profile button
         self.profile_button = QtWidgets.QPushButton("Mode: Dynamic")
@@ -79,7 +82,6 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.add_proc_button)
 
         self.load_config()
-        # Create draggable threshold lines from config
         self.low_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
@@ -91,6 +93,33 @@ class MainWindow(QtWidgets.QWidget):
         self.data[self.ptr % len(self.data)] = psutil.getloadavg()[0]
         self.ptr += 1
         self.plot.setData(self.data)
+
+    def update_state(self):
+        try:
+            if STATE_PATH.exists():
+                with open(STATE_PATH, "r") as f:
+                    state = yaml.safe_load(f) or {}
+                    thresholds = state.get("thresholds", {})
+                    active_profile = state.get("active_profile", "Unknown")
+
+                    # Update threshold lines
+                    if "low" in thresholds:
+                        self.low_line.setValue(thresholds["low"])
+                    if "high" in thresholds:
+                        self.high_line.setValue(thresholds["high"])
+
+                    # Check for manual override
+                    if OVERRIDE_PATH.exists():
+                        with open(OVERRIDE_PATH) as of:
+                            override = yaml.safe_load(of) or {}
+                            manual = override.get("manual_override", "")
+                            if manual and manual != "Dynamic":
+                                self.profile_button.setText(f"Mode: {manual}")
+                                return
+
+                    self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+        except Exception as e:
+            print(f"Error reading state file: {e}")
 
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")
@@ -162,22 +191,6 @@ class MainWindow(QtWidgets.QWidget):
                 yaml.dump(self.config, f)
             self.load_config()
 
-        # Recreate graph threshold lines
-        for line in getattr(self, "_threshold_lines", []):
-            self.graph.removeItem(line)
-        self._threshold_lines = []
-
-        self.low_line = pg.InfiniteLine(pos=self.config.get("general", {}).get("low_threshold", 1.0),
-                angle=0, pen=pg.mkPen('r', width=1), movable=True)
-        self.high_line = pg.InfiniteLine(pos=self.config.get("general", {}).get("high_threshold", 2.0),
-                angle=0, pen=pg.mkPen('g', width=1), movable=True)
-        self.graph.addItem(self.low_line)
-        self.graph.addItem(self.high_line)
-        self.low_line.sigPositionChanged.connect(self.update_thresholds)
-        self.high_line.sigPositionChanged.connect(self.update_thresholds)
-        self._threshold_lines = [self.low_line, self.high_line]
-        dlg.accept()
-
         delete_button.clicked.connect(delete_proc)
         button_box.accepted.connect(apply)
         button_box.rejected.connect(dlg.reject)
@@ -198,7 +211,6 @@ class MainWindow(QtWidgets.QWidget):
 
         self.load_config()
 
-
     def update_thresholds(self):
         new_low = float(self.low_line.value())
         new_high = float(self.high_line.value())
@@ -206,7 +218,6 @@ class MainWindow(QtWidgets.QWidget):
         self.config["general"]["high_threshold"] = round(new_high, 2)
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
-
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
