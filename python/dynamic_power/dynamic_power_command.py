@@ -5,6 +5,7 @@ import time
 import subprocess
 import yaml
 import signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
 import psutil
 from pathlib import Path
 from datetime import datetime
@@ -226,8 +227,10 @@ class MainWindow(QtWidgets.QWidget):
     def update_thresholds(self):
         new_low = float(self.low_line.value())
         new_high = float(self.high_line.value())
-        self.config.setdefault("general", {})["low_threshold"] = round(new_low, 2)
-        self.config["general"]["high_threshold"] = round(new_high, 2)
+        general = self.config.get("general", {})
+        general["low_threshold"] = round(new_low, 2)
+        general["high_threshold"] = round(new_high, 2)
+        self.config["general"] = general
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
 
@@ -254,3 +257,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
