@@ -265,7 +265,19 @@ class MainWindow(QtWidgets.QWidget):
             if self.debug_mode:
                 print("[debug] Apply button pressed.")
             proc["process_name"] = name_edit.text()
-            proc["active_profile"] = profile_button.text()
+            selected = profile_button.text()
+            if selected == "Inhibit Powersave":
+                proc.pop("active_profile", None)  # Remove if previously set
+                proc["prevent_powersave"] = True
+            else:
+                proc.pop("prevent_powersave", None)  # Remove if previously set
+                if selected == "Performance":
+                    proc["active_profile"] = "performance"
+                elif selected == "Balanced":
+                    proc["active_profile"] = "balanced"
+                elif selected == "Powersave":
+                    proc["active_profile"] = "powersave"
+                # If selected == "Dynamic" or unknown, don't write anything
             proc["priority"] = priority_slider.value()
             self.save_process(proc)
             dlg.accept()
