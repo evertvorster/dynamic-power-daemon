@@ -7,6 +7,10 @@ import yaml
 import sys
 DEBUG = '--debug' in sys.argv
 
+def dprint(msg):
+        print(msg)
+
+
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 import psutil
@@ -54,7 +58,6 @@ class MainWindow(QtWidgets.QWidget):
         # Graph area
         self.graph = pg.PlotWidget()
         self.graph.setMinimumHeight(200)
-        self.graph.setYRange(0, 10)
         self.data = [0]*60
         self.ptr = 0
         self.plot = self.graph.plot(self.data, pen='y')
@@ -131,9 +134,16 @@ class MainWindow(QtWidgets.QWidget):
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
-        self.data[self.ptr % len(self.data)] = psutil.getloadavg()[0]
         self.ptr += 1
+        max_visible = max(self.data)
+        y_max = max(7, max_visible + 1)
+        self.graph.setYRange(0, y_max)
+        load = psutil.getloadavg()[0]
+        dprint(f"[debug] Current load: {load}, y_max set to: {y_max}")
+        self.data.append(load)
+        self.data = self.data[-60:]
         self.plot.setData(self.data)
+        dprint(f"[debug] Plotting data: {self.data}")
 
     def update_state(self):
         if DEBUG: print("[debug] update_state() called")
