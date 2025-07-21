@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import yaml
 import signal
 from . import config, sensors, power_profiles, dbus_interface
 from .debug import info_log, debug_log, error_log, DEBUG_ENABLED
@@ -77,6 +78,21 @@ def run():
 
         profile = cfg.get_profile(load_level, power_source)
         power_profiles.set_profile(profile)
+        # Write system state to /run/user/<uid>/dynamic_power_state.yaml
+        try:
+            uid = os.getuid()
+            state_path = f"/run/dynamic_power_state.yaml"
+            with open(state_path, "w") as f:
+                yaml.safe_dump({
+                    "active_profile": profile,
+                    "thresholds": {
+                        "low": current_threshold_low,
+                        "high": current_threshold_high,
+                    },
+                    "timestamp": time.time()
+                }, f)
+        except Exception as e:
+            error_log("main", f"Failed to write state file: {e}")
 
         time.sleep(current_poll_interval)
 
