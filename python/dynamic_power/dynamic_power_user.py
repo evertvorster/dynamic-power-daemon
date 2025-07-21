@@ -5,6 +5,7 @@ import time
 import yaml
 import psutil
 import dbus
+from inotify_simple import INotify, flags
 import signal
 from systemd import journal
 from setproctitle import setproctitle
@@ -153,6 +154,9 @@ def main():
     bus = dbus.SystemBus()
     last_mtime = 0
     config = load_config()
+    inotify = INotify()
+    watch_flags = flags.MODIFY
+    wd = inotify.add_watch(CONFIG_PATH, watch_flags)
     last_mtime = os.path.getmtime(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else 0
 
     poll_interval = config.get("general", {}).get("poll_interval", 5)
@@ -179,6 +183,12 @@ def main():
                 send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
 
             write_state_file(last_sent_profile, thresholds)
+
+            for event in inotify.read(timeout=0):
+                if flags.MODIFY in flags.from_mask(event.mask):
+                    if DEBUG:
+                        journal.send("dpu_user (debug): Config file modified, reloading.")
+                    config = load_config()
             time.sleep(poll_interval)
         except Exception as e:
             if DEBUG:
