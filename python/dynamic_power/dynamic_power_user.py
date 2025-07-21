@@ -86,7 +86,7 @@ def apply_process_policy(bus, name, policy, high_th):
         send_profile(bus, policy["active_profile"])
         if DEBUG or name not in last_seen_processes:
             journal.send(f"dpu_user: {name} -> active_profile={policy['active_profile']}")
-    elif policy.get("prevent_powersave", False):
+    elif policy.get("active_profile") == "responsive":
         threshold_override_active = True
         send_thresholds(bus, 0, high_th)
         if DEBUG or name not in last_seen_processes:

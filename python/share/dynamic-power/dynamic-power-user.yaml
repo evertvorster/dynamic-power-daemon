@@ -12,7 +12,7 @@ process_overrides:
 
   - name: video_editing
     process_name: kdenlive
-    prevent_powersave: true
+    active_profile: responsive
     priority: 90
 
   - name: gaming
@@ -22,7 +22,7 @@ process_overrides:
 
   - name: audio_editing
     process_name: audacity
-    prevent_powersave: true
+    active_profile: responsive
     priority: 70
 
   - name: arcade_emulation
@@ -32,7 +32,7 @@ process_overrides:
 
   - name: wine_runtime
     process_name: wineserver
-    prevent_powersave: true
+    active_profile: responsive
     priority: 50
 
 features:
