@@ -123,6 +123,27 @@ def handle_sigint(signum, frame):
     log("Caught SIGINT, shutting down...")
     terminate = True
 
+
+def write_state_file(profile, thresholds):
+    try:
+        uid = os.getuid()
+        state_file = f"/run/user/{uid}/dynamic_power_state.yaml"
+        state = {
+            "active_profile": profile,
+            "thresholds": {
+                "low": thresholds.get("low", 1.0),
+                "high": thresholds.get("high", 2.0)
+            },
+            "timestamp": time.time()
+        }
+        os.makedirs(os.path.dirname(state_file), exist_ok=True)
+        with open(state_file, "w") as f:
+            yaml.dump(state, f)
+        if DEBUG:
+            journal.send("dpu_user (debug): Wrote state file.")
+    except Exception as e:
+        if DEBUG:
+            journal.send(f"dpu_user (error): Failed to write state file - {e}")
 def main():
     global terminate, threshold_override_active
 
@@ -157,6 +178,7 @@ def main():
             if not threshold_override_active:
                 send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
 
+            write_state_file(last_sent_profile, thresholds)
             time.sleep(poll_interval)
         except Exception as e:
             if DEBUG:
