@@ -95,12 +95,12 @@ class MainWindow(QtWidgets.QWidget):
                 start_new_session=True)
         except Exception as e:
             print(f"Failed to launch dynamic_power_user: {e}")
-        self.low_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
-        self.high_line = pg.InfiniteLine(pos=self.config.get('general', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
+        self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
+        self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
         self.graph.addItem(self.high_line)
-        self.low_line.sigPositionChanged.connect(self.update_thresholds)
-        self.high_line.sigPositionChanged.connect(self.update_thresholds)
+        self.low_line.sigPositionChangeFinished.connect(self.update_thresholds)
+        self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
         self.data[self.ptr % len(self.data)] = psutil.getloadavg()[0]
@@ -227,13 +227,14 @@ class MainWindow(QtWidgets.QWidget):
     def update_thresholds(self):
         new_low = float(self.low_line.value())
         new_high = float(self.high_line.value())
-        general = self.config.get("general", {})
-        general["low_threshold"] = round(new_low, 2)
-        general["high_threshold"] = round(new_high, 2)
-        self.config["general"] = general
+
+        self.config.setdefault("power", {})
+        self.config["power"].setdefault("load_thresholds", {})
+        self.config["power"]["load_thresholds"]["low"] = round(new_low, 2)
+        self.config["power"]["load_thresholds"]["high"] = round(new_high, 2)
+
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
-
 def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
