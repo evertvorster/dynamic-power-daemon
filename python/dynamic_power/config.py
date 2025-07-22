@@ -18,6 +18,22 @@ class Config:
         self.last_loaded = 0
         self.load()
 
+    # ───────────────────────────────────────── internal helpers ───
+    def _generate_from_default(self):
+        try:
+            shutil.copy(DEFAULT_TEMPLATE_PATH, self.path)
+            uid = pwd.getpwnam("root").pw_uid
+            gid = grp.getgrnam("root").gr_gid
+            os.chown(self.path, uid, gid)
+            info_log("config", f"Default config copied to {self.path}")
+        except Exception as e:
+            error_log("config", f"Failed to copy default config: {e}")
+            sys.exit(1)
+
+    def _maybe_upgrade(self):
+        # future‑proof placeholder
+        pass
+
     def load(self):
         if not os.path.exists(self.path):
             info_log("config", "No config found. Generating from default.")
@@ -36,36 +52,6 @@ class Config:
         except FileNotFoundError:
             pass
 
-    def _generate_from_default(self):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        try:
-            shutil.copy(DEFAULT_TEMPLATE_PATH, self.path)
-            uid = os.geteuid()
-            if uid == 0:
-                os.chown(self.path, pwd.getpwnam("root").pw_uid, grp.getgrnam("root").gr_gid)
-        except Exception as e:
-            error_log("config", f"Failed to generate default config: {e}")
-            raise
-        info_log("config", f"Created new config at {self.path}")
-
-    def _maybe_upgrade(self):
-        try:
-            with open(DEFAULT_TEMPLATE_PATH, "r") as f:
-                template = yaml.safe_load(f)
-            template_ver = template.get("version", 1)
-            current_ver = self.data.get("version", 1)
-
-            if template_ver > current_ver:
-                backup_path = self.path + f".v{current_ver}.bak"
-                shutil.copy(self.path, backup_path)
-                info_log("config", f"Upgrading config: version {current_ver} -> {template_ver}")
-                debug_log("config", f"Backed up old config to {backup_path}")
-                shutil.copy(DEFAULT_TEMPLATE_PATH, self.path)
-                os.chown(self.path, pwd.getpwnam("root").pw_uid, grp.getgrnam("root").gr_gid)
-                self.load()
-        except Exception as e:
-            error_log("config", f"Failed to upgrade config: {e}")
-
     def _merge(self, key_path):
         def get_nested(d, keys):
             for k in keys:
@@ -73,18 +59,17 @@ class Config:
                     return {}
                 d = d.get(k, {})
             return d
+        return get_nested(self.data, key_path.split("."))
 
-        keys = key_path.split(".")
-        return get_nested(self.data, keys)
-
-
+    # ───────────────────────────────────────── public accessors ───
     def get_profile(self, load_level, power_source):
         profiles = self._merge("power.profiles")
         if power_source == "battery":
             profile = profiles.get("on_battery", {}).get("default", "powersave")
         else:
             profile = profiles.get("on_ac", {}).get(load_level, "balanced")
-        debug_log("config", f"get_profile(load_level={load_level}, power_source={power_source}) -> {profile}")
+        debug_log("config",
+                  f"get_profile(load_level={load_level}, power_source={power_source}) -> {profile}")
         return profile
 
     def get_thresholds(self):
@@ -92,3 +77,15 @@ class Config:
 
     def get_poll_interval(self):
         return self.data.get("general", {}).get("poll_interval")
+
+    # NEW ⟶ over‑drive toggle rules
+    def get_panel_overdrive_config(self):
+        """
+        Returns a dict like {"enable_on_ac": True}.  If the key is missing
+        in /etc/dynamic-power.yaml we default to True so the feature is
+        active out‑of‑the‑box.
+        """
+        cfg = self._merge("panel.overdrive")
+        if not isinstance(cfg, dict):
+            cfg = {}
+        return {"enable_on_ac": cfg.get("enable_on_ac", True)}
