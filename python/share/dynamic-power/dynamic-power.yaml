@@ -1,4 +1,8 @@
-version: 5
+version: 6
+
+panel:
+  overdrive:
+    enable_on_ac: true      # set to 1 on AC, 0 on battery
 
 general:
   poll_interval: 5
