@@ -25,28 +25,52 @@ OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
         super().__init__(icon)
+        # store default and active icons
+        self.default_icon = icon
+        self.active_icon = self.create_color_icon(QtGui.QColor('#FFD700'))  # yellow when matched
+        self.setIcon(self.default_icon)
+
         self.app = app
         self.menu = QtWidgets.QMenu()
         self.action_open = self.menu.addAction("Open Dynamic Power Command")
         self.action_quit = self.menu.addAction("Quit")
         self.setContextMenu(self.menu)
+        # Create the main window and connect actions/signals
+        self.window = MainWindow(self)
         self.action_open.triggered.connect(self.show_window)
         self.action_quit.triggered.connect(app.quit)
-        self.window = MainWindow()
         self.activated.connect(self.icon_activated)
+    def create_color_icon(self, color):
+        pixmap = QtGui.QPixmap(16, 16)
+        pixmap.fill(color)
+        return QtGui.QIcon(pixmap)
+
+    def update_icon(self, active: bool):
+        """Switch tray icon based on process match state."""
+        if active:
+            self.setIcon(self.active_icon)
+        else:
+            self.setIcon(self.default_icon)
+
 
     def icon_activated(self, reason):
-        if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
-            self.show_window()
 
+        if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
+            if self.window.isVisible():
+                self.window.hide()
+            else:
+                self.window.show()
+                self.window.raise_()
+                self.window.activateWindow()
     def show_window(self):
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
 
 class MainWindow(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, tray):
         super().__init__()
+        self.tray = tray
         self.setWindowTitle("Dynamic Power Command")
         self.resize(600, 400)
         layout = QtWidgets.QVBoxLayout()
@@ -316,6 +340,10 @@ class MainWindow(QtWidgets.QWidget):
                     self.matched[name] = "active" if active else "inactive"
         except Exception as e:
             self.matched = {}
+
+        active_exists = any(state == 'active' for state in self.matched.values())
+        if hasattr(self, 'tray') and self.tray is not None:
+            self.tray.update_icon(active_exists)
 
         for i in range(self.proc_layout.count()):
             btn = self.proc_layout.itemAt(i).widget()
