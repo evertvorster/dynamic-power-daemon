@@ -15,6 +15,10 @@ from pathlib import Path
 from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
+from systemd import journal
+
+def log_error(msg):
+    journal.send(f"dpu_cmd (error): {msg}")
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
@@ -107,6 +111,7 @@ class MainWindow(QtWidgets.QWidget):
                 stderr=None if self.debug_mode else subprocess.DEVNULL,
                 start_new_session=True)
         except Exception as e:
+            log_error(str(e))
             print(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
@@ -124,6 +129,7 @@ class MainWindow(QtWidgets.QWidget):
             if self.debug_mode:
                 print(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
         except Exception as e:
+            log_error(str(e))
             if self.debug_mode:
                 print(f"[debug] Failed to write override state: {e}")
 
@@ -166,6 +172,7 @@ class MainWindow(QtWidgets.QWidget):
                 pass  # debug removed
             self.power_status_label.setText(f"{ac_status}\nBattery status: {battery_status}")
         except Exception as e:
+            log_error(str(e))
             pass  # debug removed
         try:
             if STATE_PATH.exists():
@@ -191,6 +198,7 @@ class MainWindow(QtWidgets.QWidget):
 
                     self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
         except Exception as e:
+            log_error(str(e))
             print(f"Error reading state file: {e}")
 
     def set_profile(self, mode):
@@ -315,6 +323,7 @@ class MainWindow(QtWidgets.QWidget):
                     active = item.get("active", False)
                     self.matched[name] = "active" if active else "inactive"
         except Exception as e:
+            log_error(str(e))
             self.matched = {}
 
         for i in range(self.proc_layout.count()):
@@ -354,8 +363,9 @@ def main():
             tray.window.user_proc.terminate()
             try:
                 tray.window.user_proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as e:
                 tray.window.user_proc.kill()
+                log_error(str(e))
 
     app.aboutToQuit.connect(cleanup)
 
@@ -363,3 +373,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
