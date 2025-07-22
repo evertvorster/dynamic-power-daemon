@@ -15,11 +15,6 @@ from pathlib import Path
 from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
-from systemd import journal
-
-def log_error(msg: str) -> None:
-    journal.send(f"dpu_cmd (error): {msg}")
-
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
@@ -310,9 +305,6 @@ class MainWindow(QtWidgets.QWidget):
 
     def update_process_matches(self):
         try:
-            if not MATCHES_PATH.exists():
-                self.matched = {}
-                return
             with open(MATCHES_PATH, "r") as f:
                 matches = yaml.safe_load(f) or {}
                 match_list = matches.get("matched_processes", matches if isinstance(matches, list) else [])
@@ -323,7 +315,6 @@ class MainWindow(QtWidgets.QWidget):
                     active = item.get("active", False)
                     self.matched[name] = "active" if active else "inactive"
         except Exception as e:
-            log_error(f"[update_process_matches] {e}")
             self.matched = {}
 
         for i in range(self.proc_layout.count()):
