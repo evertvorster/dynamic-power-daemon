@@ -11,7 +11,6 @@ import getpass
 from systemd import journal
 from setproctitle import setproctitle
 
-DEBUG = "--debug" in sys.argv
 CONFIG_PATH = os.path.expanduser("~/.config/dynamic_power/config.yaml")
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 
@@ -25,17 +24,11 @@ active_profile_process = None
 def log(msg):
     journal.send(f"dpu_user: {msg}")
 
-def debug(msg):
-    if DEBUG:
-        journal.send(f"dpu_user (debug): {msg}")
-
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        debug(f"Config file not found at {CONFIG_PATH}, using template.")
         return load_template()
     with open(CONFIG_PATH, "r") as f:
         cfg = yaml.safe_load(f) or {}
-    debug("Loaded user config.")
     return cfg
 
 def load_template():
@@ -44,33 +37,20 @@ def load_template():
 
 def send_thresholds(bus, low, high):
     global last_sent_threshold
-    if (low, high) == last_sent_threshold and not DEBUG:
+    if (low, high) == last_sent_threshold:
         return
-    try:
-        daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
-        iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
-        iface.SetLoadThresholds(float(low), float(high))
-        last_sent_threshold = (low, high)
-        debug(f"Sent thresholds: low={low}, high={high}")
-    except Exception as e:
-        if DEBUG:
-            journal.send(f"dpu_user (error): Failed to send thresholds - {e}")
-
+    daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+    iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+    iface.SetLoadThresholds(float(low), float(high))
+    last_sent_threshold = (low, high)
 def send_profile(bus, profile):
     global last_sent_profile
-    if profile == last_sent_profile and not DEBUG:
+    if profile == last_sent_profile:
         return
-    try:
-        daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
-        iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
-        iface.SetProfile(profile)
-        last_sent_profile = profile
-        debug(f"Sent profile override: {profile}")
-    except Exception as e:
-        if DEBUG:
-            journal.send(f"dpu_user (error): Failed to send profile override - {e}")
-
-
+    daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+    iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+    iface.SetProfile(profile)
+    last_sent_profile = profile
 def normalize_profile(name):
     aliases = {
         "Powersave": "power-saver",
@@ -89,75 +69,49 @@ def apply_process_policy(bus, name, policy, high_th):
     if profile == "responsive":
         threshold_override_active = True
         send_thresholds(bus, 0, high_th)  # prevent entering powersave
-        if DEBUG or name not in last_seen_processes:
-            journal.send(f"dpu_user: {name} -> prevent_powersave=true")
         return
 
     if profile:
         threshold_override_active = False
         active_profile_process = name
         send_profile(bus, profile)
-        if DEBUG or name not in last_seen_processes:
-            journal.send(f"dpu_user: {name} -> active_profile={profile}")
 def check_processes(bus, process_overrides, high_th):
     global last_seen_processes, threshold_override_active, active_profile_process
     override = read_control_override()
     mode = override.get("manual_override", "Dynamic")
     if mode == "Dynamic":
         send_profile(bus, "")
-        if DEBUG:
-            journal.send("dpu_user (debug): Override cleared (Dynamic mode)")
     elif mode in ["Inhibit Powersave", "Responsive"]:
         send_thresholds(bus, 0, high_th)
         threshold_override_active = True
-        if DEBUG:
-            journal.send(f"dpu_user (debug): Override -> {mode}")
         return
     elif mode in ["Performance", "Balanced", "Powersave"]:
         send_profile(bus, normalize_profile(mode))
-        if DEBUG:
-            journal.send(f"dpu_user (debug): Override -> {mode}")
         return
 
     mode = override.get("manual_override", "Dynamic")
     if mode == "Inhibit Powersave":
         send_thresholds(bus, 0, thresholds.get("high", 2.0))
-    if DEBUG:
-            journal.send(f"dpu_user (debug): Override -> {mode}")
     elif mode in ["Performance", "Balanced", "Powersave"]:
         send_profile(bus, mode)
-    if DEBUG:
-        journal.send(f"dpu_user (debug): Override -> {mode}")
     running = set(p.info["name"] for p in psutil.process_iter(attrs=["name"]))
 
     if isinstance(process_overrides, list):
         proc_map = {entry.get("process_name"): entry for entry in process_overrides}
     else:
         # Remove matches file if it exists
-        try:
-            uid = os.getuid()
-            match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
-            if os.path.exists(match_file):
-                os.remove(match_file)
-                if DEBUG:
-                    journal.send("dpu_user (debug): Removed matches file (no active matches).")
-        except Exception as e:
-            if DEBUG:
-                journal.send(f"dpu_user (error): Failed to remove matches file - {e}")
-        proc_map = process_overrides
-
-    matches = []
-    # Always try to remove old matches file, even if we’ll re-create it
-    try:
         uid = os.getuid()
         match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
         if os.path.exists(match_file):
             os.remove(match_file)
-            if DEBUG:
-                journal.send("dpu_user (debug): Removed old matches file.")
-    except Exception as e:
-        if DEBUG:
-            journal.send(f"dpu_user (error): Failed to remove matches file - {e}")
+        proc_map = process_overrides
+
+    matches = []
+    # Always try to remove old matches file, even if we’ll re-create it
+    uid = os.getuid()
+    match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
+    if os.path.exists(match_file):
+        os.remove(match_file)
     for name, policy in proc_map.items():
         if name in running:
             prio = policy.get("priority", 0)
@@ -166,46 +120,35 @@ def check_processes(bus, process_overrides, high_th):
 
     if matches:
         # Write match information to /run/user/{uid}/dynamic_power_matches.yaml
-        try:
-            uid = os.getuid()
-            match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
-            match_info = {
-                "matched_processes": [
-                    {
-                        "process_name": name,
-                        "priority": prio,
-                        "active": (name == matches[0][1])
-                    } for prio, name, _ in matches
-                ],
-                "timestamp": time.time()
-            }
-            os.makedirs(os.path.dirname(match_file), exist_ok=True)
-            with open(match_file, "w") as f:
-                yaml.dump(match_info, f)
-            if DEBUG:
-                journal.send("dpu_user (debug): Wrote matches file.")
-        except Exception as e:
-            if DEBUG:
-                journal.send(f"dpu_user (error): Failed to write matches file - {e}")
+        uid = os.getuid()
+        match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
+        match_info = {
+            "matched_processes": [
+                {
+                    "process_name": name,
+                    "priority": prio,
+                    "active": (name == matches[0][1])
+                } for prio, name, _ in matches
+            ],
+            "timestamp": time.time()
+        }
+        os.makedirs(os.path.dirname(match_file), exist_ok=True)
+        with open(match_file, "w") as f:
+            yaml.dump(match_info, f)
         matches.sort(reverse=True)
         _, name, policy = matches[0]
         apply_process_policy(bus, name, policy, high_th)
     else:
         if active_profile_process:
             send_profile(bus, "")
-            debug(f"Clearing active profile override from: {active_profile_process}")
             active_profile_process = None
 
         if threshold_override_active:
             threshold_override_active = False
-            debug("No override process active. Resetting thresholds to config.")
 
     for proc in list(last_seen_processes):
         if proc not in running:
             last_seen_processes.remove(proc)
-            if DEBUG:
-                journal.send(f"dpu_user (debug): Process {proc} no longer running.")
-
 def handle_sigint(signum, frame):
     global terminate
     log("Caught SIGINT, shutting down...")
@@ -213,36 +156,25 @@ def handle_sigint(signum, frame):
 
 
 def write_state_file(profile, thresholds):
-    try:
-        uid = os.getuid()
-        state_file = f"/run/user/{uid}/dynamic_power_state.yaml"
-        state = {
-            "active_profile": profile,
-            "thresholds": {
-                "low": thresholds.get("low", 1.0),
-                "high": thresholds.get("high", 2.0)
-            },
-            "timestamp": time.time()
-        }
-        os.makedirs(os.path.dirname(state_file), exist_ok=True)
-        with open(state_file, "w") as f:
-            yaml.dump(state, f)
-        if DEBUG:
-            journal.send("dpu_user (debug): Wrote state file.")
-    except Exception as e:
-        if DEBUG:
-            journal.send(f"dpu_user (error): Failed to write state file - {e}")
-
+    uid = os.getuid()
+    state_file = f"/run/user/{uid}/dynamic_power_state.yaml"
+    state = {
+        "active_profile": profile,
+        "thresholds": {
+            "low": thresholds.get("low", 1.0),
+            "high": thresholds.get("high", 2.0)
+        },
+        "timestamp": time.time()
+    }
+    os.makedirs(os.path.dirname(state_file), exist_ok=True)
+    with open(state_file, "w") as f:
+        yaml.dump(state, f)
 def read_control_override():
-    try:
-        uid = os.getuid()
-        path = f"/run/user/{uid}/dynamic_power_control.yaml"
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return yaml.safe_load(f)
-    except Exception as e:
-        if DEBUG:
-            journal.send(f"dpu_user (error): Failed to read override file - {e}")
+    uid = os.getuid()
+    path = f"/run/user/{uid}/dynamic_power_control.yaml"
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return yaml.safe_load(f)
     return {}
 def main():
     global terminate, threshold_override_active
@@ -265,35 +197,26 @@ def main():
     log("dynamic_power_user started.")
 
     while not terminate:
-        try:
-            if os.path.exists(CONFIG_PATH):
-                mtime = os.path.getmtime(CONFIG_PATH)
-                if mtime != last_mtime:
-                    config = load_config()
-                    poll_interval = config.get("general", {}).get("poll_interval", 5)
-                    thresholds = config.get("power", {}).get("load_thresholds", {})
-                    process_overrides = config.get("process_overrides", {})
-                    last_mtime = mtime
-                    debug("Reloaded config due to change.")
+        if os.path.exists(CONFIG_PATH):
+            mtime = os.path.getmtime(CONFIG_PATH)
+            if mtime != last_mtime:
+                config = load_config()
+                poll_interval = config.get("general", {}).get("poll_interval", 5)
+                thresholds = config.get("power", {}).get("load_thresholds", {})
+                process_overrides = config.get("process_overrides", {})
+                last_mtime = mtime
 
-            check_processes(bus, process_overrides, thresholds.get("high", 2.0))
+        check_processes(bus, process_overrides, thresholds.get("high", 2.0))
 
-            if not threshold_override_active:
-                send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
+        if not threshold_override_active:
+            send_thresholds(bus, thresholds.get("low", 1.0), thresholds.get("high", 2.0))
 
-            write_state_file(last_sent_profile, thresholds)
+        write_state_file(last_sent_profile, thresholds)
 
-            for event in inotify.read(timeout=0):
-                if flags.MODIFY in flags.from_mask(event.mask):
-                    if DEBUG:
-                        journal.send("dpu_user (debug): Config file modified, reloading.")
-                    config = load_config()
-            time.sleep(poll_interval)
-        except Exception as e:
-            if DEBUG:
-                journal.send(f"dpu_user (error): {e}")
-            time.sleep(poll_interval)
-
+        for event in inotify.read(timeout=0):
+            if flags.MODIFY in flags.from_mask(event.mask):
+                config = load_config()
+        time.sleep(poll_interval)
     log("dynamic_power_user exited cleanly.")
 
 if __name__ == "__main__":
