@@ -6,6 +6,18 @@ import subprocess
 import yaml
 import sys
 DEBUG = '--debug' in sys.argv
+try:
+    import setproctitle
+    setproctitle.setproctitle('dynamic_user_command')
+except ImportError:
+    # Fallback to prctl if setproctitle is unavailable
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None)
+        libc.prctl(15, b'dynamic_user_command', 0, 0, 0)
+    except Exception:
+        pass
+
 
 
 import signal
@@ -15,6 +27,13 @@ from pathlib import Path
 from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
+
+try:
+    import setproctitle
+    setproctitle.setproctitle('dynamic_power_command')
+except ImportError:
+    pass
+
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"

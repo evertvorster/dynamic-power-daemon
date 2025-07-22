@@ -5,6 +5,16 @@ import yaml
 import signal
 from . import config, sensors, power_profiles, dbus_interface
 from .debug import info_log, debug_log, error_log, DEBUG_ENABLED
+try:
+    import setproctitle
+    setproctitle.setproctitle('dynamic_power')
+except ImportError:
+    try:
+        import ctypes
+        ctypes.CDLL(None).prctl(15, b'dynamic_power', 0, 0, 0)
+    except Exception:
+        pass
+
 
 terminate = False
 override_profile = None  # Temporary profile override set via DBus
