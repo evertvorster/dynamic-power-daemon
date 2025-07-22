@@ -1,27 +1,65 @@
-PREFIX ?= /usr
-DESTDIR ?=
-SYSCONFDIR ?= /etc
-DATADIR ?= $(PREFIX)/share
-PYTHON_VERSION := $(shell python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PYTHON_LIBDIR := $(PREFIX)/lib/python$(PYTHON_VERSION)/site-packages
-DBUSDIR = /etc/dbus-1/system.d
-DBUS_POLICY_SRC = resources/dbus/org.dynamic_power.Daemon.conf
-DBUS_POLICY_DST = $(DBUSDIR)/org.dynamic_power.Daemon.conf
+
+# python/Makefile
+# --------------------------------------------------------------------
+# Installs the dynamic_power Python package + helper scripts
+# --------------------------------------------------------------------
+PREFIX        ?= /usr
+BINDIR        ?= $(PREFIX)/bin
+LIBDIR        ?= $(PREFIX)/lib
+SYSTEMD_USER  ?= /usr/lib/systemd/user
+PRESET_DIR    ?= /usr/lib/systemd/user-preset
+
+DESTDIR       ?=
+
+PY_PKG_DIR    = dynamic_power
+RES_DIR       = resources
+DBUS_DIR      = $(RES_DIR)/dbus
+SYSD_USER_DIR = $(RES_DIR)/systemd-user
+SHARE_DIR     = share/dynamic-power
+
+.PHONY: all install uninstall
+
+all:
+	@echo "Nothing to build – pure Python package"
 
 install:
-	install -Dm755 dynamic_power/dynamic_power_user.py $(DESTDIR)/usr/bin/dynamic_power_user
-	install -Dm755 dynamic_power/dynamic_power_command.py $(DESTDIR)/usr/bin/dynamic_power_command
-	install -d $(DESTDIR)$(PYTHON_LIBDIR)/dynamic_power
-	install -m 644 dynamic_power/*.py $(DESTDIR)$(PYTHON_LIBDIR)/dynamic_power/
-	install -d $(DESTDIR)$(DATADIR)/dynamic-power
-	install -m 644 share/dynamic-power/*.yaml $(DESTDIR)$(DATADIR)/dynamic-power/
-	install -Dm644 $(DBUS_POLICY_SRC) $(DESTDIR)$(DBUS_POLICY_DST)
+	# --- Python package -------------------------------------------------
+	install -d $(DESTDIR)$(LIBDIR)/$(PY_PKG_DIR)
+	cp -r $(PY_PKG_DIR)/*.py $(DESTDIR)$(LIBDIR)/$(PY_PKG_DIR)/
+
+	# --- User‑space executables ----------------------------------------
+	install -Dm755 $(PY_PKG_DIR)/dynamic_power_user.py \
+		$(DESTDIR)$(BINDIR)/dynamic_power_user
+	install -Dm755 $(PY_PKG_DIR)/dynamic_power_command.py \
+		$(DESTDIR)$(BINDIR)/dynamic_power_command
+	install -Dm755 $(PY_PKG_DIR)/dynamic_power_session_helper.py \
+		$(DESTDIR)$(BINDIR)/dynamic_power_session_helper
+
+	# --- System daemon DBus policy (root) ------------------------------
+	install -Dm644 $(DBUS_DIR)/org.dynamic_power.Daemon.conf \
+		$(DESTDIR)/etc/dbus-1/system.d/org.dynamic_power.Daemon.conf
+
+	# --- YAML templates -------------------------------------------------
+	install -Dm644 $(SHARE_DIR)/dynamic-power.yaml \
+		$(DESTDIR)$(PREFIX)/share/dynamic-power/dynamic-power.yaml
+	install -Dm644 $(SHARE_DIR)/dynamic-power-user.yaml \
+		$(DESTDIR)$(PREFIX)/share/dynamic-power/dynamic-power-user.yaml
+
+	# --- User‑session systemd unit + preset ----------------------------
+	install -Dm644 $(SYSD_USER_DIR)/dynamic_power_session.service \
+		$(DESTDIR)$(SYSTEMD_USER)/dynamic_power_session.service
+	install -Dm644 $(SYSD_USER_DIR)/90-dynamic-power.preset \
+		$(DESTDIR)$(PRESET_DIR)/90-dynamic-power.preset
+
+	@echo "Install complete."
 
 uninstall:
-	rm -f $(DESTDIR)/usr/bin/dynamic_power_user
-	rm -f $(DESTDIR)/usr/bin/dynamic_power_command
-	rm -rf $(DESTDIR)$(PYTHON_LIBDIR)/dynamic_power
-	rm -f $(DESTDIR)$(DATADIR)/dynamic-power/dynamic-power.yaml
-	rm -f $(DESTDIR)$(DATADIR)/dynamic-power/dynamic-power-user.yaml
-	rm -d $(DESTDIR)$(DATADIR)/dynamic-power 2>/dev/null || true
-	rm -f $(DESTDIR)$(DBUS_POLICY_DST)
+	@echo "Removing installed files …"
+	rm -f $(DESTDIR)$(BINDIR)/dynamic_power_user
+	rm -f $(DESTDIR)$(BINDIR)/dynamic_power_command
+	rm -f $(DESTDIR)$(BINDIR)/dynamic_power_session_helper
+	rm -rf $(DESTDIR)$(LIBDIR)/$(PY_PKG_DIR)
+	rm -f $(DESTDIR)/etc/dbus-1/system.d/org.dynamic_power.Daemon.conf
+	rm -f $(DESTDIR)$(SYSTEMD_USER)/dynamic_power_session.service
+	rm -f $(DESTDIR)$(PRESET_DIR)/90-dynamic-power.preset
+	@echo "Uninstall complete."

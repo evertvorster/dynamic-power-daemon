@@ -1,0 +1,10 @@
+[Unit]
+Description=Dynamic‑Power tray UI
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/dynamic_power_command
+Restart=no
+
+[Install]
+WantedBy=default.target
