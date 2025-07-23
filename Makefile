@@ -1,9 +1,5 @@
 # Dynamic‑Power‑Daemon – project‑root Makefile
 #
-# Installs all components into correct system locations.
-# Works both for direct installs (sudo make install) and packaging builds
-# (make DESTDIR="$pkgdir" PREFIX=/usr install).
-#
 PYTHON  ?= python
 PREFIX  ?= /usr
 DESTDIR ?=
@@ -11,12 +7,10 @@ DESTDIR ?=
 SRC_DIR          := python
 MODULE_DIR       := dynamic_power
 RESOURCE_DIR     := $(SRC_DIR)/resources
-TEMPLATE_DIR     := share/dynamic-power
+TEMPLATE_DIR     := $(SRC_DIR)/share/dynamic-power   # <= corrected
 
-# Determine interpreter site‑packages path
 PURELIB := $(shell $(PYTHON) -c "import sysconfig, sys; print(sysconfig.get_paths()['purelib'])")
 
-# Standard dirs
 BINDIR                 := $(PREFIX)/bin
 SYSTEMD_SYSTEM_DIR     := $(PREFIX)/lib/systemd/system
 SYSTEMD_USER_DIR       := $(PREFIX)/lib/systemd/user
