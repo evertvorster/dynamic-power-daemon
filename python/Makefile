@@ -1,69 +1,56 @@
+# Makefile for dynamic-power-daemon
+# ---------------------------------
 
-# python/Makefile
-# --------------------------------------------------------------------
-# Installs the dynamic_power Python package, user‑session helper, tray UI
-# and supporting systemd‑user units.
-# --------------------------------------------------------------------
-PREFIX        ?= /usr
-BINDIR        ?= $(PREFIX)/bin
-LIBDIR        ?= $(PREFIX)/lib
-SYSTEMD_USER  ?= /usr/lib/systemd/user
-PRESET_DIR    ?= /usr/lib/systemd/user-preset
+PYTHON := python3
+PYTHON_SITE := $(shell $(PYTHON) -c "import site; print(site.getsitepackages()[0])")
 
-DESTDIR       ?=
-
-PY_PKG_DIR    = dynamic_power
-RES_DIR       = resources
-DBUS_DIR      = $(RES_DIR)/dbus
-SYSD_USER_DIR = $(RES_DIR)/systemd-user
-SHARE_DIR     = share/dynamic-power
+PREFIX ?= /usr
+BINDIR := $(PREFIX)/bin
 
 .PHONY: all install uninstall
 
 all:
-	@echo "Nothing to build – pure Python package"
+	@echo "Use 'make install' to install the dynamic-power-daemon"
 
 install:
-	# --- Python package -------------------------------------------------
-	install -d $(DESTDIR)$(LIBDIR)/$(PY_PKG_DIR)
-	cp -r $(PY_PKG_DIR)/*.py $(DESTDIR)$(LIBDIR)/$(PY_PKG_DIR)/
+	# --- Python package ---
+	install -d $(DESTDIR)$(PYTHON_SITE)/dynamic_power
+	cp -r dynamic_power/*.py $(DESTDIR)$(PYTHON_SITE)/dynamic_power/
 
-	# --- Executables ----------------------------------------------------
-	install -Dm755 $(PY_PKG_DIR)/dynamic_power_user.py \
+	# --- Executables ---
+	install -Dm755 dynamic_power/dynamic_power_user.py \
 		$(DESTDIR)$(BINDIR)/dynamic_power_user
-	install -Dm755 $(PY_PKG_DIR)/dynamic_power_command.py \
+	install -Dm755 dynamic_power/dynamic_power_command.py \
 		$(DESTDIR)$(BINDIR)/dynamic_power_command
-	install -Dm755 $(PY_PKG_DIR)/dynamic_power_session_helper.py \
+	install -Dm755 dynamic_power/dynamic_power_session_helper.py \
 		$(DESTDIR)$(BINDIR)/dynamic_power_session_helper
 
-	# --- DBus policy for root daemon -----------------------------------
-	install -Dm644 $(DBUS_DIR)/org.dynamic_power.Daemon.conf \
+	# --- DBus policy ---
+	install -Dm644 resources/dbus/org.dynamic_power.Daemon.conf \
 		$(DESTDIR)/etc/dbus-1/system.d/org.dynamic_power.Daemon.conf
 
-	# --- YAML templates -------------------------------------------------
-	install -Dm644 $(SHARE_DIR)/dynamic-power.yaml \
+	# --- YAML templates ---
+	install -Dm644 share/dynamic-power/dynamic-power.yaml \
 		$(DESTDIR)$(PREFIX)/share/dynamic-power/dynamic-power.yaml
-	install -Dm644 $(SHARE_DIR)/dynamic-power-user.yaml \
+	install -Dm644 share/dynamic-power/dynamic-power-user.yaml \
 		$(DESTDIR)$(PREFIX)/share/dynamic-power/dynamic-power-user.yaml
 
-	# --- systemd‑user units & preset -----------------------------------
-	install -Dm644 $(SYSD_USER_DIR)/dynamic_power_session.service \
-		$(DESTDIR)$(SYSTEMD_USER)/dynamic_power_session.service
-	install -Dm644 $(SYSD_USER_DIR)/dynamic_power_command.service \
-		$(DESTDIR)$(SYSTEMD_USER)/dynamic_power_command.service
-	install -Dm644 $(SYSD_USER_DIR)/90-dynamic-power.preset \
-		$(DESTDIR)$(PRESET_DIR)/90-dynamic-power.preset
-
-	@echo "Install complete."
+	# --- systemd user units ---
+	install -Dm644 resources/systemd-user/dynamic_power_session.service \
+		$(DESTDIR)$(PREFIX)/lib/systemd/user/dynamic_power_session.service
+	install -Dm644 resources/systemd-user/dynamic_power_command.service \
+		$(DESTDIR)$(PREFIX)/lib/systemd/user/dynamic_power_command.service
+	install -Dm644 resources/systemd-user/90-dynamic-power.preset \
+		$(DESTDIR)$(PREFIX)/lib/systemd/user-preset/90-dynamic-power.preset
 
 uninstall:
-	@echo "Removing installed files …"
-	rm -f $(DESTDIR)$(BINDIR)/dynamic_power_user
-	rm -f $(DESTDIR)$(BINDIR)/dynamic_power_command
-	rm -f $(DESTDIR)$(BINDIR)/dynamic_power_session_helper
-	rm -rf $(DESTDIR)$(LIBDIR)/$(PY_PKG_DIR)
-	rm -f $(DESTDIR)/etc/dbus-1/system.d/org.dynamic_power.Daemon.conf
-	rm -f $(DESTDIR)$(SYSTEMD_USER)/dynamic_power_session.service
-	rm -f $(DESTDIR)$(SYSTEMD_USER)/dynamic_power_command.service
-	rm -f $(DESTDIR)$(PRESET_DIR)/90-dynamic-power.preset
-	@echo "Uninstall complete."
+	rm -f $(BINDIR)/dynamic_power_user
+	rm -f $(BINDIR)/dynamic_power_command
+	rm -f $(BINDIR)/dynamic_power_session_helper
+	rm -rf $(PYTHON_SITE)/dynamic_power
+	rm -f /etc/dbus-1/system.d/org.dynamic_power.Daemon.conf
+	rm -f $(PREFIX)/share/dynamic-power/dynamic-power.yaml
+	rm -f $(PREFIX)/share/dynamic-power/dynamic-power-user.yaml
+	rm -f $(PREFIX)/lib/systemd/user/dynamic_power_session.service
+	rm -f $(PREFIX)/lib/systemd/user/dynamic_power_command.service
+	rm -f $(PREFIX)/lib/systemd/user-preset/90-dynamic-power.preset
