@@ -46,7 +46,7 @@ install:
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 
 	@echo "# --- Desktop entry --------------------------------------------------"
-	install -Dm644 resources/dynamic-power.desktop \
+	install -Dm644 $(RESOURCE_DIR)/dynamic-power.desktop \
 		"$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
 	@echo "# --- YAML templates ------------------------------------------------"
 	install -Dm644 $(TEMPLATE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
