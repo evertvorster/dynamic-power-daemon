@@ -14,11 +14,7 @@ RESOURCE_DIR     := $(SRC_DIR)/resources
 TEMPLATE_DIR     := share/dynamic-power
 
 # Determine interpreter site‑packages path
-PURELIB := $(shell $(PYTHON) - <<'EOF'
-import sysconfig, sys
-print(sysconfig.get_paths()['purelib'])
-EOF
-)
+PURELIB := $(shell $(PYTHON) -c "import sysconfig, sys; print(sysconfig.get_paths()['purelib'])")
 
 # Standard dirs
 BINDIR                 := $(PREFIX)/bin
