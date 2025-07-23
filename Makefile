@@ -7,7 +7,7 @@ DESTDIR ?=
 SRC_DIR          := python
 MODULE_DIR       := dynamic_power
 RESOURCE_DIR     := $(SRC_DIR)/resources
-TEMPLATE_DIR     := $(SRC_DIR)/share/dynamic-power   # <= corrected
+TEMPLATE_DIR     := $(SRC_DIR)/share/dynamic-power
 
 PURELIB := $(shell $(PYTHON) -c "import sysconfig, sys; print(sysconfig.get_paths()['purelib'])")
 
@@ -15,7 +15,7 @@ BINDIR                 := $(PREFIX)/bin
 SYSTEMD_SYSTEM_DIR     := $(PREFIX)/lib/systemd/system
 SYSTEMD_USER_DIR       := $(PREFIX)/lib/systemd/user
 SYSTEMD_USER_PRESET    := $(PREFIX)/lib/systemd/user-preset
-DBUS_SYSTEM_POLICY_DIR := $(PREFIX)/etc/dbus-1/system.d
+DBUS_SYSTEM_POLICY_DIR := /etc/dbus-1/system.d
 SHARE_DIR              := /usr/share/dynamic-power
 
 .PHONY: all install uninstall
@@ -47,7 +47,7 @@ install:
 		"$(DESTDIR)$(SYSTEMD_USER_PRESET)/90-dynamic-power.preset"
 
 	@echo "# --- DBus policy ---------------------------------------------------"
-	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf         \
+	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf \
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 
 	@echo "# --- YAML templates ------------------------------------------------"
