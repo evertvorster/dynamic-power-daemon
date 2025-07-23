@@ -15,7 +15,9 @@ try:
 except ImportError:
     from dbus_next.message_bus import MessageBus     # <0.2 fallback
 
+# dbus‑next
 from dbus_next.service import ServiceInterface, method, signal as dbus_signal
+from dbus_next import Variant      # NEW – wrap a{sv} values
 
 # Project config ------------------------------------------------------
 try:
@@ -80,7 +82,12 @@ class UserBusIface(ServiceInterface):
 
     @method()
     def GetMetrics(self) -> 'a{sv}':
-        return self._metrics
+        # Wrap every value in a Variant so a{sv} marshals correctly
+        return {
+            k: (Variant('s', v) if isinstance(v, str)
+                else Variant('d', float(v)))
+            for k, v in self._metrics.items()
+        }
 
     @dbus_signal()
     def PowerStateChanged(self, power_state: 's') -> None:

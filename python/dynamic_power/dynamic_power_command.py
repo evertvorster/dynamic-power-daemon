@@ -4,6 +4,7 @@ import os
 import time
 import subprocess
 import yaml
+import dbus
 import sys
 DEBUG = '--debug' in sys.argv
 try:
@@ -89,6 +90,16 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
 class MainWindow(QtWidgets.QWidget):
     def __init__(self, tray):
         super().__init__()
+        # --- Connect to session DBus for metrics ---
+        try:
+            bus = dbus.SessionBus()
+            proxy = bus.get_object('org.dynamic_power.UserBus', '/')
+            self._dbus_iface = dbus.Interface(proxy, 'org.dynamic_power.UserBus')
+        except Exception as e:
+            if DEBUG:
+                print('Failed to connect to org.dynamic_power.UserBus:', e)
+            self._dbus_iface = None
+
         self.tray = tray
         self.setWindowTitle("Dynamic Power Command")
         self.resize(600, 400)
