@@ -1,0 +1,16 @@
+post_install() {
+  # Enable and start system daemon
+  systemctl preset dynamic_power.service >/dev/null 2>&1 || true
+
+  # Enable user-session units for all users (new logins pick them up)
+  systemctl --global preset dynamic_power_session.service dynamic_power_command.service >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+  post_install
+}
+
+post_remove() {
+  systemctl disable --now dynamic_power.service >/dev/null 2>&1 || true
+  systemctl --global disable dynamic_power_session.service dynamic_power_command.service >/dev/null 2>&1 || true
+}
