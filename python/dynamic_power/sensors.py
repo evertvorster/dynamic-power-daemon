@@ -21,6 +21,15 @@ def get_power_source(power_source_cfg=None):
         debug_log("sensors", f"Fallback detection failed, using default AC device: {ac_id}")
         return "ac"
 
+def get_battery_status(battery_id: str) -> str:
+    try:
+        path = f"/sys/class/power_supply/{battery_id}/status"
+        with open(path, "r") as f:
+            return f.read().strip()
+    except Exception as e:
+        print(f"[sensors.py] Failed to read battery status: {e}")
+        return "Unknown"
+
 def get_load_level(low_th=1.0, high_th=2.0):
     try:
         with open("/proc/loadavg", "r") as f:
@@ -38,34 +47,7 @@ def get_load_level(low_th=1.0, high_th=2.0):
     debug_log("sensors", f"Load average: {load_avg}, Level: {level}")
     return level
 
-def get_power_source(ac_id: str) -> str:
-    """
-    Return 'AC' if AC power is online, else 'Battery'.
-    """
-    try:
-        path = f"/sys/class/power_supply/{ac_id}/online"
-        with open(path, "r") as f:
-            return "AC" if f.read().strip() == "1" else "Battery"
-    except Exception as e:
-        print(f"[sensors.py] Failed to read power source: {e}")
-        return "Unknown"
-
-def get_battery_status(battery_id: str) -> str:
-    """
-    Return battery status string from /sys/class/power_supply/{battery_id}/status
-    """
-    try:
-        path = f"/sys/class/power_supply/{battery_id}/status"
-        with open(path, "r") as f:
-            return f.read().strip()
-    except Exception as e:
-        print(f"[sensors.py] Failed to read battery status: {e}")
-        return "Unknown"
-
 def get_cpu_load(interval=0.1) -> float:
-    """
-    Read CPU load average over the specified interval.
-    """
     with open("/proc/stat", "r") as f:
         fields = f.readline().strip().split()[1:]
         prev_idle = int(fields[3])
@@ -84,9 +66,6 @@ def get_cpu_load(interval=0.1) -> float:
     return 1.0 - idle_delta / total_delta if total_delta != 0 else 0.0
 
 def get_cpu_freq() -> tuple[int, int]:
-    """
-    Return a tuple of (current_freq_khz, max_freq_khz) for CPU0.
-    """
     try:
         with open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "r") as f:
             cur = int(f.read().strip())
@@ -98,9 +77,6 @@ def get_cpu_freq() -> tuple[int, int]:
         return (0, 0)
 
 def set_panel_autohide(enabled: bool) -> None:
-    """
-    Sets the KDE panel autohide state.
-    """
     mode = "1" if enabled else "0"
     try:
         subprocess.run([
@@ -119,7 +95,7 @@ def set_panel_autohide(enabled: bool) -> None:
         print(f"[sensors.py] Failed to set panel autohide: {e}")
 
 def set_refresh_rate(enabled: bool) -> None:
-    """
-    Stub for refresh rate control. Not yet implemented.
-    """
     print(f"[sensors.py] set_refresh_rate({enabled}) called (stub)")
+
+def get_uid() -> int:
+    return os.getuid()
