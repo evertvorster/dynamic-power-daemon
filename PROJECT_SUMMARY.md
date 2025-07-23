@@ -10,6 +10,10 @@ Dynamic‑Power‑Daemon (DPD) is a smart power‑profile manager for Linux lapt
 It adjusts `powerprofilesctl` / `asusctl` modes based on **CPU load, power source,
 user overrides, and running processes**, while exposing a DBus API and a Qt tray UI.
 
+## Comment Preservation
+
+Inline comments added by the maintainer during code reviews are **canonical documentation**.  
+**Do not remove them.** If a comment becomes outdated, update it so the original intent remains clear.
 ---
 
 ## 2. Current Repository Layout
@@ -140,3 +144,13 @@ journalctl --user -fu dynamic_power_session.service
 * **Configuration** is stored in YAML files and read on startup (`config.py` auto‑upgrades the schema).
 * **Runtime sensor data** (power source, load, battery %, etc.) **MUST travel over DBus (`GetMetrics`) – not via YAML scratch files.**
   This eliminates latency and file‑polling hacks introduced in early Bash versions.
+
+
+### Runtime features
+
+* **Battery detection → Session helper DBus:** The session helper now owns all
+  power‑source & battery‑percent sensing and publishes them via
+  `GetMetrics()`. The tray consumes these over DBus—no YAML hacks.
+* **Panel overdrive auto‑toggle (2025‑07‑23):** Session helper toggles the
+  display’s overdrive using `asusctl` when AC ↔ battery changes, respecting
+  `panel.overdrive.enable_on_ac` and hardware support detection.

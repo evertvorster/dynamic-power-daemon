@@ -3,7 +3,7 @@ power:
   load_thresholds:
     low: 1
     high: 2
-    
+
 process_overrides:
   - name: recording
     process_name: obs
@@ -36,5 +36,5 @@ process_overrides:
     priority: 50
 
 features:
-  panel_overdrive: false
+  panel_overdrive: true
   kde_autohide_on_battery: false
