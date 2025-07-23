@@ -17,6 +17,7 @@ SYSTEMD_USER_DIR       := $(PREFIX)/lib/systemd/user
 SYSTEMD_USER_PRESET    := $(PREFIX)/lib/systemd/user-preset
 DBUS_SYSTEM_POLICY_DIR := /etc/dbus-1/system.d
 SHARE_DIR              := /usr/share/dynamic-power
+DESKTOP_DIR          := $(PREFIX)/share/applications
 
 .PHONY: all install uninstall
 
@@ -39,17 +40,14 @@ install:
 	install -Dm644 dynamic-power.service                                 "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
 
 	@echo "# --- User session units & preset ----------------------------------"
-	install -Dm644 $(RESOURCE_DIR)/systemd-user/dynamic_power_session.service  \
-		"$(DESTDIR)$(SYSTEMD_USER_DIR)/dynamic_power_session.service"
-	install -Dm644 $(RESOURCE_DIR)/systemd-user/dynamic_power_command.service \
-		"$(DESTDIR)$(SYSTEMD_USER_DIR)/dynamic_power_command.service"
-	install -Dm644 $(RESOURCE_DIR)/systemd-user/90-dynamic-power.preset       \
-		"$(DESTDIR)$(SYSTEMD_USER_PRESET)/90-dynamic-power.preset"
 
 	@echo "# --- DBus policy ---------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf \
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 
+	@echo "# --- Desktop entry --------------------------------------------------"
+	install -Dm644 resources/dynamic-power.desktop \
+		"$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
 	@echo "# --- YAML templates ------------------------------------------------"
 	install -Dm644 $(TEMPLATE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
 	install -Dm644 $(TEMPLATE_DIR)/dynamic-power-user.yaml "$(DESTDIR)$(SHARE_DIR)/dynamic-power-user.yaml"
@@ -61,8 +59,7 @@ uninstall:
 	@rm -vf "$(DESTDIR)$(BINDIR)"/dynamic_power*
 	@rm -vrf "$(DESTDIR)$(PURELIB)/$(MODULE_DIR)"
 	@rm -vf "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
-	@rm -vf "$(DESTDIR)$(SYSTEMD_USER_DIR)"/dynamic_power_{session,command}.service
-	@rm -vf "$(DESTDIR)$(SYSTEMD_USER_PRESET)/90-dynamic-power.preset"
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
+	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
 	@echo "Uninstall complete."

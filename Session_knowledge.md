@@ -69,6 +69,23 @@ panel:
 ```
 
 ## 6 · Known Issues / TODO
+### 2025‑07‑23 · Systemd session units removed
+
+After extensive troubleshooting we discovered that launching the **session helper** through *systemd --user* introduced race‑conditions with **asusd** which resulted in panel over‑drive toggles being missed at login.  
+The helpers now rely on the regular **KDE “Autostart”** mechanism (or any DE‑level autostart) instead.  
+When started this way:
+
+* Power‑supply detection (`AC` / `BAT`)
+* Battery‑percentage reporting
+* **Panel over‑drive** switching
+
+all work **flawlessly**.
+
+> **Action taken**  
+> • `dynamic_power_session.service`, `dynamic_power_command.service` and the associated preset file have been removed from the build system.  
+> • The root daemon (`dynamic_power.service`) remains managed by systemd.
+
+
 
 * **Tray import failure** on Arch `python-dbus-next 0.2.3`; needs:
   ```python

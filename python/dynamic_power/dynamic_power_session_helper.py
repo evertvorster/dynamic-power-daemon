@@ -27,6 +27,7 @@ except ImportError:
 
 LOG = logging.getLogger("dynamic_power_session_helper")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
+UI_CMD   = ["/usr/bin/dynamic_power_command"]
 
 # ───────────────────────────────────────── helpers ───
 def read_first(path):
@@ -122,6 +123,19 @@ async def sensor_loop(iface, cfg):
 
         await asyncio.sleep(2)
 
+
+async def spawn_ui():
+    """Launch the tray UI (dynamic_power_command) and return the process."""
+    try:
+        return await asyncio.create_subprocess_exec(
+            *UI_CMD,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError as e:
+        LOG.error("dynamic_power_command not found: %s", e)
+        return None
+
 async def spawn_user_helper():
     return await asyncio.create_subprocess_exec(
         *USER_HELPER_CMD,
@@ -136,6 +150,13 @@ async def supervise(proc):
         await asyncio.sleep(3)
         proc = await spawn_user_helper()
 
+    ui_proc = await spawn_ui()
+
+
+@method()
+def Exit(self):
+    """Request the session helper to terminate cleanly."""
+    LOOP.call_soon_threadsafe(STOP_EVENT.set)
 # ───────────────────────────────────────── main ───
 async def main():
     logging.basicConfig(level=logging.INFO,
@@ -165,6 +186,9 @@ async def main():
     if proc.returncode is None:
         proc.terminate()
         await proc.wait()
+    if ui_proc and ui_proc.returncode is None:
+        ui_proc.terminate()
+        await ui_proc.wait()
 
 if __name__ == "__main__":
     import asyncio as _asyncio

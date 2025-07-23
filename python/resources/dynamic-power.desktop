@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Dynamic Power
+Comment=Dynamic system power management and tray UI
+Exec=dynamic_power_command
+Icon=dynamic-power
+Type=Application
+Categories=System;Utility;Tray;
+StartupNotify=false

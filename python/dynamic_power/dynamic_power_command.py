@@ -391,6 +391,20 @@ class MainWindow(QtWidgets.QWidget):
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
 def main():
+    # Wait for X display to be ready before starting the app
+    import os, time
+    from PyQt6.QtGui import QGuiApplication
+
+    max_tries = 20
+    for i in range(max_tries):
+        if os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"):
+            break
+        print("[startup] Waiting for DISPLAY or WAYLAND_DISPLAY...")
+        time.sleep(0.5)
+    else:
+        print("[error] DISPLAY not found after delay; exiting")
+        return
+
     app = QtWidgets.QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
