@@ -181,33 +181,27 @@ class MainWindow(QtWidgets.QWidget):
         self.plot.setData(self.data)
 
     def update_state(self):
+
         try:
-            config_path = Path("/etc/dynamic-power.yaml")
-            if not config_path.exists():
-                self.power_status_label.setText("Power status: Unknown")
-                return
-            with open(config_path) as f:
-                sys_config = yaml.safe_load(f) or {}
-                power = sys_config.get("power", {})
-                source = power.get("power_source", {})
-                ac_id = source.get("ac_id", "AC")
-                battery_id = source.get("battery_id", "BAT0")
-            ac_path = Path(f"/sys/class/power_supply/{ac_id}/online")
-            bat_path = Path(f"/sys/class/power_supply/{battery_id}/status")
-            ac_status = "Unknown"
-            battery_status = "Unknown"
-            if ac_path.exists():
-                ac_value = ac_path.read_text().strip()
-                ac_status = "AC power is connected" if ac_value == "1" else "AC power is not connected"
+            # --- Power source via DBus ---
+            if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
+                try:
+                    metrics = self._dbus_iface.GetMetrics()
+                    power_src = metrics.get('power_source', 'Unknown')
+                    batt = metrics.get('battery_percent', None)
+                    label = f"Power source: {power_src}"
+                    if batt is not None:
+                        label += f" ({batt}%)"
+                    self.power_status_label.setText(label)
+                except Exception as e:
+                    if DEBUG:
+                        print("DBus GetMetrics failed:", e)
+                    self.power_status_label.setText("Power status: Unknown")
             else:
-                pass  # debug removed
-            if bat_path.exists():
-                battery_status = bat_path.read_text().strip()
-            else:
-                pass  # debug removed
-            self.power_status_label.setText(f"{ac_status}\nBattery status: {battery_status}")
+                self.power_status_label.setText("Power status: Unavailable")
         except Exception as e:
-            pass  # debug removed
+            if DEBUG:
+                print("Error updating power status:", e)
         try:
             if STATE_PATH.exists():
                 with open(STATE_PATH, "r") as f:
