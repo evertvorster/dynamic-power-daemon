@@ -8,7 +8,7 @@ import yaml
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method
 from dynamic_power.config import load_user_config
-from dynamic_power.utils import (
+from dynamic_power.sensors import (
     get_power_source, get_battery_status,
     get_cpu_load, get_cpu_freq,
     set_panel_autohide, set_refresh_rate,
