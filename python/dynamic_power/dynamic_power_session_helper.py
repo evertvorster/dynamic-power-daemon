@@ -1,78 +1,26 @@
 #!/usr/bin/env python3
-"""
-Dynamic‑Power session helper (Phase 3)
-* Owns org.dynamic_power.UserBus on the session bus
-* Spawns and supervises dynamic_power_user
-* Polls basic metrics (load 1 m, AC/BAT, battery %) every 2 s
-* Emits PowerStateChanged and toggles panel over‑drive
-"""
-import asyncio, logging, os, signal, time
-from pathlib import Path as _P
+import asyncio
+import logging
+import os
+import time
+import yaml
 
-# Flexible import for dbus‑next across 0.2.x / 0.3.x
-try:
-    from dbus_next.aio import MessageBus
-except ImportError:
-    from dbus_next.message_bus import MessageBus     # <0.2 fallback
+from dbus_next.aio import MessageBus
+from dbus_next.service import ServiceInterface, method
+from dynamic_power.config import load_user_config
+from dynamic_power.utils import (
+    get_power_source, get_battery_status,
+    get_cpu_load, get_cpu_freq,
+    set_panel_autohide, set_refresh_rate,
+    get_uid
+)
+from dynamic_power.dynamic_power_user import get_process_override, write_matches, send_profile, send_thresholds
 
-from dbus_next.service import ServiceInterface, method, signal as dbus_signal
+CONFIG_PATH = os.path.expanduser("~/.config/dynamic_power/config.yaml")
 
-# Project config ------------------------------------------------------
-try:
-    from config import Config
-except ImportError:
-    from dynamic_power.config import Config
-
-LOG = logging.getLogger("dynamic_power_session_helper")
-USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
-
-# ───────────────────────────────────────── helpers ───
-def read_first(path):
-    try:
-        with open(path, "r") as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return None
-
-def get_power_source():
-    """Return 'AC' if any power-supply whose type=='Mains' is online."""
-    for dev in _P("/sys/class/power_supply").iterdir():
-        if read_first(dev / "type") == "Mains" and read_first(dev / "online") == "1":
-            return "AC"
-    return "BAT"
-
-def get_battery_percent():
-    bats = [d for d in _P("/sys/class/power_supply").iterdir() if read_first(d / "type") == "Battery"]
-    if not bats:
-        return None
-    try:
-        return float(read_first(bats[0] / "capacity"))
-    except (TypeError, ValueError):
-        return None
-
-async def set_panel_overdrive(enable: bool):
-    cmd = ["asusctl", "armoury", "panel_overdrive", "1" if enable else "0"]
-    LOG.info("Running %s", " ".join(cmd))
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-    except FileNotFoundError as e:
-        LOG.error("asusctl not found in PATH (%s); over‑drive toggle skipped", e)
-        return
-    out, _ = await proc.communicate()
-    if proc.returncode == 0:
-        LOG.info("panel_overdrive set to %s", 1 if enable else 0)
-    else:
-        LOG.error("panel_overdrive failed (%s): %s", proc.returncode, out.decode().strip())
-
-# ───────────────────────────────────────── DBus iface ───
-class UserBusIface(ServiceInterface):
+class UserBusInterface(ServiceInterface):
     def __init__(self):
         super().__init__("org.dynamic_power.UserBus")
-        self._metrics = {}
 
     @method()
     def Ping(self) -> 's':
@@ -80,85 +28,116 @@ class UserBusIface(ServiceInterface):
 
     @method()
     def GetMetrics(self) -> 'a{sv}':
-        return self._metrics
+        return self.metrics if hasattr(self, "metrics") else {}
 
-    @dbus_signal()
-    def PowerStateChanged(self, power_state: 's') -> None:
-        pass
+class UserLogic:
+    def __init__(self, config, bus_iface):
+        self.config = config
+        self.bus_iface = bus_iface
+        self.last_match = None
 
-    def update_metrics(self, m):
-        self._metrics.update(m)
+    async def run(self):
+        logging.info("UserLogic started")
+        while True:
+            try:
+                self.loop_once()
+            except Exception as e:
+                logging.exception("UserLogic error: %s", e)
+            await asyncio.sleep(self.config.get("general", {}).get("poll_interval", 5))
 
-# ───────────────────────────────────────── loops ───
-async def sensor_loop(iface, cfg):
-    last_power = None
-    LOG.info("Sensor loop started")
-    while True:
-        load1, _, _ = os.getloadavg()
-        power_src = get_power_source()
-        batt = get_battery_percent()
+    def loop_once(self):
+        match = get_process_override(self.config)
+        if match:
+            profile = match.get("active_profile")
+            if profile:
+                send_profile(profile, is_user_override=False)
+            write_matches([match])
+        else:
+            write_matches([])
 
-        iface.update_metrics({
+class SensorLogic:
+    def __init__(self, config, bus_iface, uid):
+        self.config = config
+        self.bus_iface = bus_iface
+        self.uid = uid
+        self.last_power_source = None
+        self.metrics_path = f"/run/user/{uid}/dynamic_power_metrics.yaml"
+        self.poll_interval = 5
+
+    async def run(self):
+        logging.info("Sensor loop started (poll=%ss)", self.poll_interval)
+        while True:
+            try:
+                await self.poll_once()
+            except Exception as e:
+                logging.exception("SensorLogic error: %s", e)
+            await asyncio.sleep(self.poll_interval)
+
+    async def poll_once(self):
+        load_1s = get_cpu_load()
+        freq = get_cpu_freq()
+        power_source = get_power_source()
+        battery_status = get_battery_status()
+
+        # Power transition
+        if power_source != self.last_power_source:
+            logging.info("Power source changed %s → %s", self.last_power_source, power_source)
+            self.last_power_source = power_source
+            await self.handle_power_transition(power_source)
+
+        self.write_metrics_file(load_1s, freq, power_source, battery_status)
+        if hasattr(self.bus_iface, "metrics"):
+            self.bus_iface.metrics = {
+                "load_1s": load_1s,
+                "cpu_freq_avg": freq,
+                "power_source": power_source,
+                "battery_status": battery_status,
+            }
+
+    def write_metrics_file(self, load, freq, source, battery):
+        data = {
             "timestamp": time.time(),
-            "load_1m": load1,
-            "power_source": power_src,
-            **({"battery_percent": batt} if batt is not None else {})
-        })
+            "load_1s": load,
+            "cpu_freq_avg": freq,
+            "power_source": source,
+            "battery_status": battery
+        }
+        try:
+            os.makedirs(os.path.dirname(self.metrics_path), exist_ok=True)
+            with open(self.metrics_path + ".tmp", "w") as f:
+                yaml.safe_dump(data, f)
+            os.replace(self.metrics_path + ".tmp", self.metrics_path)
+        except Exception as e:
+            logging.warning("Failed to write metrics YAML: %s", e)
 
-        if power_src != last_power:
-            LOG.info("Power source changed %s → %s", last_power, power_src)
-            iface.PowerStateChanged(power_src)
-            last_power = power_src
+    async def handle_power_transition(self, source):
+        panel_cfg = self.config.get("panel", {})
+        if panel_cfg.get("auto_hide", {}).get("enable_on_battery", False):
+            set_panel_autohide(source == "Battery")
 
-            if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
-                await set_panel_overdrive(power_src == "AC")
+        if panel_cfg.get("refresh_rate", {}).get("apply_on_switch", False):
+            target = "battery_hz" if source == "Battery" else "ac_hz"
+            hz = panel_cfg.get("refresh_rate", {}).get(target)
+            if isinstance(hz, int):
+                set_refresh_rate(hz)
 
-        await asyncio.sleep(2)
-
-async def spawn_user_helper():
-    return await asyncio.create_subprocess_exec(
-        *USER_HELPER_CMD,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
-
-async def supervise(proc):
-    while True:
-        await proc.wait()
-        LOG.warning("dynamic_power_user exited (%s); respawning", proc.returncode)
-        await asyncio.sleep(3)
-        proc = await spawn_user_helper()
-
-# ───────────────────────────────────────── main ───
 async def main():
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    uid = get_uid()
+    config = load_user_config()
 
     bus = await MessageBus().connect()
-    iface = UserBusIface()
+    iface = UserBusInterface()
     bus.export("/", iface)
     await bus.request_name("org.dynamic_power.UserBus")
 
-    cfg = Config()
+    user_logic = UserLogic(config, iface)
+    sensor_logic = SensorLogic(config, iface, uid)
 
-    proc = await spawn_user_helper()
-
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGTERM, stop.set)
-    loop.add_signal_handler(signal.SIGINT, stop.set)
-
-    tasks = [
-        asyncio.create_task(sensor_loop(iface, cfg)),
-        asyncio.create_task(supervise(proc)),
-    ]
-    await stop.wait()
-    for t in tasks:
-        t.cancel()
-    if proc.returncode is None:
-        proc.terminate()
-        await proc.wait()
+    await asyncio.gather(
+        user_logic.run(),
+        sensor_logic.run()
+    )
 
 if __name__ == "__main__":
-    import asyncio as _asyncio
-    _asyncio.run(main())
+    asyncio.run(main())

@@ -89,3 +89,23 @@ class Config:
         if not isinstance(cfg, dict):
             cfg = {}
         return {"enable_on_ac": cfg.get("enable_on_ac", True)}
+
+# ──────────────────────────────────────── user config loader ───
+def load_user_config():
+    """
+    Loads the user config from ~/.config/dynamic_power/config.yaml.
+    Returns an empty dict if missing or unreadable.
+    """
+    path = os.path.expanduser("~/.config/dynamic_power/config.yaml")
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            error_log("config", f"Failed to load user config: {e}")
+    return {}
+
+__all__ = [
+    "Config",
+    "load_user_config",
+]
