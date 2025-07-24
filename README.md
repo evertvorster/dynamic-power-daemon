@@ -32,8 +32,7 @@ This repo ships:
 |---------|---------|
 | **Load‑aware switching** | Slides between the three profiles using 1‑minute load averages. |
 | **Battery‑first safety** | Forces `power-saver` when unplugged. |
-| **Quiet / Responsive modes** | *Quiet* never leaves `power‑saver`; *Responsive* never drops below `balanced`. Each mode watches a CSV process list. |
-| **EPP tuning** | Pins Energy‑Performance‑Preference per profile or per mode. |
+| **Powersave / Responsive modes** | *Powersave* never leaves `power‑saver`; *Responsive* never drops below `balanced`. Each mode watches a CSV process list. |
 | **Dual backend** | Works with `powerprofilesctl` (kernel ≥ 5.11) **or** `asusctl` on ASUS laptops. |
 | **Self‑healing config** | `/etc/dynamic-power.conf` is created on first run; missing keys auto‑fill and are logged. |
 | **Smart AC detection** | If `AC_PATH` is wrong, the daemon hunts common paths (`ADP0`, `AC`, `ACAD`, …) and picks a working one. |
@@ -105,18 +104,6 @@ RESPONSIVE_MIN_PROFILE="balanced"
 
 ---
 
-## Monitor keys
-
-* **d** – dynamic (auto)  
-* **s** – power‑saver  
-* **b** – balanced  
-* **p** – performance  
-* **q** – quit
-
-It also highlights config gaps and AC‑path mismatches in yellow.
-
----
-
 ## Uninstall
 
 ```bash
@@ -131,3 +118,17 @@ sudo rm /etc/systemd/system/dynamic-power.service
 ## License
 
 GPL‑3.0‑or‑later
+
+
+## Desktop Integration
+
+Dynamic‑Power now ships a **`dynamic-power.desktop`** entry and an **SVG icon**.
+
+* The desktop file is installed to `/usr/share/applications`, so *Dynamic Power* shows up in KDE, GNOME, etc.
+* The SVG icon (`dynamic-power.svg`) is installed to `/usr/share/pixmaps`.
+* Users can enable autostart from their DE’s settings; the entry runs `dynamic_power_session_helper`, which in turn starts the tray UI.
+
+## Panel Over‑Drive
+
+On ASUS ROG laptops, the daemon automatically toggles panel over‑drive (via `asusctl armoury panel_overdrive`) when switching between AC and battery.  
+This feature is enabled by default and can be configured under `panel.overdrive` in the YAML config.

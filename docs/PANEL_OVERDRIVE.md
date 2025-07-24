@@ -94,3 +94,10 @@ the token is missing, the feature is silently skipped.
 
 ---
 
+
+
+### 2025‑07‑23
+
+The helper now calls `asusctl armoury panel_overdrive 1|0` directly whenever the power source flips.  
+Tests show immediate switching with no race conditions when session helper is started via autostart (not systemd‑user).
+

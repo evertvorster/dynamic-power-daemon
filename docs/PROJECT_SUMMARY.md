@@ -125,10 +125,6 @@ Optional: powerprofilesctl, asusctl, xorg-xrandr, kscreen
 # check root daemon
 sudo systemctl status dynamic_power.service
 
-# check user units
-systemctl --user status dynamic_power_session.service
-systemctl --user status dynamic_power_command.service
-
 # live logs
 sudo journalctl -fu dynamic_power.service
 journalctl --user -fu dynamic_power_session.service
@@ -154,3 +150,13 @@ journalctl --user -fu dynamic_power_session.service
 * **Panel overdrive auto‑toggle (2025‑07‑23):** Session helper toggles the
   display’s overdrive using `asusctl` when AC ↔ battery changes, respecting
   `panel.overdrive.enable_on_ac` and hardware support detection.
+
+
+#### Latest progress (2025‑07‑23)
+
+| Feature | Status |
+|---------|--------|
+| Panel over‑drive toggle | **Completed** |
+| Desktop entry & icon | **Completed** |
+| Systemd‑user replacement | **Completed** (Autostart via .desktop) |
+

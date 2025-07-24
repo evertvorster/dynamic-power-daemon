@@ -30,8 +30,6 @@ python/
 | Unit | Scope | Purpose |
 |------|-------|---------|
 | `dynamic-power.service` | **system** | Root daemon — power‑profile logic |
-| `dynamic_power_session.service` | **user** | Starts `dynamic_power_session_helper` after login |
-| `dynamic_power_command.service` | **user** | Autostarts tray UI |
 
 ## 3 · DBus Interfaces
 
@@ -69,23 +67,6 @@ panel:
 ```
 
 ## 6 · Known Issues / TODO
-### 2025‑07‑23 · Systemd session units removed
-
-After extensive troubleshooting we discovered that launching the **session helper** through *systemd --user* introduced race‑conditions with **asusd** which resulted in panel over‑drive toggles being missed at login.  
-The helpers now rely on the regular **KDE “Autostart”** mechanism (or any DE‑level autostart) instead.  
-When started this way:
-
-* Power‑supply detection (`AC` / `BAT`)
-* Battery‑percentage reporting
-* **Panel over‑drive** switching
-
-all work **flawlessly**.
-
-> **Action taken**  
-> • `dynamic_power_session.service`, `dynamic_power_command.service` and the associated preset file have been removed from the build system.  
-> • The root daemon (`dynamic_power.service`) remains managed by systemd.
-
-
 
 * **Tray import failure** on Arch `python-dbus-next 0.2.3`; needs:
   ```python
@@ -108,4 +89,9 @@ all work **flawlessly**.
 
 ---
 
-*End of summary.*
+
+## 2025‑07‑23
+
+* **Panel over‑drive**: Implemented via `asusctl armoury panel_overdrive` and now confirmed working – toggles automatically on AC ↔ battery events.
+* **Desktop integration**: Added `dynamic-power.svg` icon and a `.desktop` file installed to `/usr/share/applications`, icon to `/usr/share/pixmaps`. KDE now lists *Dynamic Power* and users can add it to autostart easily.
+* **Systemd user services deprecated**: Session helper is now started via autostart, launching `dynamic_power_user` and the tray UI internally. User‑session systemd units have been removed from packaging.
