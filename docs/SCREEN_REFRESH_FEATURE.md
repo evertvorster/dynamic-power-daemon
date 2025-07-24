@@ -119,3 +119,126 @@ Where:
 - Manually change resolution or refresh with external tool and verify re-sync
 
 ---
+
+Second version, some a lot of things may be duplicated below here. It is to be considered an update of duplicates above.
+
+
+# Screen Refresh Rate Control Feature
+
+This document outlines the design and implementation considerations for a feature in `dynamic_power_user` that adjusts the screen refresh rate depending on the system's power state.
+
+## Purpose
+
+When on battery power, reducing the screen refresh rate can save power. When on AC power, the maximum refresh rate should be used for the best user experience.
+
+## Configuration
+
+This feature is controlled in the user's YAML configuration file:
+
+```yaml
+features:
+  screen_refresh: true
+```
+
+Even when `screen_refresh` is set to `false`, the system should still gather information about connected monitors and their refresh rates for display purposes.
+
+## UI Behavior
+
+In the main `dynamic_power_command` interface:
+
+- The feature appears as a toggle checkbox.
+- Label: **"Screen Hz:"**
+- The display format: `[Monitor ID] - [Current Refresh Rate]`
+  - Example: `eDP-1 - 60Hz`
+- Positioned under the battery/AC power status line.
+
+## Information Required
+
+For each connected monitor:
+
+- **Monitor ID**
+- **Current refresh rate**
+- **Maximum refresh rate**
+- **Minimum refresh rate**
+
+## Behavior
+
+- On AC power: set **maximum** refresh rate.
+- On Battery power: set **minimum** refresh rate.
+- When the feature is disabled: do not change refresh rate, but still report monitor and refresh rate info in UI.
+
+## Detection Requirements
+
+- Detect display connect/disconnect events.
+- Detect refresh rate change events.
+- Detect power state changes (AC/Battery).
+
+## Polling Considerations
+
+Polling should be avoided to minimize power consumption. Prefer:
+
+- File watchers (`/sys/class/drm/`) if needed.
+- **DBus signals** for real-time event updates.
+- Polling only when unavoidable.
+
+## Investigation Summary: Determining Screen Refresh Rates and Connected Displays
+
+### X11-Compatible Options
+
+- **`xrandr`**: CLI tool for querying/changing display settings.
+  - Example: `xrandr --current`
+  - Reliable for X11. Not supported under Wayland.
+
+### Wayland-Compatible Options
+
+- **`wlr-randr`**: For wlroots-based compositors.
+- **`weston-info`**: Lists refresh rates and connected outputs (in mHz).
+- **`kscreen-doctor`** (KDE):
+  - Lists outputs and refresh rates.
+  - Allows setting of refresh rates.
+  - KDE-native and scriptable.
+  - Example:
+    ```
+    Output 0: eDP-1 enabled connected priority 0 Panel
+      Modes:
+        1920x1080@60 (preferred)
+        1920x1080@48
+    ```
+
+### KDE Integration
+
+- KDE uses `KScreen2` with DBus support.
+- `kscreen-doctor` is preferred:
+  - Minimal overhead.
+  - Integrates with Plasma.
+  - Can be watched for output change events over DBus.
+
+### Hotplug Detection
+
+- Monitor `/sys/class/drm` for changes.
+- Use KScreen DBus events (for KDE).
+- Wayland compositors like Sway may have different APIs.
+
+## Design Considerations
+
+- Cache output info on startup.
+- Use DBus to listen for:
+  - Power state changes.
+  - Screen configuration changes.
+- Update refresh rate **only when needed**.
+- Avoid external commands unless triggered by DBus or system event.
+
+## Implementation Steps (to be defined later)
+
+1. Detect available screens and their capabilities using `kscreen-doctor`.
+2. Hook into the existing power state DBus signals.
+3. Update the refresh rate only when power state or display configuration changes.
+4. Show the info in the UI with minimal overhead.
+
+## Future Enhancements
+
+- Allow user to specify custom min/max refresh rates per monitor.
+- Automatically detect preferred performance/power-saving modes.
+- Integrate with display configuration UIs.
+- Graceful fallback to X11 or sway-specific tools.
+
