@@ -1,3 +1,7 @@
+features:
+  kde_autohide_on_battery: false
+  panel_overdrive: true
+  screen_refresh: false
 
 power:
   load_thresholds:
@@ -34,7 +38,3 @@ process_overrides:
     process_name: wineserver
     active_profile: responsive
     priority: 50
-
-features:
-  panel_overdrive: true
-  kde_autohide_on_battery: false
