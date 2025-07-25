@@ -246,6 +246,11 @@ class MainWindow(QtWidgets.QWidget):
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
                 try:
                     metrics = self._dbus_iface.GetMetrics()
+                    panel = metrics.get('panel_overdrive', None)
+                    if panel is not None:
+                        self.panel_overdrive_status_label.setText("On" if panel else "Off")
+                    else:
+                        self.panel_overdrive_status_label.setText("Unknown")
                     power_src = metrics.get('power_source', 'Unknown')
                     batt = metrics.get('battery_percent', None)
                     label = f"Power source: {power_src}"

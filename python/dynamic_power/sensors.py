@@ -35,3 +35,26 @@ def get_load_level(low_th=1.0, high_th=2.0):
 
     debug_log("sensors", f"Load average: {load_avg}, Level: {level}")
     return level
+
+import subprocess
+
+def get_panel_overdrive_status() -> bool | None:
+    try:
+        result = subprocess.run(
+            ["asusctl", "armoury", "--help"],
+            capture_output=True, text=True, check=True
+        )
+        lines = result.stdout.splitlines()
+        inside_panel_block = False
+        for line in lines:
+            if "panel_overdrive:" in line:
+                inside_panel_block = True
+            elif inside_panel_block and "current:" in line:
+                if "[0,(1)]" in line:
+                    return True
+                elif "[(0),1]" in line:
+                    return False
+                break
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        debug_log("sensors", f"Failed to query panel overdrive status: {e}")
+    return None
