@@ -41,6 +41,30 @@ TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 STATE_PATH = Path("/run/dynamic_power_state.yaml")
 MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
+# --- Panel Overdrive Config Helpers ---
+def _load_panel_overdrive():
+    """Return boolean for features.panel_overdrive in user config.
+    Defaults to False if key or file missing."""
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            data = yaml.safe_load(f) or {}
+        return bool(data.get("features", {}).get("panel_overdrive", False))
+    except FileNotFoundError:
+        return False
+
+def _save_panel_overdrive(enabled: bool):
+    """Persist features.panel_overdrive to user config file."""
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            data = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        data = {}
+    if not isinstance(data.get("features"), dict):
+        data["features"] = {}
+    data["features"]["panel_overdrive"] = bool(enabled)
+    os.makedirs(CONFIG_PATH.parent, exist_ok=True)
+    with open(CONFIG_PATH, "w") as f:
+        yaml.safe_dump(data, f)
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -136,6 +160,30 @@ class MainWindow(QtWidgets.QWidget):
         self.power_status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.insertWidget(1, self.power_status_label)
 
+        # Panel Overdrive control box just below power status
+        self.panel_overdrive_widget = QtWidgets.QWidget()
+        pov_layout = QtWidgets.QHBoxLayout()
+        pov_layout.setContentsMargins(0, 0, 0, 0)
+        self.panel_overdrive_checkbox = QtWidgets.QCheckBox()
+        self.panel_overdrive_checkbox.setToolTip("Enable panel overdrive switching")
+        self.panel_overdrive_status_label = QtWidgets.QLabel()
+        pov_layout.addWidget(self.panel_overdrive_checkbox)
+        pov_layout.addWidget(QtWidgets.QLabel("Panel Overdrive :"))
+        pov_layout.addWidget(self.panel_overdrive_status_label)
+        pov_layout.addStretch()
+        self.panel_overdrive_widget.setLayout(pov_layout)
+        layout.insertWidget(2, self.panel_overdrive_widget)
+
+        # Initialize checkbox state from config
+        pov_enabled = _load_panel_overdrive()
+        self.panel_overdrive_checkbox.setChecked(pov_enabled)
+        self.panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
+
+        # Connect toggle handler
+        self.panel_overdrive_checkbox.stateChanged.connect(
+            lambda state: self._on_panel_overdrive_toggled(state)
+)
+
         # Placeholder for process monitor buttons
         self.proc_layout = QtWidgets.QVBoxLayout()
         self.proc_group = QtWidgets.QGroupBox("Monitored Processes")
@@ -198,6 +246,11 @@ class MainWindow(QtWidgets.QWidget):
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
                 try:
                     metrics = self._dbus_iface.GetMetrics()
+                    panel = metrics.get('panel_overdrive', None)
+                    if panel is not None:
+                        self.panel_overdrive_status_label.setText("On" if panel else "Off")
+                    else:
+                        self.panel_overdrive_status_label.setText("Unknown")
                     power_src = metrics.get('power_source', 'Unknown')
                     batt = metrics.get('battery_percent', None)
                     label = f"Power source: {power_src}"
@@ -390,6 +443,16 @@ class MainWindow(QtWidgets.QWidget):
 
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
+def _on_panel_overdrive_toggled(self, state):
+    enabled = state == QtCore.Qt.CheckState.Checked
+    self.panel_overdrive_status_label.setText("On" if enabled else "Off")
+    # Update YAML config
+    _save_panel_overdrive(enabled)
+    # Keep self.config in sync if loaded
+    if hasattr(self, "config"):
+        if not isinstance(self.config.get("features"), dict):
+            self.config["features"] = {}
+        self.config["features"]["panel_overdrive"] = enabled
 def main():
     # Wait for X display to be ready before starting the app
     import os, time

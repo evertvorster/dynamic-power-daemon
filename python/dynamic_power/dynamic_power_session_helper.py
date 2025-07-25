@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from dynamic_power.sensors import get_panel_overdrive_status
 """
 Dynamic‑Power session helper (Phase 3)
 * Owns org.dynamic_power.UserBus on the session bus
@@ -96,6 +97,9 @@ class UserBusIface(ServiceInterface):
         pass
 
     def update_metrics(self, m):
+        panel_status = get_panel_overdrive_status()
+        print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
+        self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
 
 # ───────────────────────────────────────── loops ───
