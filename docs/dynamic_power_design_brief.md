@@ -132,9 +132,6 @@ python/
 ├── resources/
 │   ├── dbus/
 │   │   └── org.dynamic_power.Daemon.conf
-│   ├── systemd-user/
-│   │   ├── dynamic_power_session.service   # NEW
-│   │   └── 90-dynamic-power.preset         # NEW
 ├── share/
 │   └── dynamic-power/
 │       ├── dynamic-power.yaml
