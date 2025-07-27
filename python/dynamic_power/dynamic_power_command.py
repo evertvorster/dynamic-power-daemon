@@ -55,17 +55,26 @@ def _load_panel_overdrive():
 
 def _save_panel_overdrive(enabled: bool):
     """Persist features.panel_overdrive to user config file."""
+    print(f"[debug] Called _save_panel_overdrive with enabled={enabled}")
+    print(f"[debug] Target config path: {CONFIG_PATH}")
     try:
         with open(CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f) or {}
+            print(f"[debug] Loaded existing config: {data}")
     except FileNotFoundError:
         data = {}
+        print("[debug] Config file not found, starting with empty config")
+
     if not isinstance(data.get("features"), dict):
         data["features"] = {}
+        print("[debug] Created new 'features' section")
+
     data["features"]["auto_panel_overdrive"] = bool(enabled)
+    print(f"[debug] Updated config value: {data['features']}")
     os.makedirs(CONFIG_PATH.parent, exist_ok=True)
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(data, f)
+        print("[debug] Config successfully written to disk")
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -114,12 +123,15 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
 
 class MainWindow(QtWidgets.QWidget):
     def _on_auto_panel_overdrive_toggled(self, state):
-        auto_enabled = state == QtCore.Qt.CheckState.Checked
+        print(f"[debug] Toggle clicked – state: {state}")
+        auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
+        print(f"[debug] Resolved auto_enabled = {auto_enabled}")
         self.auto_panel_overdrive_status_label.setText("On" if auto_enabled else "Off")
         if hasattr(self, "config"):
             if not isinstance(self.config.get("features"), dict):
                 self.config["features"] = {}
             self.config["features"]["auto_panel_overdrive"] = auto_enabled
+        print("[debug] Updating config")
         _save_panel_overdrive(auto_enabled)
 
     def __init__(self, tray):
@@ -178,7 +190,7 @@ class MainWindow(QtWidgets.QWidget):
         self.auto_panel_overdrive_checkbox.setToolTip("Enable panel overdrive switching")
         self.auto_panel_overdrive_status_label = QtWidgets.QLabel()
         pov_layout.addWidget(self.auto_panel_overdrive_checkbox)
-        pov_layout.addWidget(QtWidgets.QLabel("Auto Panel Overdrive :"))
+        pov_layout.addWidget(QtWidgets.QLabel("Automatically set Panel Overdrive. Current Panel Overdrive :"))
         pov_layout.addWidget(self.auto_panel_overdrive_status_label)
         pov_layout.addStretch()
         self.panel_overdrive_widget.setLayout(pov_layout)
@@ -190,8 +202,7 @@ class MainWindow(QtWidgets.QWidget):
         self.auto_panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
 
         # Connect toggle handler
-        self.auto_panel_overdrive_checkbox.stateChanged.connect(
-)
+        self.auto_panel_overdrive_checkbox.stateChanged.connect(self._on_auto_panel_overdrive_toggled)
 
         # Placeholder for process monitor buttons
         self.proc_layout = QtWidgets.QVBoxLayout()
