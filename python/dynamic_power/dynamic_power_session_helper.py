@@ -123,13 +123,12 @@ async def sensor_loop(iface, cfg):
             iface.PowerStateChanged(power_src)
             last_power = power_src
 
-            if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
-                if cfg.get("features", {}).get("auto_panel_overdrive", True):
-                    await set_panel_overdrive(power_src == "AC")
-                    status = get_panel_overdrive_status()
-                    LOG.info("Verified panel_overdrive status: %s", status)
-                else:
-                    status = "Disabled"
+            if cfg.get("features", {}).get("auto_panel_overdrive", True):
+                await set_panel_overdrive(power_src == "AC")
+                status = get_panel_overdrive_status()
+                LOG.info("Verified panel_overdrive status: %s", status)
+            else:
+                status = "Disabled"
 
         await asyncio.sleep(2)
 
