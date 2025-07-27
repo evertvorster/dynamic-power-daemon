@@ -89,3 +89,22 @@ class Config:
         if not isinstance(cfg, dict):
             cfg = {}
         return {"enable_on_ac": cfg.get("enable_on_ac", True)}
+
+
+# === Added for GUI support of user config ===
+import yaml
+from pathlib import Path
+
+USER_CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
+
+def load_user_config():
+    try:
+        with open(USER_CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}
+
+def save_user_config(config):
+    USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(USER_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(config, f)

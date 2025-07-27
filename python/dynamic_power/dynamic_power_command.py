@@ -18,6 +18,7 @@ except ImportError:
         libc.prctl(15, b'dynamic_user_command', 0, 0, 0)
     except Exception:
         pass
+from dynamic_power.config import load_user_config, save_user_config
 
 
 
