@@ -222,6 +222,9 @@ class MainWindow(QtWidgets.QWidget):
         # dynamic_power_user is now managed by session helper; no local spawn
         self.user_proc = None
         try:
+            cmd = ["/usr/bin/dynamic_power_user"]
+            if self.debug_mode:
+                cmd.append("--debug")
             self.user_proc = subprocess.Popen(cmd,
                 stdout=None if self.debug_mode else subprocess.DEVNULL,
                 stderr=None if self.debug_mode else subprocess.DEVNULL,

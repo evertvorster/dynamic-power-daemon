@@ -97,20 +97,25 @@ class UserBusIface(ServiceInterface):
         pass
 
     def update_metrics(self, m):
-        panel_status = get_panel_overdrive_status()
-        print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
-        self._metrics["panel_overdrive"] = panel_status
-        self._metrics.update(m)
+        if "panel_overdrive" in m:
+            print(f"[DEBUG] update_metrics using supplied panel_overdrive: {m['panel_overdrive']}")  # inside if
+            self._metrics["panel_overdrive"] = m["panel_overdrive"]
+        else:
+            panel_status = get_panel_overdrive_status()
+            print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
+            self._metrics["panel_overdrive"] = panel_status
+
+        self._metrics.update({k: v for k, v in m.items() if k != "panel_overdrive"})
 
 # ───────────────────────────────────────── loops ───
 async def sensor_loop(iface, cfg):
     last_power = None
-    LOG.info("Sensor loop started")
+    print("[DEBUG] sensor_loop() has started")
     while True:
         load1, _, _ = os.getloadavg()
         power_src = get_power_source()
         batt = get_battery_percent()
-
+        print("[DEBUG] sensor_loop() is active")
         iface.update_metrics({
             "timestamp": time.time(),
             "load_1m": load1,
