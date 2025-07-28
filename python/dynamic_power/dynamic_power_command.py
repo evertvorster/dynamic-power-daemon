@@ -9,13 +9,13 @@ import sys
 DEBUG = '--debug' in sys.argv
 try:
     import setproctitle
-    setproctitle.setproctitle('dynamic_user_command')
+    setproctitle.setproctitle('dynamic_power_command')
 except ImportError:
     # Fallback to prctl if setproctitle is unavailable
     try:
         import ctypes
         libc = ctypes.CDLL(None)
-        libc.prctl(15, b'dynamic_user_command', 0, 0, 0)
+        libc.prctl(15, b'dynamic_power_command', 0, 0, 0)
     except Exception:
         pass
 from dynamic_power.config import load_user_config, save_user_config

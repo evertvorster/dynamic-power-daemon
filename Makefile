@@ -31,7 +31,7 @@ install:
 	cp -r $(SRC_DIR)/$(MODULE_DIR) "$(DESTDIR)$(PURELIB)/"
 
 	@echo "# --- Executables ----------------------------------------------------"
-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/cli.py                       "$(DESTDIR)$(BINDIR)/dynamic_power"
+	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_launcher.py    "$(DESTDIR)$(BINDIR)/dynamic_power"
 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_user.py        "$(DESTDIR)$(BINDIR)/dynamic_power_user"
 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_command.py     "$(DESTDIR)$(BINDIR)/dynamic_power_command"
 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_session_helper.py \
@@ -65,5 +65,5 @@ uninstall:
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
-	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg"
 	@echo "Uninstall complete."

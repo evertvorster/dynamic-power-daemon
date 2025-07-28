@@ -1,0 +1,150 @@
+diff --git a/Makefile b/Makefile
+index 452a6c1..7c2243f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -31,7 +31,7 @@ install:
+ 	cp -r $(SRC_DIR)/$(MODULE_DIR) "$(DESTDIR)$(PURELIB)/"
+ 
+ 	@echo "# --- Executables ----------------------------------------------------"
+-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/cli.py                       "$(DESTDIR)$(BINDIR)/dynamic_power"
++	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_launcher.py    "$(DESTDIR)$(BINDIR)/dynamic_power"
+ 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_user.py        "$(DESTDIR)$(BINDIR)/dynamic_power_user"
+ 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_command.py     "$(DESTDIR)$(BINDIR)/dynamic_power_command"
+ 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_session_helper.py \
+@@ -65,5 +65,5 @@ uninstall:
+ 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
+ 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
+ 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
+-	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg
++	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg"
+ 	@echo "Uninstall complete."
+diff --git a/python/dynamic_power/cli.py b/python/dynamic_power/cli.py
+deleted file mode 100644
+index 6870216..0000000
+--- a/python/dynamic_power/cli.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-#!/usr/bin/env python3
+-from dynamic_power import run
+-
+-if __name__ == "__main__":
+-    run()
+diff --git a/python/dynamic_power/dynamic_power_command.py b/python/dynamic_power/dynamic_power_command.py
+index f427890..b7ceb1e 100644
+--- a/python/dynamic_power/dynamic_power_command.py
++++ b/python/dynamic_power/dynamic_power_command.py
+@@ -9,13 +9,13 @@ import sys
+ DEBUG = '--debug' in sys.argv
+ try:
+     import setproctitle
+-    setproctitle.setproctitle('dynamic_user_command')
++    setproctitle.setproctitle('dynamic_power_command')
+ except ImportError:
+     # Fallback to prctl if setproctitle is unavailable
+     try:
+         import ctypes
+         libc = ctypes.CDLL(None)
+-        libc.prctl(15, b'dynamic_user_command', 0, 0, 0)
++        libc.prctl(15, b'dynamic_power_command', 0, 0, 0)
+     except Exception:
+         pass
+ from dynamic_power.config import load_user_config, save_user_config
+diff --git a/python/dynamic_power/dynamic_power_launcher.py b/python/dynamic_power/dynamic_power_launcher.py
+new file mode 100644
+index 0000000..b8d46af
+--- /dev/null
++++ b/python/dynamic_power/dynamic_power_launcher.py
+@@ -0,0 +1,13 @@
++#!/usr/bin/env python3
++import os
++import sys
++
++# Prevent running as non-root
++if os.geteuid() != 0:
++    print("Error: dynamic_power must be run as root.", file=sys.stderr)
++    sys.exit(1)
++
++from dynamic_power import run
++
++if __name__ == "__main__":
++    run()
+diff --git a/python/dynamic_power/dynamic_power_session_helper.py b/python/dynamic_power/dynamic_power_session_helper.py
+index aa4431c..783589a 100644
+--- a/python/dynamic_power/dynamic_power_session_helper.py
++++ b/python/dynamic_power/dynamic_power_session_helper.py
+@@ -7,8 +7,18 @@ Dynamic‑Power session helper (Phase 3)
+ * Polls basic metrics (load 1 m, AC/BAT, battery %) every 2 s
+ * Emits PowerStateChanged and toggles panel over‑drive
+ """
+-import asyncio, logging, os, signal, time
++import asyncio, logging, os, signal, time, dbus, psutil, getpass
+ from pathlib import Path as _P
++try:
++    import setproctitle
++    setproctitle.setproctitle("dynamic_power_session_helper")
++except ImportError:
++    try:
++        import ctypes
++        libc = ctypes.CDLL(None)
++        libc.prctl(15, b'dynamic_power_session_helper', 0, 0, 0)
++    except Exception:
++        pass
+ 
+ # Flexible import for dbus‑next across 0.2.x / 0.3.x
+ try:
+@@ -19,6 +29,7 @@ except ImportError:
+ # dbus‑next
+ from dbus_next.service import ServiceInterface, method, signal as dbus_signal
+ from dbus_next import Variant      # NEW – wrap a{sv} values
++from dbus_next.constants import BusType
+ 
+ # Project config ------------------------------------------------------
+ try:
+@@ -168,10 +179,25 @@ async def supervise(proc):
+         await asyncio.sleep(3)
+         proc = await spawn_user_helper()
+ 
++def system_dbus_service_available(name):
++    try:
++        bus = dbus.SystemBus()
++        return bus.name_has_owner(name)
++    except Exception as e:
++        LOG.error(f"DBus check failed: {e}")
++        return False
++
++
+ # ───────────────────────────────────────── main ───
+ async def main():
+-    logging.basicConfig(level=logging.INFO,
+-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
++    username = getpass.getuser()
++    for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline']):
++        if proc.info['username'] == username and proc.info.get('cmdline'):
++            cmd = proc.info['cmdline'][0]
++            if cmd == '/usr/bin/dynamic_power':
++                LOG.warning("Detected unexpected user-owned dynamic_power process. Skipping launch.")
++                return
++
+ 
+     bus = await MessageBus().connect()
+     iface = UserBusIface()
+@@ -179,6 +205,19 @@ async def main():
+     await bus.request_name("org.dynamic_power.UserBus")
+ 
+     cfg = Config()
++    # Wait until the system daemon registers its DBus name
++    try:
++        for _ in range(10):
++            if system_dbus_service_available("org.dynamic_power.Daemon"):
++                LOG.info("Confirmed: org.dynamic_power.Daemon is available on system bus.")
++                break
++            LOG.warning("Waiting for org.dynamic_power.Daemon to appear on DBus...")
++            await asyncio.sleep(0.5)
++        else:
++            LOG.error("Timeout waiting for org.dynamic_power.Daemon to register on DBus.")
++    except Exception as e:
++        LOG.error(f"DBus check failed: {e}")
++
+ 
+     proc = await spawn_user_helper()
+     # Start GUI
