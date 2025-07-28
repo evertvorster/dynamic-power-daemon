@@ -9,6 +9,16 @@ Dynamic‑Power session helper (Phase 3)
 """
 import asyncio, logging, os, signal, time, dbus, psutil, getpass
 from pathlib import Path as _P
+try:
+    import setproctitle
+    setproctitle.setproctitle("dynamic_power_session_helper")
+except ImportError:
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None)
+        libc.prctl(15, b'dynamic_power_session_helper', 0, 0, 0)
+    except Exception:
+        pass
 
 # Flexible import for dbus‑next across 0.2.x / 0.3.x
 try:
@@ -181,12 +191,13 @@ def system_dbus_service_available(name):
 # ───────────────────────────────────────── main ───
 async def main():
     username = getpass.getuser()
-    for proc in psutil.process_iter(['pid', 'name', 'username']):
-        if proc.info['name'] == 'dynamic_power' and proc.info['username'] == username:
-            LOG.warning("Detected unexpected user-owned dynamic_power process. Skipping launch.")
-            return
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline']):
+        if proc.info['username'] == username and proc.info.get('cmdline'):
+            cmd = proc.info['cmdline'][0]
+            if cmd == '/usr/bin/dynamic_power':
+                LOG.warning("Detected unexpected user-owned dynamic_power process. Skipping launch.")
+                return
+
 
     bus = await MessageBus().connect()
     iface = UserBusIface()
