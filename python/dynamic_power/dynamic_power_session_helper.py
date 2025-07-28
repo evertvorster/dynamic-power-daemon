@@ -144,13 +144,12 @@ async def sensor_loop(iface, cfg, inotify):
                 iface.PowerStateChanged(power_src)
                 last_power = power_src
 
-                if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
-                    if cfg.get_panel_overdrive_config().get("enabled", True):
-                        await set_panel_overdrive(power_src == "AC")
-                        status = get_panel_overdrive_status()
-                        LOG.info("Verified panel_overdrive status: %s", status)
-                    else:
-                        status = "Disabled"
+                if cfg_ref["cfg"].get_panel_overdrive_config().get("enabled", True):
+                    await set_panel_overdrive(power_src == "AC")
+                    status = get_panel_overdrive_status()
+                    LOG.info("Verified panel_overdrive status: %s", status)
+                else:
+                    status = "Disabled"
 
             await asyncio.sleep(2)
     
@@ -214,7 +213,7 @@ async def main():
     bus.export("/", iface)
     await bus.request_name("org.dynamic_power.UserBus")
 
-    cfg = Config()
+    cfg_ref = {"cfg": Config()}
     # Wait until the system daemon registers its DBus name
     try:
         for _ in range(10):
