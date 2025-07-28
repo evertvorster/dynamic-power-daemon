@@ -1,0 +1,399 @@
+diff --git a/Makefile b/Makefile
+index 452a6c1..7c2243f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -31,7 +31,7 @@ install:
+ 	cp -r $(SRC_DIR)/$(MODULE_DIR) "$(DESTDIR)$(PURELIB)/"
+ 
+ 	@echo "# --- Executables ----------------------------------------------------"
+-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/cli.py                       "$(DESTDIR)$(BINDIR)/dynamic_power"
++	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_launcher.py    "$(DESTDIR)$(BINDIR)/dynamic_power"
+ 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_user.py        "$(DESTDIR)$(BINDIR)/dynamic_power_user"
+ 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_command.py     "$(DESTDIR)$(BINDIR)/dynamic_power_command"
+ 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_session_helper.py \
+@@ -65,5 +65,5 @@ uninstall:
+ 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
+ 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
+ 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
+-	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg
++	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg"
+ 	@echo "Uninstall complete."
+diff --git a/python/dynamic_power/cli.py b/python/dynamic_power/cli.py
+deleted file mode 100644
+index 6870216..0000000
+--- a/python/dynamic_power/cli.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-#!/usr/bin/env python3
+-from dynamic_power import run
+-
+-if __name__ == "__main__":
+-    run()
+diff --git a/python/dynamic_power/config.py b/python/dynamic_power/config.py
+index b34348e..b4010e0 100644
+--- a/python/dynamic_power/config.py
++++ b/python/dynamic_power/config.py
+@@ -89,3 +89,22 @@ class Config:
+         if not isinstance(cfg, dict):
+             cfg = {}
+         return {"enable_on_ac": cfg.get("enable_on_ac", True)}
++
++
++# === Added for GUI support of user config ===
++import yaml
++from pathlib import Path
++
++USER_CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
++
++def load_user_config():
++    try:
++        with open(USER_CONFIG_PATH, "r") as f:
++            return yaml.safe_load(f) or {}
++    except FileNotFoundError:
++        return {}
++
++def save_user_config(config):
++    USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
++    with open(USER_CONFIG_PATH, "w") as f:
++        yaml.safe_dump(config, f)
+diff --git a/python/dynamic_power/dynamic_power_command.py b/python/dynamic_power/dynamic_power_command.py
+index e238d81..b7ceb1e 100644
+--- a/python/dynamic_power/dynamic_power_command.py
++++ b/python/dynamic_power/dynamic_power_command.py
+@@ -9,15 +9,16 @@ import sys
+ DEBUG = '--debug' in sys.argv
+ try:
+     import setproctitle
+-    setproctitle.setproctitle('dynamic_user_command')
++    setproctitle.setproctitle('dynamic_power_command')
+ except ImportError:
+     # Fallback to prctl if setproctitle is unavailable
+     try:
+         import ctypes
+         libc = ctypes.CDLL(None)
+-        libc.prctl(15, b'dynamic_user_command', 0, 0, 0)
++        libc.prctl(15, b'dynamic_power_command', 0, 0, 0)
+     except Exception:
+         pass
++from dynamic_power.config import load_user_config, save_user_config
+ 
+ 
+ 
+@@ -48,23 +49,32 @@ def _load_panel_overdrive():
+     try:
+         with open(CONFIG_PATH, "r") as f:
+             data = yaml.safe_load(f) or {}
+-        return bool(data.get("features", {}).get("panel_overdrive", False))
++        return bool(data.get("features", {}).get("auto_panel_overdrive", False))
+     except FileNotFoundError:
+         return False
+ 
+ def _save_panel_overdrive(enabled: bool):
+     """Persist features.panel_overdrive to user config file."""
++    print(f"[debug] Called _save_panel_overdrive with enabled={enabled}")
++    print(f"[debug] Target config path: {CONFIG_PATH}")
+     try:
+         with open(CONFIG_PATH, "r") as f:
+             data = yaml.safe_load(f) or {}
++            print(f"[debug] Loaded existing config: {data}")
+     except FileNotFoundError:
+         data = {}
++        print("[debug] Config file not found, starting with empty config")
++
+     if not isinstance(data.get("features"), dict):
+         data["features"] = {}
+-    data["features"]["panel_overdrive"] = bool(enabled)
++        print("[debug] Created new 'features' section")
++
++    data["features"]["auto_panel_overdrive"] = bool(enabled)
++    print(f"[debug] Updated config value: {data['features']}")
+     os.makedirs(CONFIG_PATH.parent, exist_ok=True)
+     with open(CONFIG_PATH, "w") as f:
+         yaml.safe_dump(data, f)
++        print("[debug] Config successfully written to disk")
+ 
+ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
+     def __init__(self, icon, app):
+@@ -112,6 +122,18 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
+         self.window.activateWindow()
+ 
+ class MainWindow(QtWidgets.QWidget):
++    def _on_auto_panel_overdrive_toggled(self, state):
++        print(f"[debug] Toggle clicked – state: {state}")
++        auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
++        print(f"[debug] Resolved auto_enabled = {auto_enabled}")
++        self.auto_panel_overdrive_status_label.setText("On" if auto_enabled else "Off")
++        if hasattr(self, "config"):
++            if not isinstance(self.config.get("features"), dict):
++                self.config["features"] = {}
++            self.config["features"]["auto_panel_overdrive"] = auto_enabled
++        print("[debug] Updating config")
++        _save_panel_overdrive(auto_enabled)
++
+     def __init__(self, tray):
+         super().__init__()
+         # --- Connect to session DBus for metrics ---
+@@ -164,25 +186,23 @@ class MainWindow(QtWidgets.QWidget):
+         self.panel_overdrive_widget = QtWidgets.QWidget()
+         pov_layout = QtWidgets.QHBoxLayout()
+         pov_layout.setContentsMargins(0, 0, 0, 0)
+-        self.panel_overdrive_checkbox = QtWidgets.QCheckBox()
+-        self.panel_overdrive_checkbox.setToolTip("Enable panel overdrive switching")
+-        self.panel_overdrive_status_label = QtWidgets.QLabel()
+-        pov_layout.addWidget(self.panel_overdrive_checkbox)
+-        pov_layout.addWidget(QtWidgets.QLabel("Panel Overdrive :"))
+-        pov_layout.addWidget(self.panel_overdrive_status_label)
++        self.auto_panel_overdrive_checkbox = QtWidgets.QCheckBox()
++        self.auto_panel_overdrive_checkbox.setToolTip("Enable panel overdrive switching")
++        self.auto_panel_overdrive_status_label = QtWidgets.QLabel()
++        pov_layout.addWidget(self.auto_panel_overdrive_checkbox)
++        pov_layout.addWidget(QtWidgets.QLabel("Automatically set Panel Overdrive. Current Panel Overdrive :"))
++        pov_layout.addWidget(self.auto_panel_overdrive_status_label)
+         pov_layout.addStretch()
+         self.panel_overdrive_widget.setLayout(pov_layout)
+         layout.insertWidget(2, self.panel_overdrive_widget)
+ 
+         # Initialize checkbox state from config
+         pov_enabled = _load_panel_overdrive()
+-        self.panel_overdrive_checkbox.setChecked(pov_enabled)
+-        self.panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
++        self.auto_panel_overdrive_checkbox.setChecked(pov_enabled)
++        self.auto_panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
+ 
+         # Connect toggle handler
+-        self.panel_overdrive_checkbox.stateChanged.connect(
+-            lambda state: self._on_panel_overdrive_toggled(state)
+-)
++        self.auto_panel_overdrive_checkbox.stateChanged.connect(self._on_auto_panel_overdrive_toggled)
+ 
+         # Placeholder for process monitor buttons
+         self.proc_layout = QtWidgets.QVBoxLayout()
+@@ -200,17 +220,17 @@ class MainWindow(QtWidgets.QWidget):
+             sys.stdout = open(os.devnull, "w")
+             sys.stderr = open(os.devnull, "w")
+         # dynamic_power_user is now managed by session helper; no local spawn
+-        self.user_proc = None
+-        try:
+-            cmd = ["/usr/bin/dynamic_power_user"]
+-            if self.debug_mode:
+-                cmd.append("--debug")
+-            self.user_proc = subprocess.Popen(cmd,
+-                stdout=None if self.debug_mode else subprocess.DEVNULL,
+-                stderr=None if self.debug_mode else subprocess.DEVNULL,
+-                start_new_session=True)
+-        except Exception as e:
+-            print(f"Failed to launch dynamic_power_user: {e}")
++        #self.user_proc = None
++        #try:
++        #    cmd = ["/usr/bin/dynamic_power_user"]
++        #    if self.debug_mode:
++        #        cmd.append("--debug")
++        #    self.user_proc = subprocess.Popen(cmd,
++        #        stdout=None if self.debug_mode else subprocess.DEVNULL,
++        #        stderr=None if self.debug_mode else subprocess.DEVNULL,
++        #        start_new_session=True)
++        #except Exception as e:
++        #    print(f"Failed to launch dynamic_power_user: {e}")
+         self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
+         self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
+         self.graph.addItem(self.low_line)
+@@ -249,11 +269,14 @@ class MainWindow(QtWidgets.QWidget):
+             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
+                 try:
+                     metrics = self._dbus_iface.GetMetrics()
+-                    panel = metrics.get('panel_overdrive', None)
+-                    if panel is not None:
+-                        self.panel_overdrive_status_label.setText("On" if panel else "Off")
++                    if _load_panel_overdrive():
++                        panel = metrics.get('panel_overdrive', None)
++                        if panel is not None:
++                            self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
++                        else:
++                            self.auto_panel_overdrive_status_label.setText("Unknown")
+                     else:
+-                        self.panel_overdrive_status_label.setText("Unknown")
++                        self.auto_panel_overdrive_status_label.setText("Disabled")                 
+                     power_src = metrics.get('power_source', 'Unknown')
+                     batt = metrics.get('battery_percent', None)
+                     label = f"Power source: {power_src}"
+@@ -446,22 +469,10 @@ class MainWindow(QtWidgets.QWidget):
+ 
+         with open(CONFIG_PATH, "w") as f:
+             yaml.dump(self.config, f)
+-def _on_panel_overdrive_toggled(self, state):
+-    enabled = state == QtCore.Qt.CheckState.Checked
+-    self.panel_overdrive_status_label.setText("On" if enabled else "Off")
+-    # Update YAML config
+-    _save_panel_overdrive(enabled)
+-    # Keep self.config in sync if loaded
+-    if hasattr(self, "config"):
+-        if not isinstance(self.config.get("features"), dict):
+             self.config["features"] = {}
+-        self.config["features"]["panel_overdrive"] = enabled
++        self.config["features"]["auto_panel_overdrive"] = enabled
+ def main():
+     # Wait for X display to be ready before starting the app
+-    import signal
+-    def handle_sigint(sig, frame):
+-        QtWidgets.QApplication.quit()
+-    signal.signal(signal.SIGINT, handle_sigint)
+     import os, time
+     from PyQt6.QtGui import QGuiApplication
+ 
+diff --git a/python/dynamic_power/dynamic_power_launcher.py b/python/dynamic_power/dynamic_power_launcher.py
+new file mode 100644
+index 0000000..b8d46af
+--- /dev/null
++++ b/python/dynamic_power/dynamic_power_launcher.py
+@@ -0,0 +1,13 @@
++#!/usr/bin/env python3
++import os
++import sys
++
++# Prevent running as non-root
++if os.geteuid() != 0:
++    print("Error: dynamic_power must be run as root.", file=sys.stderr)
++    sys.exit(1)
++
++from dynamic_power import run
++
++if __name__ == "__main__":
++    run()
+diff --git a/python/dynamic_power/dynamic_power_session_helper.py b/python/dynamic_power/dynamic_power_session_helper.py
+index 11725d5..783589a 100644
+--- a/python/dynamic_power/dynamic_power_session_helper.py
++++ b/python/dynamic_power/dynamic_power_session_helper.py
+@@ -7,8 +7,18 @@ Dynamic‑Power session helper (Phase 3)
+ * Polls basic metrics (load 1 m, AC/BAT, battery %) every 2 s
+ * Emits PowerStateChanged and toggles panel over‑drive
+ """
+-import asyncio, logging, os, signal, time
++import asyncio, logging, os, signal, time, dbus, psutil, getpass
+ from pathlib import Path as _P
++try:
++    import setproctitle
++    setproctitle.setproctitle("dynamic_power_session_helper")
++except ImportError:
++    try:
++        import ctypes
++        libc = ctypes.CDLL(None)
++        libc.prctl(15, b'dynamic_power_session_helper', 0, 0, 0)
++    except Exception:
++        pass
+ 
+ # Flexible import for dbus‑next across 0.2.x / 0.3.x
+ try:
+@@ -19,6 +29,7 @@ except ImportError:
+ # dbus‑next
+ from dbus_next.service import ServiceInterface, method, signal as dbus_signal
+ from dbus_next import Variant      # NEW – wrap a{sv} values
++from dbus_next.constants import BusType
+ 
+ # Project config ------------------------------------------------------
+ try:
+@@ -97,20 +108,25 @@ class UserBusIface(ServiceInterface):
+         pass
+ 
+     def update_metrics(self, m):
+-        panel_status = get_panel_overdrive_status()
+-        print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
+-        self._metrics["panel_overdrive"] = panel_status
+-        self._metrics.update(m)
++        if "panel_overdrive" in m:
++            print(f"[DEBUG] update_metrics using supplied panel_overdrive: {m['panel_overdrive']}")  # inside if
++            self._metrics["panel_overdrive"] = m["panel_overdrive"]
++        else:
++            panel_status = get_panel_overdrive_status()
++            print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
++            self._metrics["panel_overdrive"] = panel_status
++
++        self._metrics.update({k: v for k, v in m.items() if k != "panel_overdrive"})
+ 
+ # ───────────────────────────────────────── loops ───
+ async def sensor_loop(iface, cfg):
+     last_power = None
+-    LOG.info("Sensor loop started")
++    print("[DEBUG] sensor_loop() has started")
+     while True:
+         load1, _, _ = os.getloadavg()
+         power_src = get_power_source()
+         batt = get_battery_percent()
+-
++        print("[DEBUG] sensor_loop() is active")
+         iface.update_metrics({
+             "timestamp": time.time(),
+             "load_1m": load1,
+@@ -123,8 +139,12 @@ async def sensor_loop(iface, cfg):
+             iface.PowerStateChanged(power_src)
+             last_power = power_src
+ 
+-            if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
++            if cfg.get("features", {}).get("auto_panel_overdrive", True):
+                 await set_panel_overdrive(power_src == "AC")
++                status = get_panel_overdrive_status()
++                LOG.info("Verified panel_overdrive status: %s", status)
++            else:
++                status = "Disabled"
+ 
+         await asyncio.sleep(2)
+ 
+@@ -159,10 +179,25 @@ async def supervise(proc):
+         await asyncio.sleep(3)
+         proc = await spawn_user_helper()
+ 
++def system_dbus_service_available(name):
++    try:
++        bus = dbus.SystemBus()
++        return bus.name_has_owner(name)
++    except Exception as e:
++        LOG.error(f"DBus check failed: {e}")
++        return False
++
++
+ # ───────────────────────────────────────── main ───
+ async def main():
+-    logging.basicConfig(level=logging.INFO,
+-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
++    username = getpass.getuser()
++    for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline']):
++        if proc.info['username'] == username and proc.info.get('cmdline'):
++            cmd = proc.info['cmdline'][0]
++            if cmd == '/usr/bin/dynamic_power':
++                LOG.warning("Detected unexpected user-owned dynamic_power process. Skipping launch.")
++                return
++
+ 
+     bus = await MessageBus().connect()
+     iface = UserBusIface()
+@@ -170,6 +205,19 @@ async def main():
+     await bus.request_name("org.dynamic_power.UserBus")
+ 
+     cfg = Config()
++    # Wait until the system daemon registers its DBus name
++    try:
++        for _ in range(10):
++            if system_dbus_service_available("org.dynamic_power.Daemon"):
++                LOG.info("Confirmed: org.dynamic_power.Daemon is available on system bus.")
++                break
++            LOG.warning("Waiting for org.dynamic_power.Daemon to appear on DBus...")
++            await asyncio.sleep(0.5)
++        else:
++            LOG.error("Timeout waiting for org.dynamic_power.Daemon to register on DBus.")
++    except Exception as e:
++        LOG.error(f"DBus check failed: {e}")
++
+ 
+     proc = await spawn_user_helper()
+     # Start GUI
+diff --git a/python/share/dynamic-power/dynamic-power-user.yaml b/python/share/dynamic-power/dynamic-power-user.yaml
+index 1476dd1..2e51dad 100644
+--- a/python/share/dynamic-power/dynamic-power-user.yaml
++++ b/python/share/dynamic-power/dynamic-power-user.yaml
+@@ -1,6 +1,6 @@
+ features:
+   kde_autohide_on_battery: false
+-  panel_overdrive: true
++  auto_panel_overdrive: true
+   screen_refresh: false
+ 
+ power:

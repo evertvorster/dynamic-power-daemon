@@ -1,6 +1,6 @@
 features:
   kde_autohide_on_battery: false
-  panel_overdrive: true
+  auto_panel_overdrive: true
   screen_refresh: false
 
 power:
