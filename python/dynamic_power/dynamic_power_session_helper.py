@@ -7,7 +7,7 @@ Dynamic‑Power session helper (Phase 3)
 * Polls basic metrics (load 1 m, AC/BAT, battery %) every 2 s
 * Emits PowerStateChanged and toggles panel over‑drive
 """
-import asyncio, logging, os, signal, time
+import asyncio, logging, os, signal, time, dbus, psutil, getpass
 from pathlib import Path as _P
 
 # Flexible import for dbus‑next across 0.2.x / 0.3.x
@@ -19,6 +19,7 @@ except ImportError:
 # dbus‑next
 from dbus_next.service import ServiceInterface, method, signal as dbus_signal
 from dbus_next import Variant      # NEW – wrap a{sv} values
+from dbus_next.constants import BusType
 
 # Project config ------------------------------------------------------
 try:
@@ -168,6 +169,15 @@ async def supervise(proc):
         await asyncio.sleep(3)
         proc = await spawn_user_helper()
 
+def system_dbus_service_available(name):
+    try:
+        bus = dbus.SystemBus()
+        return bus.name_has_owner(name)
+    except Exception as e:
+        LOG.error(f"DBus check failed: {e}")
+        return False
+
+
 # ───────────────────────────────────────── main ───
 async def main():
     logging.basicConfig(level=logging.INFO,
@@ -179,6 +189,19 @@ async def main():
     await bus.request_name("org.dynamic_power.UserBus")
 
     cfg = Config()
+    # Wait until the system daemon registers its DBus name
+    try:
+        for _ in range(10):
+            if system_dbus_service_available("org.dynamic_power.Daemon"):
+                LOG.info("Confirmed: org.dynamic_power.Daemon is available on system bus.")
+                break
+            LOG.warning("Waiting for org.dynamic_power.Daemon to appear on DBus...")
+            await asyncio.sleep(0.5)
+        else:
+            LOG.error("Timeout waiting for org.dynamic_power.Daemon to register on DBus.")
+    except Exception as e:
+        LOG.error(f"DBus check failed: {e}")
+
 
     proc = await spawn_user_helper()
     # Start GUI

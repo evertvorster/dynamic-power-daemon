@@ -65,5 +65,5 @@ uninstall:
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
-	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg"
 	@echo "Uninstall complete."
