@@ -180,6 +180,11 @@ def system_dbus_service_available(name):
 
 # ───────────────────────────────────────── main ───
 async def main():
+    username = getpass.getuser()
+    for proc in psutil.process_iter(['pid', 'name', 'username']):
+        if proc.info['name'] == 'dynamic_power' and proc.info['username'] == username:
+            LOG.warning("Detected unexpected user-owned dynamic_power process. Skipping launch.")
+            return
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
