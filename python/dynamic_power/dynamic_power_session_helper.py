@@ -7,7 +7,9 @@ Dynamic‑Power session helper (Phase 3)
 * Polls basic metrics (load 1 m, AC/BAT, battery %) every 2 s
 * Emits PowerStateChanged and toggles panel over‑drive
 """
-import asyncio, logging, os, signal, time, dbus, psutil, getpass
+import asyncio
+from inotify_simple import INotify, flags
+import os, logging, signal, time, dbus, psutil, getpass
 from pathlib import Path as _P
 try:
     import setproctitle
@@ -33,10 +35,9 @@ from dbus_next.constants import BusType
 
 # Project config ------------------------------------------------------
 try:
-    from config import Config
+    from config import Config, load_config
 except ImportError:
-    from dynamic_power.config import Config
-
+    from dynamic_power.config import Config, load_config
 LOG = logging.getLogger("dynamic_power_session_helper")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 UI_CMD = ["/usr/bin/dynamic_power_command"]
@@ -112,37 +113,49 @@ class UserBusIface(ServiceInterface):
         print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
         self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
+        print("[DEBUG] self._metrics =", self._metrics)
 
 # ───────────────────────────────────────── loops ───
-async def sensor_loop(iface, cfg):
+async def sensor_loop(iface, cfg, inotify):
     last_power = None
     LOG.info("Sensor loop started")
-    while True:
-        load1, _, _ = os.getloadavg()
-        power_src = get_power_source()
-        batt = get_battery_percent()
+    try:
+        while True:
+            for event in inotify.read(timeout=0):
+                if event.mask & flags.MODIFY:
+                    cfg = load_config()
+                    LOG.info("Config reloaded due to inotify change")
 
-        iface.update_metrics({
-            "timestamp": time.time(),
-            "load_1m": load1,
-            "power_source": power_src,
-            **({"battery_percent": batt} if batt is not None else {})
-        })
+            load1, _, _ = os.getloadavg()
+            power_src = get_power_source()
+            batt = get_battery_percent()
+            try:
+                iface.update_metrics({
+                    "timestamp": time.time(),
+                    "load_1m": load1,
+                    "power_source": power_src,
+                    **({"battery_percent": batt} if batt is not None else {})
+                })
+            except Exception as e:
+                LOG.error("Failed to update metrics: %s", e)
 
-        if power_src != last_power:
-            LOG.info("Power source changed %s → %s", last_power, power_src)
-            iface.PowerStateChanged(power_src)
-            last_power = power_src
+            if power_src != last_power:
+                LOG.info("Power source changed %s → %s", last_power, power_src)
+                iface.PowerStateChanged(power_src)
+                last_power = power_src
 
-            if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
-                if cfg.get_panel_overdrive_config().get("enabled", True):
-                    await set_panel_overdrive(power_src == "AC")
-                    status = get_panel_overdrive_status()
-                    LOG.info("Verified panel_overdrive status: %s", status)
-                else:
-                    status = "Disabled"
+                if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
+                    if cfg.get_panel_overdrive_config().get("enabled", True):
+                        await set_panel_overdrive(power_src == "AC")
+                        status = get_panel_overdrive_status()
+                        LOG.info("Verified panel_overdrive status: %s", status)
+                    else:
+                        status = "Disabled"
 
-        await asyncio.sleep(2)
+            await asyncio.sleep(2)
+    
+    except Exception as e:
+        LOG.error("Sensor loop crashed: %s", e)  
 
 async def spawn_user_helper():
     return await asyncio.create_subprocess_exec(
@@ -186,6 +199,7 @@ def system_dbus_service_available(name):
 
 # ───────────────────────────────────────── main ───
 async def main():
+    print("[debug] main() started")
     username = getpass.getuser()
     for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline']):
         if proc.info['username'] == username and proc.info.get('cmdline'):
@@ -225,8 +239,15 @@ async def main():
     loop.add_signal_handler(signal.SIGTERM, stop.set)
     loop.add_signal_handler(signal.SIGINT, stop.set)
 
+    from inotify_simple import INotify, flags
+    import os
+
+    inotify = INotify()
+    CONFIG_PATH = os.path.expanduser("~/.config/dynamic_power/config.yaml")
+    inotify.add_watch(CONFIG_PATH, flags.MODIFY)
+
     tasks = [
-        asyncio.create_task(sensor_loop(iface, cfg)),
+        asyncio.create_task(sensor_loop(iface, cfg, inotify)),
         asyncio.create_task(supervise(proc)),
         asyncio.create_task(monitor_ui(ui_proc)),
     ]
@@ -241,5 +262,5 @@ async def main():
         await ui_proc.wait()
 
 if __name__ == "__main__":
-    import asyncio as _asyncio
-    _asyncio.run(main())
+    import asyncio
+    asyncio.run(main())

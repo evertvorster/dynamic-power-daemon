@@ -108,3 +108,6 @@ def save_user_config(config):
     USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(USER_CONFIG_PATH, "w") as f:
         yaml.safe_dump(config, f)
+        
+def load_config():
+    return Config()

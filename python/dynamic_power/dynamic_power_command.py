@@ -265,12 +265,21 @@ class MainWindow(QtWidgets.QWidget):
             # --- Power source via DBus ---
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
                 try:
+                    # Load config (only if not already loaded)
+                    if not hasattr(self, "config"):
+                        self.load_config()
+
+                    # Respect feature toggle
                     metrics = self._dbus_iface.GetMetrics()
-                    panel = metrics.get('panel_overdrive', None)
-                    if panel is not None:
-                        self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
+                    auto_enabled = self.config.get("features", {}).get("auto_panel_overdrive", False)
+                    if not auto_enabled:
+                        self.auto_panel_overdrive_status_label.setText("Disabled")
                     else:
-                        self.auto_panel_overdrive_status_label.setText("Unknown")
+                        panel = metrics.get('panel_overdrive', None)
+                        if panel is not None:
+                            self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
+                        else:
+                            self.auto_panel_overdrive_status_label.setText("Unknown")
                     power_src = metrics.get('power_source', 'Unknown')
                     batt = metrics.get('battery_percent', None)
                     label = f"Power source: {power_src}"
