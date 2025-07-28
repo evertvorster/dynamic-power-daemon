@@ -220,17 +220,17 @@ class MainWindow(QtWidgets.QWidget):
             sys.stdout = open(os.devnull, "w")
             sys.stderr = open(os.devnull, "w")
         # dynamic_power_user is now managed by session helper; no local spawn
-        self.user_proc = None
-        try:
-            cmd = ["/usr/bin/dynamic_power_user"]
-            if self.debug_mode:
-                cmd.append("--debug")
-            self.user_proc = subprocess.Popen(cmd,
-                stdout=None if self.debug_mode else subprocess.DEVNULL,
-                stderr=None if self.debug_mode else subprocess.DEVNULL,
-                start_new_session=True)
-        except Exception as e:
-            print(f"Failed to launch dynamic_power_user: {e}")
+        #self.user_proc = None
+        #try:
+        #    cmd = ["/usr/bin/dynamic_power_user"]
+        #    if self.debug_mode:
+        #        cmd.append("--debug")
+        #    self.user_proc = subprocess.Popen(cmd,
+        #        stdout=None if self.debug_mode else subprocess.DEVNULL,
+        #        stderr=None if self.debug_mode else subprocess.DEVNULL,
+        #        start_new_session=True)
+        #except Exception as e:
+        #    print(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
@@ -269,11 +269,14 @@ class MainWindow(QtWidgets.QWidget):
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
                 try:
                     metrics = self._dbus_iface.GetMetrics()
-                    panel = metrics.get('panel_overdrive', None)
-                    if panel is not None:
-                        self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
+                    if _load_panel_overdrive():
+                        panel = metrics.get('panel_overdrive', None)
+                        if panel is not None:
+                            self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
+                        else:
+                            self.auto_panel_overdrive_status_label.setText("Unknown")
                     else:
-                        self.auto_panel_overdrive_status_label.setText("Unknown")
+                        self.auto_panel_overdrive_status_label.setText("Disabled")                 
                     power_src = metrics.get('power_source', 'Unknown')
                     batt = metrics.get('battery_percent', None)
                     label = f"Power source: {power_src}"
