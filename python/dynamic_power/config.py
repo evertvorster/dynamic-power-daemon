@@ -4,9 +4,19 @@ import yaml
 import pwd
 import grp
 import sys
+import logging
 
 from .power_profiles import normalize_profile
 from .debug import debug_log, info_log, error_log
+
+# Debug flag from environment.
+DEBUG = os.getenv("DYNAMIC_POWER_DEBUG") == "1"
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
+def is_debug_enabled():
+    return DEBUG
 
 DEFAULT_CONFIG_PATH = "/etc/dynamic-power.yaml"
 DEFAULT_TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power.yaml"
@@ -78,14 +88,34 @@ class Config:
     def get_poll_interval(self):
         return self.data.get("general", {}).get("poll_interval")
 
-    # NEW ⟶ over‑drive toggle rules
     def get_panel_overdrive_config(self):
         """
-        Returns a dict like {"enable_on_ac": True}.  If the key is missing
-        in /etc/dynamic-power.yaml we default to True so the feature is
-        active out‑of‑the‑box.
+        Returns a dict like {"enabled": True}, based on features.auto_panel_overdrive
         """
-        cfg = self._merge("panel.overdrive")
-        if not isinstance(cfg, dict):
-            cfg = {}
-        return {"enable_on_ac": cfg.get("enable_on_ac", True)}
+        enabled = self.data.get("features", {}).get("auto_panel_overdrive", False)
+        return {"enabled": enabled}
+
+
+
+# === Added for GUI support of user config ===
+import yaml
+from pathlib import Path
+
+USER_CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
+
+def load_user_config():
+    try:
+        with open(USER_CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}
+
+def save_user_config(config):
+    USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(USER_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(config, f)
+        
+def load_config():
+    print("[DEBUG] USER_CONFIG_PATH =", USER_CONFIG_PATH)    
+    return Config(str(USER_CONFIG_PATH))
+ 

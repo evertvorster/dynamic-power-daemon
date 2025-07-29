@@ -6,18 +6,26 @@ import subprocess
 import yaml
 import dbus
 import sys
-DEBUG = '--debug' in sys.argv
+import logging
+from dynamic_power.config import is_debug_enabled
+logging.basicConfig(
+    level=logging.DEBUG if is_debug_enabled() else logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
+logging.debug("Debug mode in dynamic_power_command is enabled (via config)")
+
 try:
     import setproctitle
-    setproctitle.setproctitle('dynamic_user_command')
+    setproctitle.setproctitle('dynamic_power_command')
 except ImportError:
     # Fallback to prctl if setproctitle is unavailable
     try:
         import ctypes
         libc = ctypes.CDLL(None)
-        libc.prctl(15, b'dynamic_user_command', 0, 0, 0)
+        libc.prctl(15, b'dynamic_power_command', 0, 0, 0)
     except Exception:
         pass
+from dynamic_power.config import load_user_config, save_user_config
 
 
 
@@ -29,18 +37,13 @@ from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 
-try:
-    import setproctitle
-    setproctitle.setproctitle('dynamic_power_command')
-except ImportError:
-    pass
-
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 STATE_PATH = Path("/run/dynamic_power_state.yaml")
 MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
+USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 # --- Panel Overdrive Config Helpers ---
 def _load_panel_overdrive():
     """Return boolean for features.panel_overdrive in user config.
@@ -48,23 +51,32 @@ def _load_panel_overdrive():
     try:
         with open(CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f) or {}
-        return bool(data.get("features", {}).get("panel_overdrive", False))
+        return bool(data.get("features", {}).get("auto_panel_overdrive", False))
     except FileNotFoundError:
         return False
 
 def _save_panel_overdrive(enabled: bool):
     """Persist features.panel_overdrive to user config file."""
+    logging.debug(f"[debug] Called _save_panel_overdrive with enabled={enabled}")
+    logging.debug(f"[debug] Target config path: {CONFIG_PATH}")
     try:
         with open(CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f) or {}
+            logging.debug(f"[debug] Loaded existing config: {data}")
     except FileNotFoundError:
         data = {}
+        logging.info("[debug] Config file not found, starting with empty config")
+
     if not isinstance(data.get("features"), dict):
         data["features"] = {}
-    data["features"]["panel_overdrive"] = bool(enabled)
+        logging.info("[debug] Created new 'features' section")
+
+    data["features"]["auto_panel_overdrive"] = bool(enabled)
+    logging.info(f"[debug] Updated config value: {data['features']}")
     os.makedirs(CONFIG_PATH.parent, exist_ok=True)
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(data, f)
+        logging.info("[debug] Config successfully written to disk")
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -112,6 +124,18 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
         self.window.activateWindow()
 
 class MainWindow(QtWidgets.QWidget):
+    def _on_auto_panel_overdrive_toggled(self, state):
+        logging.debug(f"[debug] Toggle clicked – state: {state}")
+        auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
+        logging.debug(f"[debug] Resolved auto_enabled = {auto_enabled}")
+        self.auto_panel_overdrive_status_label.setText("On" if auto_enabled else "Off")
+        if hasattr(self, "config"):
+            if not isinstance(self.config.get("features"), dict):
+                self.config["features"] = {}
+            self.config["features"]["auto_panel_overdrive"] = auto_enabled
+            logging.debug("[debug] Updating config")
+        _save_panel_overdrive(auto_enabled)
+
     def __init__(self, tray):
         super().__init__()
         # --- Connect to session DBus for metrics ---
@@ -120,8 +144,7 @@ class MainWindow(QtWidgets.QWidget):
             proxy = bus.get_object('org.dynamic_power.UserBus', '/')
             self._dbus_iface = dbus.Interface(proxy, 'org.dynamic_power.UserBus')
         except Exception as e:
-            if DEBUG:
-                print('Failed to connect to org.dynamic_power.UserBus:', e)
+            logging.debug('Failed to connect to org.dynamic_power.UserBus:', e)
             self._dbus_iface = None
 
         self.tray = tray
@@ -164,25 +187,23 @@ class MainWindow(QtWidgets.QWidget):
         self.panel_overdrive_widget = QtWidgets.QWidget()
         pov_layout = QtWidgets.QHBoxLayout()
         pov_layout.setContentsMargins(0, 0, 0, 0)
-        self.panel_overdrive_checkbox = QtWidgets.QCheckBox()
-        self.panel_overdrive_checkbox.setToolTip("Enable panel overdrive switching")
-        self.panel_overdrive_status_label = QtWidgets.QLabel()
-        pov_layout.addWidget(self.panel_overdrive_checkbox)
-        pov_layout.addWidget(QtWidgets.QLabel("Panel Overdrive :"))
-        pov_layout.addWidget(self.panel_overdrive_status_label)
+        self.auto_panel_overdrive_checkbox = QtWidgets.QCheckBox()
+        self.auto_panel_overdrive_checkbox.setToolTip("Enable panel overdrive switching")
+        self.auto_panel_overdrive_status_label = QtWidgets.QLabel()
+        pov_layout.addWidget(self.auto_panel_overdrive_checkbox)
+        pov_layout.addWidget(QtWidgets.QLabel("Automatically set Panel Overdrive. Current Panel Overdrive :"))
+        pov_layout.addWidget(self.auto_panel_overdrive_status_label)
         pov_layout.addStretch()
         self.panel_overdrive_widget.setLayout(pov_layout)
         layout.insertWidget(2, self.panel_overdrive_widget)
 
         # Initialize checkbox state from config
         pov_enabled = _load_panel_overdrive()
-        self.panel_overdrive_checkbox.setChecked(pov_enabled)
-        self.panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
+        self.auto_panel_overdrive_checkbox.setChecked(pov_enabled)
+        self.auto_panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
 
         # Connect toggle handler
-        self.panel_overdrive_checkbox.stateChanged.connect(
-            lambda state: self._on_panel_overdrive_toggled(state)
-)
+        self.auto_panel_overdrive_checkbox.stateChanged.connect(self._on_auto_panel_overdrive_toggled)
 
         # Placeholder for process monitor buttons
         self.proc_layout = QtWidgets.QVBoxLayout()
@@ -195,19 +216,16 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.add_proc_button)
 
         self.load_config()
-        self.debug_mode = "--debug" in sys.argv
-        if not self.debug_mode:
-            sys.stdout = open(os.devnull, "w")
-            sys.stderr = open(os.devnull, "w")
         # dynamic_power_user is now managed by session helper; no local spawn
         self.user_proc = None
+        cmd = USER_HELPER_CMD
         try:
             self.user_proc = subprocess.Popen(cmd,
-                stdout=None if self.debug_mode else subprocess.DEVNULL,
-                stderr=None if self.debug_mode else subprocess.DEVNULL,
-                start_new_session=True)
+                stdout=None if is_debug_enabled() else subprocess.DEVNULL,
+                stderr=None if is_debug_enabled() else subprocess.DEVNULL
+            )
         except Exception as e:
-            print(f"Failed to launch dynamic_power_user: {e}")
+            logging.info(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
@@ -221,11 +239,9 @@ class MainWindow(QtWidgets.QWidget):
             os.makedirs(OVERRIDE_PATH.parent, exist_ok=True)
             with open(OVERRIDE_PATH, "w") as f:
                 yaml.dump(override_state, f)
-            if self.debug_mode:
-                print(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
+                logging.debug(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
         except Exception as e:
-            if self.debug_mode:
-                print(f"[debug] Failed to write override state: {e}")
+            logging.info(f"Failed to write override state: {e}")
 
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
@@ -240,17 +256,25 @@ class MainWindow(QtWidgets.QWidget):
         self.plot.setData(self.data)
 
     def update_state(self):
-
         try:
             # --- Power source via DBus ---
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
                 try:
+                    # Load config (only if not already loaded)
+                    if not hasattr(self, "config"):
+                        self.load_config()
+
+                    # Respect feature toggle
                     metrics = self._dbus_iface.GetMetrics()
-                    panel = metrics.get('panel_overdrive', None)
-                    if panel is not None:
-                        self.panel_overdrive_status_label.setText("On" if panel else "Off")
+                    auto_enabled = self.config.get("features", {}).get("auto_panel_overdrive", False)
+                    if not auto_enabled:
+                        self.auto_panel_overdrive_status_label.setText("Disabled")
                     else:
-                        self.panel_overdrive_status_label.setText("Unknown")
+                        panel = metrics.get('panel_overdrive', None)
+                        if panel is not None:
+                            self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
+                        else:
+                            self.auto_panel_overdrive_status_label.setText("Unknown")
                     power_src = metrics.get('power_source', 'Unknown')
                     batt = metrics.get('battery_percent', None)
                     label = f"Power source: {power_src}"
@@ -258,14 +282,12 @@ class MainWindow(QtWidgets.QWidget):
                         label += f" ({batt}%)"
                     self.power_status_label.setText(label)
                 except Exception as e:
-                    if DEBUG:
-                        print("DBus GetMetrics failed:", e)
+                    logging.info(f"DBus GetMetrics failed: {e}")
                     self.power_status_label.setText("Power status: Unknown")
             else:
                 self.power_status_label.setText("Power status: Unavailable")
         except Exception as e:
-            if DEBUG:
-                print("Error updating power status:", e)
+            logging.info(f"Error updating power status: {e}")
         try:
             if STATE_PATH.exists():
                 with open(STATE_PATH, "r") as f:
@@ -290,7 +312,7 @@ class MainWindow(QtWidgets.QWidget):
 
                     self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
         except Exception as e:
-            print(f"Error reading state file: {e}")
+            logging.info(f"Error reading state file: {e}")
 
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")
@@ -350,8 +372,7 @@ class MainWindow(QtWidgets.QWidget):
         dlg_layout.addRow(button_row)
 
         def apply():
-            if self.debug_mode:
-                print("[debug] Apply button pressed.")
+            logging.debug("[debug] Apply button pressed.")
             proc["process_name"] = name_edit.text()
             selected = profile_button.text()
             # Store the profile in lowercase for backend
@@ -433,26 +454,16 @@ class MainWindow(QtWidgets.QWidget):
             else:
                 btn.setStyleSheet("")
     def on_low_drag_finished(self):
-        if self.debug_mode:
-            print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
+        logging.debug(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
         self.update_thresholds()
     def on_high_drag_finished(self):
-        if self.debug_mode:
-            print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
+        logging.debug(f"[debug] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
 
-        with open(CONFIG_PATH, "w") as f:
-            yaml.dump(self.config, f)
-def _on_panel_overdrive_toggled(self, state):
-    enabled = state == QtCore.Qt.CheckState.Checked
-    self.panel_overdrive_status_label.setText("On" if enabled else "Off")
-    # Update YAML config
-    _save_panel_overdrive(enabled)
-    # Keep self.config in sync if loaded
-    if hasattr(self, "config"):
-        if not isinstance(self.config.get("features"), dict):
-            self.config["features"] = {}
-        self.config["features"]["panel_overdrive"] = enabled
+        #with open(CONFIG_PATH, "w") as f:
+        #    yaml.dump(self.config, f)
+        #    self.config["features"] = {}
+        #self.config["features"]["auto_panel_overdrive"] = enabled
 def main():
     # Wait for X display to be ready before starting the app
     import os, time
@@ -462,10 +473,10 @@ def main():
     for i in range(max_tries):
         if os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"):
             break
-        print("[startup] Waiting for DISPLAY or WAYLAND_DISPLAY...")
+        logging.debug("[startup] Waiting for DISPLAY or WAYLAND_DISPLAY...")
         time.sleep(0.5)
     else:
-        print("[error] DISPLAY not found after delay; exiting")
+        logging.info("[error] DISPLAY not found after delay; exiting")
         return
 
     app = QtWidgets.QApplication(sys.argv)
