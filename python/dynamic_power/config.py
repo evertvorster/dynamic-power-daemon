@@ -78,17 +78,13 @@ class Config:
     def get_poll_interval(self):
         return self.data.get("general", {}).get("poll_interval")
 
-    # NEW ⟶ over‑drive toggle rules
     def get_panel_overdrive_config(self):
         """
-        Returns a dict like {"enable_on_ac": True}.  If the key is missing
-        in /etc/dynamic-power.yaml we default to True so the feature is
-        active out‑of‑the‑box.
+        Returns a dict like {"enabled": True}, based on features.auto_panel_overdrive
         """
-        cfg = self._merge("panel.overdrive")
-        if not isinstance(cfg, dict):
-            cfg = {}
-        return {"enable_on_ac": cfg.get("enable_on_ac", True)}
+        enabled = self.data.get("features", {}).get("auto_panel_overdrive", False)
+        return {"enabled": enabled}
+
 
 
 # === Added for GUI support of user config ===

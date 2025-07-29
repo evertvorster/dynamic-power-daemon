@@ -121,6 +121,7 @@ async def sensor_loop(iface, cfg, inotify):
     LOG.info("Sensor loop started")
     try:
         while True:
+            # Reload config 
             for event in inotify.read(timeout=0):
                 if event.mask & flags.MODIFY:
                     cfg = load_config()
@@ -139,18 +140,25 @@ async def sensor_loop(iface, cfg, inotify):
             except Exception as e:
                 LOG.error("Failed to update metrics: %s", e)
 
+            # Detects power state changes, then does stuff.
             if power_src != last_power:
                 LOG.info("Power source changed %s → %s", last_power, power_src)
                 iface.PowerStateChanged(power_src)
                 last_power = power_src
 
-                if cfg.get_panel_overdrive_config().get("enable_on_ac", True):
-                    if cfg.get_panel_overdrive_config().get("enabled", True):
-                        await set_panel_overdrive(power_src == "AC")
-                        status = get_panel_overdrive_status()
-                        LOG.info("Verified panel_overdrive status: %s", status)
+                # Handle the panel overdrive feature
+                # Panel Overdrive Logic (simplified – based on single config variable)
+                if cfg.get_panel_overdrive_config().get("enabled", True):
+                    if power_src == "AC":
+                        await set_panel_overdrive(True)
                     else:
-                        status = "Disabled"
+                        await set_panel_overdrive(False)
+                    status = get_panel_overdrive_status()
+                    LOG.info("Verified panel_overdrive status: %s", status)
+                else:
+                    LOG.debug("auto_panel_overdrive is disabled in config; skipping hardware toggle")
+
+                #Future features to be added below
 
             await asyncio.sleep(2)
     
