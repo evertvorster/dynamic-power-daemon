@@ -6,7 +6,16 @@ import subprocess
 import yaml
 import dbus
 import sys
+import logging
+from dynamic_power.config import is_debug_enabled
+
 DEBUG = '--debug' in sys.argv
+logging.basicConfig(
+    level=logging.DEBUG if is_debug_enabled() else logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
+logging.debug("Debug mode in dynamic_power_command is enabled (via config)")
+
 try:
     import setproctitle
     setproctitle.setproctitle('dynamic_power_command')
@@ -216,9 +225,9 @@ class MainWindow(QtWidgets.QWidget):
 
         self.load_config()
         self.debug_mode = "--debug" in sys.argv
-        if not self.debug_mode:
-            sys.stdout = open(os.devnull, "w")
-            sys.stderr = open(os.devnull, "w")
+        #if not self.debug_mode:
+        #    sys.stdout = open(os.devnull, "w")
+        #    sys.stderr = open(os.devnull, "w")
         # dynamic_power_user is now managed by session helper; no local spawn
         self.user_proc = None
         try:
