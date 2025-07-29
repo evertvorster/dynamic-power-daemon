@@ -221,9 +221,9 @@ class MainWindow(QtWidgets.QWidget):
         cmd = USER_HELPER_CMD
         try:
             self.user_proc = subprocess.Popen(cmd,
-                stdout=None if self.debug_mode else subprocess.DEVNULL,
-                stderr=None if self.debug_mode else subprocess.DEVNULL,
-                start_new_session=True)
+                stdout=None if is_debug_enabled() else subprocess.DEVNULL,
+                stderr=None if is_debug_enabled() else subprocess.DEVNULL
+            )
         except Exception as e:
             logging.info(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
