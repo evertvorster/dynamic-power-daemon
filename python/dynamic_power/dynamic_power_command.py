@@ -8,8 +8,6 @@ import dbus
 import sys
 import logging
 from dynamic_power.config import is_debug_enabled
-
-DEBUG = '--debug' in sys.argv
 logging.basicConfig(
     level=logging.DEBUG if is_debug_enabled() else logging.INFO,
     format="%(levelname)s: %(message)s"
@@ -39,18 +37,13 @@ from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 
-try:
-    import setproctitle
-    setproctitle.setproctitle('dynamic_power_command')
-except ImportError:
-    pass
-
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 STATE_PATH = Path("/run/dynamic_power_state.yaml")
 MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
+USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 # --- Panel Overdrive Config Helpers ---
 def _load_panel_overdrive():
     """Return boolean for features.panel_overdrive in user config.
@@ -64,26 +57,26 @@ def _load_panel_overdrive():
 
 def _save_panel_overdrive(enabled: bool):
     """Persist features.panel_overdrive to user config file."""
-    print(f"[debug] Called _save_panel_overdrive with enabled={enabled}")
-    print(f"[debug] Target config path: {CONFIG_PATH}")
+    logging.debug(f"[debug] Called _save_panel_overdrive with enabled={enabled}")
+    logging.debug(f"[debug] Target config path: {CONFIG_PATH}")
     try:
         with open(CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f) or {}
-            print(f"[debug] Loaded existing config: {data}")
+            logging.debug(f"[debug] Loaded existing config: {data}")
     except FileNotFoundError:
         data = {}
-        print("[debug] Config file not found, starting with empty config")
+        logging.info("[debug] Config file not found, starting with empty config")
 
     if not isinstance(data.get("features"), dict):
         data["features"] = {}
-        print("[debug] Created new 'features' section")
+        logging.info("[debug] Created new 'features' section")
 
     data["features"]["auto_panel_overdrive"] = bool(enabled)
-    print(f"[debug] Updated config value: {data['features']}")
+    logging.info(f"[debug] Updated config value: {data['features']}")
     os.makedirs(CONFIG_PATH.parent, exist_ok=True)
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(data, f)
-        print("[debug] Config successfully written to disk")
+        logging.info("[debug] Config successfully written to disk")
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -132,15 +125,15 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
 
 class MainWindow(QtWidgets.QWidget):
     def _on_auto_panel_overdrive_toggled(self, state):
-        print(f"[debug] Toggle clicked – state: {state}")
+        logging.debug(f"[debug] Toggle clicked – state: {state}")
         auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
-        print(f"[debug] Resolved auto_enabled = {auto_enabled}")
+        logging.debug(f"[debug] Resolved auto_enabled = {auto_enabled}")
         self.auto_panel_overdrive_status_label.setText("On" if auto_enabled else "Off")
         if hasattr(self, "config"):
             if not isinstance(self.config.get("features"), dict):
                 self.config["features"] = {}
             self.config["features"]["auto_panel_overdrive"] = auto_enabled
-        print("[debug] Updating config")
+            logging.debug("[debug] Updating config")
         _save_panel_overdrive(auto_enabled)
 
     def __init__(self, tray):
@@ -151,8 +144,7 @@ class MainWindow(QtWidgets.QWidget):
             proxy = bus.get_object('org.dynamic_power.UserBus', '/')
             self._dbus_iface = dbus.Interface(proxy, 'org.dynamic_power.UserBus')
         except Exception as e:
-            if DEBUG:
-                print('Failed to connect to org.dynamic_power.UserBus:', e)
+            logging.debug('Failed to connect to org.dynamic_power.UserBus:', e)
             self._dbus_iface = None
 
         self.tray = tray
@@ -224,19 +216,16 @@ class MainWindow(QtWidgets.QWidget):
         layout.addWidget(self.add_proc_button)
 
         self.load_config()
-        self.debug_mode = "--debug" in sys.argv
-        #if not self.debug_mode:
-        #    sys.stdout = open(os.devnull, "w")
-        #    sys.stderr = open(os.devnull, "w")
         # dynamic_power_user is now managed by session helper; no local spawn
         self.user_proc = None
+        cmd = USER_HELPER_CMD
         try:
             self.user_proc = subprocess.Popen(cmd,
                 stdout=None if self.debug_mode else subprocess.DEVNULL,
                 stderr=None if self.debug_mode else subprocess.DEVNULL,
                 start_new_session=True)
         except Exception as e:
-            print(f"Failed to launch dynamic_power_user: {e}")
+            logging.info(f"Failed to launch dynamic_power_user: {e}")
         self.low_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('low_threshold', 1.0), angle=0, pen=pg.mkPen('g', width=1), movable=True)
         self.high_line = pg.InfiniteLine(pos=self.config.get('power', {}).get('high_threshold', 2.0), angle=0, pen=pg.mkPen('b', width=1), movable=True)
         self.graph.addItem(self.low_line)
@@ -250,11 +239,9 @@ class MainWindow(QtWidgets.QWidget):
             os.makedirs(OVERRIDE_PATH.parent, exist_ok=True)
             with open(OVERRIDE_PATH, "w") as f:
                 yaml.dump(override_state, f)
-            if self.debug_mode:
-                print(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
+                logging.debug(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
         except Exception as e:
-            if self.debug_mode:
-                print(f"[debug] Failed to write override state: {e}")
+            logging.info(f"Failed to write override state: {e}")
 
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
@@ -269,7 +256,6 @@ class MainWindow(QtWidgets.QWidget):
         self.plot.setData(self.data)
 
     def update_state(self):
-
         try:
             # --- Power source via DBus ---
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
@@ -296,14 +282,12 @@ class MainWindow(QtWidgets.QWidget):
                         label += f" ({batt}%)"
                     self.power_status_label.setText(label)
                 except Exception as e:
-                    if DEBUG:
-                        print("DBus GetMetrics failed:", e)
+                    logging.info(f"DBus GetMetrics failed: {e}")
                     self.power_status_label.setText("Power status: Unknown")
             else:
                 self.power_status_label.setText("Power status: Unavailable")
         except Exception as e:
-            if DEBUG:
-                print("Error updating power status:", e)
+            logging.info(f"Error updating power status: {e}")
         try:
             if STATE_PATH.exists():
                 with open(STATE_PATH, "r") as f:
@@ -328,7 +312,7 @@ class MainWindow(QtWidgets.QWidget):
 
                     self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
         except Exception as e:
-            print(f"Error reading state file: {e}")
+            logging.info(f"Error reading state file: {e}")
 
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")
@@ -388,8 +372,7 @@ class MainWindow(QtWidgets.QWidget):
         dlg_layout.addRow(button_row)
 
         def apply():
-            if self.debug_mode:
-                print("[debug] Apply button pressed.")
+            logging.debug("[debug] Apply button pressed.")
             proc["process_name"] = name_edit.text()
             selected = profile_button.text()
             # Store the profile in lowercase for backend
@@ -471,18 +454,16 @@ class MainWindow(QtWidgets.QWidget):
             else:
                 btn.setStyleSheet("")
     def on_low_drag_finished(self):
-        if self.debug_mode:
-            print(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
+        logging.debug(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
         self.update_thresholds()
     def on_high_drag_finished(self):
-        if self.debug_mode:
-            print(f"[debug] High threshold drag finished at: {self.high_line.value()}")
+        logging.debug(f"[debug] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
 
-        with open(CONFIG_PATH, "w") as f:
-            yaml.dump(self.config, f)
-            self.config["features"] = {}
-        self.config["features"]["auto_panel_overdrive"] = enabled
+        #with open(CONFIG_PATH, "w") as f:
+        #    yaml.dump(self.config, f)
+        #    self.config["features"] = {}
+        #self.config["features"]["auto_panel_overdrive"] = enabled
 def main():
     # Wait for X display to be ready before starting the app
     import os, time
@@ -492,10 +473,10 @@ def main():
     for i in range(max_tries):
         if os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"):
             break
-        print("[startup] Waiting for DISPLAY or WAYLAND_DISPLAY...")
+        logging.debug("[startup] Waiting for DISPLAY or WAYLAND_DISPLAY...")
         time.sleep(0.5)
     else:
-        print("[error] DISPLAY not found after delay; exiting")
+        logging.info("[error] DISPLAY not found after delay; exiting")
         return
 
     app = QtWidgets.QApplication(sys.argv)
