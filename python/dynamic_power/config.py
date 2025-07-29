@@ -8,7 +8,11 @@ import sys
 from .power_profiles import normalize_profile
 from .debug import debug_log, info_log, error_log
 
-print("[DEBUG] config.py loaded from", __file__)
+# Debug flag from environment.
+DEBUG = os.getenv("DYNAMIC_POWER_DEBUG") == "1"
+
+def is_debug_enabled():
+    return DEBUG
 
 DEFAULT_CONFIG_PATH = "/etc/dynamic-power.yaml"
 DEFAULT_TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power.yaml"

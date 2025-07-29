@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+import sys
+if "--debug" in sys.argv:
+    import os
+    os.environ["DYNAMIC_POWER_DEBUG"] = "1"
+
 from dynamic_power.sensors import get_panel_overdrive_status
 """
 Dynamic‑Power session helper (Phase 3)
@@ -9,8 +14,12 @@ Dynamic‑Power session helper (Phase 3)
 """
 import asyncio
 from inotify_simple import INotify, flags
-import os, logging, signal, time, dbus, psutil, getpass
+import os, logging, signal, time, dbus, psutil, getpass, sys
 from pathlib import Path as _P
+if os.getenv("DYNAMIC_POWER_DEBUG") == "1":
+    logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
+else:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 try:
     import setproctitle
     setproctitle.setproctitle("dynamic_power_session_helper")
@@ -35,9 +44,12 @@ from dbus_next.constants import BusType
 
 # Project config ------------------------------------------------------
 try:
-    from config import Config, load_config
+    from config import Config, load_config, is_debug_enabled
 except ImportError:
-    from dynamic_power.config import Config, load_config
+    from dynamic_power.config import Config, load_config, is_debug_enabled
+logging.debug("Debug mode is enabled (via config)")
+
+#To be removed later when not needed. 
 LOG = logging.getLogger("dynamic_power_session_helper")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 UI_CMD = ["/usr/bin/dynamic_power_command"]
