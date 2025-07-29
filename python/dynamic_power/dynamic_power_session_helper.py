@@ -116,7 +116,7 @@ class UserBusIface(ServiceInterface):
         print("[DEBUG] self._metrics =", self._metrics)
 
 # ───────────────────────────────────────── loops ───
-async def sensor_loop(iface, cfg, inotify):
+async def sensor_loop(iface, cfg_ref, inotify):
     last_power = None
     LOG.info("Sensor loop started")
     try:
@@ -124,7 +124,7 @@ async def sensor_loop(iface, cfg, inotify):
             # Reload config 
             for event in inotify.read(timeout=0):
                 if event.mask & flags.MODIFY:
-                    cfg = load_config()
+                    cfg_ref["cfg"] = load_config()
                     LOG.info("Config reloaded due to inotify change")
 
             load1, _, _ = os.getloadavg()
@@ -141,22 +141,26 @@ async def sensor_loop(iface, cfg, inotify):
                 LOG.error("Failed to update metrics: %s", e)
 
             # Detects power state changes, then does stuff.
+            print("[DEBUG] last_power =", last_power)
+            print("[DEBUG] current power_src =", power_src)
             if power_src != last_power:
-                LOG.info("Power source changed %s → %s", last_power, power_src)
+                print("[DEBUG] Power source change detected: ", last_power, "→", power_src)
                 iface.PowerStateChanged(power_src)
                 last_power = power_src
 
                 # Handle the panel overdrive feature
                 # Panel Overdrive Logic (simplified – based on single config variable)
-                if cfg.get_panel_overdrive_config().get("enabled", True):
-                    if power_src == "AC":
-                        await set_panel_overdrive(True)
-                    else:
-                        await set_panel_overdrive(False)
+                print("[DEBUG] cfg path =", cfg_ref["cfg"].path)
+                print("[DEBUG] cfg panel block =", cfg_ref["cfg"].get_panel_overdrive_config())
+                if cfg_ref["cfg"].get_panel_overdrive_config().get("enabled", True):
+                    print("[DEBUG] Panel overdrive feature is enabled in config")
+                    print("[DEBUG] Setting panel overdrive to:", power_src == "AC")
+                    await set_panel_overdrive(power_src == "AC")
                     status = get_panel_overdrive_status()
-                    LOG.info("Verified panel_overdrive status: %s", status)
+                    print("Verified panel_overdrive status: %s", status)
                 else:
-                    LOG.debug("auto_panel_overdrive is disabled in config; skipping hardware toggle")
+                    status = "Disabled"
+                    print("[DEBUG] Panel overdrive feature is disabled in config")
 
                 #Future features to be added below
 
@@ -222,7 +226,10 @@ async def main():
     bus.export("/", iface)
     await bus.request_name("org.dynamic_power.UserBus")
 
-    cfg = Config()
+    #Changed to get the config to be global in this file.
+    from dynamic_power.config import load_config
+    cfg_ref = {"cfg": load_config()}
+    
     # Wait until the system daemon registers its DBus name
     try:
         for _ in range(10):
@@ -255,7 +262,7 @@ async def main():
     inotify.add_watch(CONFIG_PATH, flags.MODIFY)
 
     tasks = [
-        asyncio.create_task(sensor_loop(iface, cfg, inotify)),
+        asyncio.create_task(sensor_loop(iface, cfg_ref, inotify)),
         asyncio.create_task(supervise(proc)),
         asyncio.create_task(monitor_ui(ui_proc)),
     ]

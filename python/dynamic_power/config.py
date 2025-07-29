@@ -8,6 +8,8 @@ import sys
 from .power_profiles import normalize_profile
 from .debug import debug_log, info_log, error_log
 
+print("[DEBUG] config.py loaded from", __file__)
+
 DEFAULT_CONFIG_PATH = "/etc/dynamic-power.yaml"
 DEFAULT_TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power.yaml"
 
@@ -106,4 +108,6 @@ def save_user_config(config):
         yaml.safe_dump(config, f)
         
 def load_config():
-    return Config()
+    print("[DEBUG] USER_CONFIG_PATH =", USER_CONFIG_PATH)    
+    return Config(str(USER_CONFIG_PATH))
+ 
