@@ -5,13 +5,6 @@ if "--debug" in sys.argv:
     os.environ["DYNAMIC_POWER_DEBUG"] = "1"
 
 from dynamic_power.sensors import get_panel_overdrive_status
-"""
-Dynamic‑Power session helper (Phase 3)
-* Owns org.dynamic_power.UserBus on the session bus
-* Spawns and supervises dynamic_power_user
-* Polls basic metrics (load 1 m, AC/BAT, battery %) every 2 s
-* Emits PowerStateChanged and toggles panel over‑drive
-"""
 import asyncio
 from inotify_simple import INotify, flags
 import os, logging, signal, time, dbus, psutil, getpass, sys
@@ -47,7 +40,7 @@ try:
     from config import Config, load_config, is_debug_enabled
 except ImportError:
     from dynamic_power.config import Config, load_config, is_debug_enabled
-logging.debug("Debug mode is enabled (via config)")
+logging.debug("Debug mode in session helper is enabled (via config)")
 
 #To be removed later when not needed. 
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
@@ -183,16 +176,12 @@ async def sensor_loop(iface, cfg_ref, inotify):
 async def spawn_user_helper():
     return await asyncio.create_subprocess_exec(
         *USER_HELPER_CMD,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
     )
 
 async def spawn_ui():
     """Launch dynamic_power_command GUI and return the process object."""
     return await asyncio.create_subprocess_exec(
         *UI_CMD,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
     )
 
 async def monitor_ui(proc):

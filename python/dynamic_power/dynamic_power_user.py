@@ -1,22 +1,7 @@
 #!/usr/bin/env python3
-"""dynamic_power_user – per‑user helper for dynamic‑power
-
-Monitors running processes and a user config file
-(~/.config/dynamic_power/config.yaml).  When a configured process is found
-it writes an ephemeral state file to /run/user/<uid>/dynamic_power_matches.yaml
-so the UI helper (dynamic_power_command.py) can react.  It also issues DBus
-calls to the root daemon to tweak power‐profilesd behaviour.
-
-This version
-• restores the special “responsive” policy (inhibit powersave by low‑threshold 0)
-• makes all try/except blocks log failures to the journal even without --debug
-• removes duplicate / dead code from the previous patch
-• normalises process names to lower‑case so matching is case‑insensitive
-• leaves previous DEBUG prints intact (only emitted when --debug passed)
-"""
-
 import os
 import sys
+import logging
 import time
 import yaml
 import psutil
@@ -26,7 +11,10 @@ from inotify_simple import INotify, flags
 import signal
 from systemd import journal
 from setproctitle import setproctitle
+from dynamic_power.config import is_debug_enabled
 
+DEBUG = is_debug_enabled()
+logging.debug("Debug mode in dynamic power user is enabled (via config)")
 # ---------------------------------------------------------------------------
 DEBUG = "--debug" in sys.argv
 CONFIG_PATH   = os.path.expanduser("~/.config/dynamic_power/config.yaml")
