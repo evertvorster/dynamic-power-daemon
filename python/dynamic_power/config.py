@@ -4,6 +4,7 @@ import yaml
 import pwd
 import grp
 import sys
+import logging
 
 from .power_profiles import normalize_profile
 from .debug import debug_log, info_log, error_log

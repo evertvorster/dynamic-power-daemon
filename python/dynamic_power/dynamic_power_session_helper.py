@@ -124,7 +124,7 @@ class UserBusIface(ServiceInterface):
         logging.debug(f"[DEBUG] Panel overdrive status detected: {panel_status}")
         self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
-        logging.debug("[DEBUG] self._metrics =", self._metrics)
+        logging.debug("[DEBUG] self._metrics = %s", self._metrics)
 
 # ───────────────────────────────────────── loops ───
 async def sensor_loop(iface, cfg_ref, inotify):
@@ -152,20 +152,20 @@ async def sensor_loop(iface, cfg_ref, inotify):
                 logging.debug("Failed to update metrics: %s", e)
 
             # Detects power state changes, then does stuff.
-            logging.debug("[DEBUG] last_power =", last_power)
-            logging.debug("[DEBUG] current power_src =", power_src)
+            logging.debug("[DEBUG] last_power = %s", last_power)
+            logging.debug("[DEBUG] current power_src = %s", power_src)
             if power_src != last_power:
-                logging.debug("[DEBUG] Power source change detected: ", last_power, "→", power_src)
+                logging.debug("Power source change detected: %s → %s", last_power, power_src)
                 iface.PowerStateChanged(power_src)
                 last_power = power_src
 
                 # Handle the panel overdrive feature
                 # Panel Overdrive Logic (simplified – based on single config variable)
-                logging.debug("[DEBUG] cfg path =", cfg_ref["cfg"].path)
-                logging.debug("[DEBUG] cfg panel block =", cfg_ref["cfg"].get_panel_overdrive_config())
+                logging.debug("[DEBUG] cfg path = %s", cfg_ref["cfg"].path)
+                logging.debug("[DEBUG] cfg panel block = %s", cfg_ref["cfg"].get_panel_overdrive_config())
                 if cfg_ref["cfg"].get_panel_overdrive_config().get("enabled", True):
                     logging.debug("[DEBUG] Panel overdrive feature is enabled in config")
-                    logging.debug("[DEBUG] Setting panel overdrive to:", power_src == "AC")
+                    logging.debug("[DEBUG] Setting panel overdrive to: %s", power_src == "AC")
                     await set_panel_overdrive(power_src == "AC")
                     status = get_panel_overdrive_status()
                     logging.debug("Verified panel_overdrive status: %s", status)
