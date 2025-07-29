@@ -48,11 +48,11 @@ def load_template():
 
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        debug(f"Config file not found at {CONFIG_PATH}, using template.")
+        logging.info(f"Config file not found at {CONFIG_PATH}, using template.")
         return load_template()
     with open(CONFIG_PATH, "r") as f:
         cfg = yaml.safe_load(f) or {}
-    debug("Loaded user config.")
+    logging.info("Loaded user config.")
     return cfg
 
 # ---------------------------------------------------------------------------
@@ -66,9 +66,9 @@ def send_thresholds(bus, low: float, high: float) -> None:
         iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
         iface.SetLoadThresholds(float(low), float(high))
         last_sent_threshold = (low, high)
-        debug(f"Sent thresholds: low={low}, high={high}")
+        logging.debug(f"Sent thresholds: low={low}, high={high}")
     except Exception as e:
-        error(f"[send_thresholds] {e}")
+        logging.debug(f"[send_thresholds] {e}")
 
 def send_profile(bus, profile: str) -> None:
     """Forward a power‑profilesd profile to the root daemon."""
@@ -80,9 +80,9 @@ def send_profile(bus, profile: str) -> None:
         iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
         iface.SetProfile(profile)
         last_sent_profile = profile
-        debug(f"Sent profile override: {profile}")
+        logging.info(f"Sent profile override: {profile}")
     except Exception as e:
-        error(f"[send_profile] {e}")
+        logging.info(f"[send_profile] {e}")
 
 # ---------------------------------------------------------------------------
 PROFILE_ALIASES = {
@@ -108,14 +108,14 @@ def apply_process_policy(bus, name: str, policy: dict, high_th: float) -> None:
     if profile == "responsive":
         threshold_override_active = True
         send_thresholds(bus, 0, high_th)
-        debug(f"{name} -> prevent_powersave (responsive)")
+        logging.debug(f"{name} -> prevent_powersave (responsive)")
         return
 
     if profile:
         threshold_override_active = False
         active_profile_process = name
         send_profile(bus, normalize_profile(profile))
-        debug(f"{name} -> active_profile={profile}")
+        logging.debug(f"{name} -> active_profile={profile}")
         return
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ def read_control_override() -> dict:
             with open(path, "r") as f:
                 return yaml.safe_load(f) or {}
     except Exception as e:
-        error(f"[read_control_override] {e}")
+        logging.info(f"[read_control_override] {e}")
     return {}
 
 # ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ def write_state_file(profile: str, thresholds: dict) -> None:
         with open(state_file, "w") as f:
             yaml.dump(state, f)
     except Exception as e:
-        error(f"[write_state_file] {e}")
+        logging.info(f"[write_state_file] {e}")
 
 # ---------------------------------------------------------------------------
 def check_processes(bus, process_overrides, high_th: float) -> None:
@@ -161,11 +161,11 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
     if mode == "Inhibit Powersave":
         send_thresholds(bus, 0, high_th)
         threshold_override_active = True
-        debug("Override → Inhibit Powersave")
+        logging.debug("Override → Inhibit Powersave")
         return
     elif mode in ["Performance", "Balanced", "Powersave"]:
         send_profile(bus, normalize_profile(mode))
-        debug(f"Override → {mode}")
+        logging.debug(f"Override → {mode}")
         return
     else:
         # ensure any previous override is cleared
@@ -196,7 +196,7 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         if os.path.exists(match_file):
             os.remove(match_file)
     except Exception as e:
-        error(f"[matches_file_remove] {e}")
+        logging.info(f"[matches_file_remove] {e}")
 
     if matches:
         # select highest‑priority match (max prio)
@@ -220,14 +220,14 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             with open(match_file, "w") as f:
                 yaml.dump(match_info, f)
         except Exception as e:
-            error(f"[matches_file_write] {e}")
+            logging.info(f"[matches_file_write] {e}")
 
         apply_process_policy(bus, selected_name, selected_policy, high_th)
     else:
         # no matches – reset threshold override if it was driven by a process
         if threshold_override_active:
             threshold_override_active = False
-            debug("No override process active. Resetting thresholds to config.")
+            logging.info("No override process active. Resetting thresholds to config.")
 
         # clean out last_seen_processes set
         last_seen_processes &= running
@@ -235,7 +235,7 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
 # ---------------------------------------------------------------------------
 def handle_sigint(signum, frame):
     global terminate
-    log("Caught SIGINT, shutting down...")
+    logging.info("Caught SIGINT, shutting down...")
     terminate = True
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ def main():
     thresholds        = config.get("power",   {}).get("load_thresholds", {})
     process_overrides = config.get("process_overrides", {})
 
-    log("dynamic_power_user started.")
+    logging.info("dynamic_power_user started.")
 
     while not terminate:
         try:
@@ -270,7 +270,7 @@ def main():
                     thresholds        = config.get("power",   {}).get("load_thresholds", {})
                     process_overrides = config.get("process_overrides", {})
                     last_mtime        = mtime
-                    debug("Reloaded config due to mtime change.")
+                    logging.debug("Reloaded config due to mtime change.")
 
             check_processes(bus, process_overrides, thresholds.get("high", 2.0))
 
@@ -288,15 +288,15 @@ def main():
                     poll_interval     = config.get("general", {}).get("poll_interval", 5)
                     thresholds        = config.get("power",   {}).get("load_thresholds", {})
                     process_overrides = config.get("process_overrides", {})
-                    debug("Reloaded config via inotify.")
+                    logging.debug("Reloaded config via inotify.")
 
             time.sleep(poll_interval)
 
         except Exception as e:
-            error(f"[main_loop] {e}")
+            logging.info(f"[main_loop] {e}")
             time.sleep(poll_interval)
 
-    log("dynamic_power_user exited cleanly.")
+    logging.info("dynamic_power_user exited cleanly.")
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
