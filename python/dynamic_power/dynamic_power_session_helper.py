@@ -50,7 +50,6 @@ except ImportError:
 logging.debug("Debug mode is enabled (via config)")
 
 #To be removed later when not needed. 
-LOG = logging.getLogger("dynamic_power_session_helper")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 UI_CMD = ["/usr/bin/dynamic_power_command"]
 
@@ -81,7 +80,7 @@ def get_battery_percent():
 
 async def set_panel_overdrive(enable: bool):
     cmd = ["asusctl", "armoury", "panel_overdrive", "1" if enable else "0"]
-    LOG.info("Running %s", " ".join(cmd))
+    logging.info("Running %s", " ".join(cmd))
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -89,13 +88,13 @@ async def set_panel_overdrive(enable: bool):
             stderr=asyncio.subprocess.STDOUT,
         )
     except FileNotFoundError as e:
-        LOG.error("asusctl not found in PATH (%s); over‑drive toggle skipped", e)
+        logging.debug("asusctl not found in PATH (%s); over‑drive toggle skipped", e)
         return
     out, _ = await proc.communicate()
     if proc.returncode == 0:
-        LOG.info("panel_overdrive set to %s", 1 if enable else 0)
+        logging.info("panel_overdrive set to %s", 1 if enable else 0)
     else:
-        LOG.error("panel_overdrive failed (%s): %s", proc.returncode, out.decode().strip())
+        logging.debug("panel_overdrive failed (%s): %s", proc.returncode, out.decode().strip())
 
 # ───────────────────────────────────────── DBus iface ───
 class UserBusIface(ServiceInterface):
@@ -122,22 +121,22 @@ class UserBusIface(ServiceInterface):
 
     def update_metrics(self, m):
         panel_status = get_panel_overdrive_status()
-        print(f"[DEBUG] Panel overdrive status detected: {panel_status}")  # DEBUG LINE
+        logging.debug(f"[DEBUG] Panel overdrive status detected: {panel_status}")
         self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
-        print("[DEBUG] self._metrics =", self._metrics)
+        logging.debug("[DEBUG] self._metrics =", self._metrics)
 
 # ───────────────────────────────────────── loops ───
 async def sensor_loop(iface, cfg_ref, inotify):
     last_power = None
-    LOG.info("Sensor loop started")
+    logging.info("Sensor loop started")
     try:
         while True:
             # Reload config 
             for event in inotify.read(timeout=0):
                 if event.mask & flags.MODIFY:
                     cfg_ref["cfg"] = load_config()
-                    LOG.info("Config reloaded due to inotify change")
+                    logging.debug("Config reloaded due to inotify change")
 
             load1, _, _ = os.getloadavg()
             power_src = get_power_source()
@@ -150,36 +149,36 @@ async def sensor_loop(iface, cfg_ref, inotify):
                     **({"battery_percent": batt} if batt is not None else {})
                 })
             except Exception as e:
-                LOG.error("Failed to update metrics: %s", e)
+                logging.debug("Failed to update metrics: %s", e)
 
             # Detects power state changes, then does stuff.
-            print("[DEBUG] last_power =", last_power)
-            print("[DEBUG] current power_src =", power_src)
+            logging.debug("[DEBUG] last_power =", last_power)
+            logging.debug("[DEBUG] current power_src =", power_src)
             if power_src != last_power:
-                print("[DEBUG] Power source change detected: ", last_power, "→", power_src)
+                logging.debug("[DEBUG] Power source change detected: ", last_power, "→", power_src)
                 iface.PowerStateChanged(power_src)
                 last_power = power_src
 
                 # Handle the panel overdrive feature
                 # Panel Overdrive Logic (simplified – based on single config variable)
-                print("[DEBUG] cfg path =", cfg_ref["cfg"].path)
-                print("[DEBUG] cfg panel block =", cfg_ref["cfg"].get_panel_overdrive_config())
+                logging.debug("[DEBUG] cfg path =", cfg_ref["cfg"].path)
+                logging.debug("[DEBUG] cfg panel block =", cfg_ref["cfg"].get_panel_overdrive_config())
                 if cfg_ref["cfg"].get_panel_overdrive_config().get("enabled", True):
-                    print("[DEBUG] Panel overdrive feature is enabled in config")
-                    print("[DEBUG] Setting panel overdrive to:", power_src == "AC")
+                    logging.debug("[DEBUG] Panel overdrive feature is enabled in config")
+                    logging.debug("[DEBUG] Setting panel overdrive to:", power_src == "AC")
                     await set_panel_overdrive(power_src == "AC")
                     status = get_panel_overdrive_status()
-                    print("Verified panel_overdrive status: %s", status)
+                    logging.debug("Verified panel_overdrive status: %s", status)
                 else:
                     status = "Disabled"
-                    print("[DEBUG] Panel overdrive feature is disabled in config")
+                    logging.debug("[DEBUG] Panel overdrive feature is disabled in config")
 
                 #Future features to be added below
 
             await asyncio.sleep(2)
     
     except Exception as e:
-        LOG.error("Sensor loop crashed: %s", e)  
+        logging.info("Sensor loop crashed: %s", e)  
 
 async def spawn_user_helper():
     return await asyncio.create_subprocess_exec(
@@ -200,7 +199,7 @@ async def monitor_ui(proc):
     """Restart UI if it exits unexpectedly."""
     while True:
         await proc.wait()
-        LOG.warning("dynamic_power_command exited (%s); respawning", proc.returncode)
+        logging.info("dynamic_power_command exited (%s); respawning", proc.returncode)
         await asyncio.sleep(3)
         proc = await spawn_ui()
 
@@ -208,7 +207,7 @@ async def monitor_ui(proc):
 async def supervise(proc):
     while True:
         await proc.wait()
-        LOG.warning("dynamic_power_user exited (%s); respawning", proc.returncode)
+        logging.info("dynamic_power_user exited (%s); respawning", proc.returncode)
         await asyncio.sleep(3)
         proc = await spawn_user_helper()
 
@@ -217,19 +216,19 @@ def system_dbus_service_available(name):
         bus = dbus.SystemBus()
         return bus.name_has_owner(name)
     except Exception as e:
-        LOG.error(f"DBus check failed: {e}")
+        logging.info(f"DBus check failed: {e}")
         return False
 
 
 # ───────────────────────────────────────── main ───
 async def main():
-    print("[debug] main() started")
+    logging.debug("[debug] main() started")
     username = getpass.getuser()
     for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline']):
         if proc.info['username'] == username and proc.info.get('cmdline'):
             cmd = proc.info['cmdline'][0]
             if cmd == '/usr/bin/dynamic_power':
-                LOG.warning("Detected unexpected user-owned dynamic_power process. Skipping launch.")
+                logging.info("Detected unexpected user-owned dynamic_power process. Skipping launch.")
                 return
 
 
@@ -246,14 +245,14 @@ async def main():
     try:
         for _ in range(10):
             if system_dbus_service_available("org.dynamic_power.Daemon"):
-                LOG.info("Confirmed: org.dynamic_power.Daemon is available on system bus.")
+                logging.info("Confirmed: org.dynamic_power.Daemon is available on system bus.")
                 break
-            LOG.warning("Waiting for org.dynamic_power.Daemon to appear on DBus...")
+            logging.info("Waiting for org.dynamic_power.Daemon to appear on DBus...")
             await asyncio.sleep(0.5)
         else:
-            LOG.error("Timeout waiting for org.dynamic_power.Daemon to register on DBus.")
+            logging.info("Timeout waiting for org.dynamic_power.Daemon to register on DBus.")
     except Exception as e:
-        LOG.error(f"DBus check failed: {e}")
+        logging.info(f"DBus check failed: {e}")
 
 
     proc = await spawn_user_helper()

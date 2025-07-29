@@ -10,7 +10,10 @@ from .debug import debug_log, info_log, error_log
 
 # Debug flag from environment.
 DEBUG = os.getenv("DYNAMIC_POWER_DEBUG") == "1"
-
+logging.basicConfig(
+    level=logging.DEBUG if DEBUG else logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
 def is_debug_enabled():
     return DEBUG
 
