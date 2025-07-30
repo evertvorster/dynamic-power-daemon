@@ -137,6 +137,28 @@ class MainWindow(QtWidgets.QWidget):
             logging.debug("[debug] Updating config")
         _save_panel_overdrive(auto_enabled)
 
+    def _on_auto_refresh_toggled(self, state):
+        logging.debug(f"[debug] Refresh toggle clicked – state: {state}")
+        auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
+        logging.debug(f"[debug] Resolved auto_refresh_enabled = {auto_enabled}")
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                data = yaml.safe_load(f) or {}
+                logging.debug(f"[debug] Loaded existing config for refresh toggle: {data}")
+        except FileNotFoundError:
+            data = {}
+            logging.info("[debug] Config file not found, starting with empty config for refresh toggle")
+
+        if not isinstance(data.get("features"), dict):
+            data["features"] = {}
+            logging.info("[debug] Created new 'features' section for refresh toggle")
+
+        data["features"]["screen_refresh"] = bool(auto_enabled)
+        os.makedirs(CONFIG_PATH.parent, exist_ok=True)
+        with open(CONFIG_PATH, "w") as f:
+            yaml.safe_dump(data, f)
+            logging.info("[debug] Refresh toggle config successfully written to disk")  
+
     def __init__(self, tray):
         super().__init__()
         # --- Connect to session DBus for metrics ---
@@ -205,12 +227,10 @@ class MainWindow(QtWidgets.QWidget):
 
         # toggle placeholder – disabled until switching logic is implemented
         self.auto_refresh_checkbox = QtWidgets.QCheckBox()
-        self.auto_refresh_checkbox.setEnabled(False)
-        self.auto_refresh_checkbox.setToolTip(
-            "Automatic refresh-rate switching (coming soon)"
-        )
+        self.auto_refresh_checkbox = QtWidgets.QCheckBox()
+        self.auto_refresh_checkbox.setEnabled(True)
+        self.auto_refresh_checkbox.setToolTip("Enable screen refresh switching on power change")
         rr_layout.addWidget(self.auto_refresh_checkbox)
-
         rr_layout.addWidget(QtWidgets.QLabel("Display Refresh Rates:"))
 
         # single label that will show “eDP-2: 60 Hz,  HDMI-A-1: 144 Hz” etc.
@@ -225,10 +245,17 @@ class MainWindow(QtWidgets.QWidget):
         pov_enabled = _load_panel_overdrive()
         self.auto_panel_overdrive_checkbox.setChecked(pov_enabled)
         self.auto_panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                data = yaml.safe_load(f) or {}
+            auto_refresh_enabled = bool(data.get("features", {}).get("screen_refresh", False))
+            self.auto_refresh_checkbox.setChecked(auto_refresh_enabled)
+        except FileNotFoundError:
+            self.auto_refresh_checkbox.setChecked(False)
 
         # Connect toggle handler
         self.auto_panel_overdrive_checkbox.stateChanged.connect(self._on_auto_panel_overdrive_toggled)
-
+        self.auto_refresh_checkbox.stateChanged.connect(self._on_auto_refresh_toggled)
         # Placeholder for process monitor buttons
         self.proc_layout = QtWidgets.QVBoxLayout()
         self.proc_group = QtWidgets.QGroupBox("Monitored Processes")
