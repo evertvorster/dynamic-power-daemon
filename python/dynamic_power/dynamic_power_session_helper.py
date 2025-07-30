@@ -4,7 +4,7 @@ if "--debug" in sys.argv:
     import os
     os.environ["DYNAMIC_POWER_DEBUG"] = "1"
 
-from dynamic_power.sensors import get_panel_overdrive_status
+from dynamic_power.sensors import get_panel_overdrive_status, set_refresh_rates_for_power
 import asyncio
 from inotify_simple import INotify, flags
 import os, logging, signal, time, dbus, psutil, getpass, sys
@@ -166,7 +166,18 @@ async def sensor_loop(iface, cfg_ref, inotify):
                     status = "Disabled"
                     logging.debug("[DEBUG] Panel overdrive feature is disabled in config")
 
-                #Future features to be added below
+                # Refresh Rate Logic (independent toggle)
+                logging.debug("[DEBUG] cfg screen_refresh block = %s", cfg_ref["cfg"].get_screen_refresh_config())
+                if cfg_ref["cfg"].get_screen_refresh_config().get("enabled", True):
+                    logging.debug("[DEBUG] Screen refresh feature is enabled in config")
+                    logging.debug("[DEBUG] Setting refresh rates for: %s", power_src)
+                    try:
+                        set_refresh_rates_for_power(power_src)
+                    except Exception as e:
+                        logging.info(f"Failed to adjust screen refresh rates: {e}")
+                else:
+                    logging.debug("[DEBUG] Screen refresh feature is disabled in config")
+
 
             await asyncio.sleep(2)
     

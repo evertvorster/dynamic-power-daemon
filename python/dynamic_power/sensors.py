@@ -1,5 +1,8 @@
 import os
-from .debug import debug_log
+import subprocess
+import re
+import logging
+from .config import is_debug_enabled
 
 def get_power_source(power_source_cfg=None):
     ac_id = "ADP0"
@@ -13,10 +16,10 @@ def get_power_source(power_source_cfg=None):
     try:
         with open(ac_path, "r") as f:
             online = f.read().strip() == "1"
-            debug_log("sensors", f"Detected power source: {'AC' if online else 'Battery'}")
+            logging.debug("sensors: Detected power source: AC" if online else "sensors: Detected power source: Battery")
             return "ac" if online else "battery"
     except FileNotFoundError:
-        debug_log("sensors", f"Fallback detection failed, using default AC device: {ac_id}")
+        logging.info(f"sensors: Fallback detection failed, using default AC device: {ac_id}")
         return "ac"
 
 def get_load_level(low_th=1.0, high_th=2.0):
@@ -24,7 +27,7 @@ def get_load_level(low_th=1.0, high_th=2.0):
         with open("/proc/loadavg", "r") as f:
             load_avg = float(f.read().split()[0])
     except Exception as e:
-        debug_log("sensors", f"Failed to read loadavg: {e}")
+        logging.info(f"sensors: Failed to read loadavg: {e}")
         return "low"
 
     level = "low"
@@ -33,10 +36,124 @@ def get_load_level(low_th=1.0, high_th=2.0):
     elif load_avg > low_th:
         level = "medium"
 
-    debug_log("sensors", f"Load average: {load_avg}, Level: {level}")
+    logging.debug(f"sensors: Load average: {load_avg}, Level: {level}")
     return level
 
-import subprocess
+def get_uptime_seconds():
+    with open("/proc/uptime", "r") as f:
+        return float(f.readline().split()[0])
+
+def get_process_override(config):
+    overrides = config.get("process_overrides", {})
+    if not overrides:
+        return None
+
+    max_priority = -1
+    selected_profile = None
+    for proc in os.listdir("/proc"):
+        if not proc.isdigit():
+            continue
+        try:
+            with open(f"/proc/{proc}/comm", "r") as f:
+                name = f.read().strip()
+            if name in overrides:
+                entry = overrides[name]
+                priority = entry.get("priority", 0)
+                if priority > max_priority:
+                    max_priority = priority
+                    selected_profile = entry.get("power_mode")
+        except FileNotFoundError:
+            continue
+    return selected_profile
+
+def get_refresh_info(cfg=None):
+    """Returns a dictionary of connected displays with current, min, max refresh rates, and resolution."""
+    if cfg and not cfg.get("features", {}).get("screen_refresh", False):
+        return None
+
+    try:
+        output = subprocess.check_output(["kscreen-doctor", "-o"], text=True)
+        # Strip ANSI color codes
+        output = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        logging.info("sensors: kscreen-doctor not found or failed.")
+        return None
+
+    displays = {}
+    current_display = None
+    all_modes = {}
+    current_resolution = {}
+
+    for raw in output.splitlines():
+        line = raw.strip()
+
+        if line.startswith("Output:"):
+            logging.debug(f"[sensors:refresh] Output line: {line}")
+            parts = line.split()
+            if len(parts) >= 3:
+                current_display = parts[2]
+                all_modes[current_display] = []
+            continue
+
+        if current_display is None:
+            continue
+
+        # collect every numeric refresh rate on this line
+        for hz in re.findall(r"@(\d+)", line):
+            logging.debug(f"[sensors:refresh] Found rate {hz} Hz for {current_display}")
+            all_modes[current_display].append(int(hz))
+
+        # detect current mode marked with * or *!
+        star = re.search(r"(\d+x\d+)@(\d+)\*(?:!?)?", line)
+        if star:
+            res = star.group(1)
+            hz = int(star.group(2))
+            displays[current_display] = {
+                "current": hz,
+                "resolution": res
+            }
+            logging.debug(f"[refresh] Current mode for {current_display}: {res} @ {hz}Hz")
+
+    for name, rates in all_modes.items():
+        if name in displays and rates:
+            displays[name]["min"] = min(rates)
+            displays[name]["max"] = max(rates)
+
+    logging.debug(f"sensors: Detected refresh info: {displays}")
+    return displays if displays else None
+
+def set_refresh_rates_for_power(power_src: str):
+    """
+    Sets each screen to its min (on battery) or max (on AC) refresh rate
+    at the current resolution, using kscreen-doctor.
+    """
+    from .sensors import get_refresh_info  # avoid circular import if used elsewhere
+
+    refresh_data = get_refresh_info()
+    if not refresh_data:
+        logging.info("[sensors] No refresh data available, skipping refresh adjustment")
+        return
+
+    for output, info in refresh_data.items():
+        resolution = info.get("resolution")
+        if not resolution:
+            logging.info(f"[sensors] No resolution info for {output}, skipping")
+            continue
+
+        target_rate = info.get("min") if power_src == "BAT" else info.get("max")
+        if not target_rate:
+            logging.info(f"[sensors] No target refresh rate for {output}, skipping")
+            continue
+
+        mode_string = f"{resolution}@{target_rate}"
+        cmd = ["kscreen-doctor", f"output.{output}.mode.{mode_string}"]
+
+        try:
+            subprocess.run(cmd, check=True)
+            logging.info(f"[sensors] Set {output} to {mode_string}")
+        except subprocess.CalledProcessError as e:
+            logging.info(f"[sensors] Failed to set {output} to {mode_string}: {e}")
+
 
 def get_panel_overdrive_status() -> bool | None:
     try:
@@ -56,5 +173,5 @@ def get_panel_overdrive_status() -> bool | None:
                     return False
                 break
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        debug_log("sensors", f"Failed to query panel overdrive status: {e}")
+        logging.info(f"sensors: Failed to query panel overdrive status: {e}")
     return None

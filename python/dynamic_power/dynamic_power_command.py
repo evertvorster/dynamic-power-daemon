@@ -26,6 +26,7 @@ except ImportError:
     except Exception:
         pass
 from dynamic_power.config import load_user_config, save_user_config
+from dynamic_power import sensors
 
 
 
@@ -136,6 +137,28 @@ class MainWindow(QtWidgets.QWidget):
             logging.debug("[debug] Updating config")
         _save_panel_overdrive(auto_enabled)
 
+    def _on_auto_refresh_toggled(self, state):
+        logging.debug(f"[debug] Refresh toggle clicked – state: {state}")
+        auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
+        logging.debug(f"[debug] Resolved auto_refresh_enabled = {auto_enabled}")
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                data = yaml.safe_load(f) or {}
+                logging.debug(f"[debug] Loaded existing config for refresh toggle: {data}")
+        except FileNotFoundError:
+            data = {}
+            logging.info("[debug] Config file not found, starting with empty config for refresh toggle")
+
+        if not isinstance(data.get("features"), dict):
+            data["features"] = {}
+            logging.info("[debug] Created new 'features' section for refresh toggle")
+
+        data["features"]["screen_refresh"] = bool(auto_enabled)
+        os.makedirs(CONFIG_PATH.parent, exist_ok=True)
+        with open(CONFIG_PATH, "w") as f:
+            yaml.safe_dump(data, f)
+            logging.info("[debug] Refresh toggle config successfully written to disk")  
+
     def __init__(self, tray):
         super().__init__()
         # --- Connect to session DBus for metrics ---
@@ -166,7 +189,7 @@ class MainWindow(QtWidgets.QWidget):
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.timeout.connect(self.update_state)
+        self.state_timer.timeout.connect(self.update_ui_state)
         self.state_timer.start(1000)
         self.match_timer = QtCore.QTimer()
         self.match_timer.timeout.connect(self.update_process_matches)
@@ -196,15 +219,43 @@ class MainWindow(QtWidgets.QWidget):
         pov_layout.addStretch()
         self.panel_overdrive_widget.setLayout(pov_layout)
         layout.insertWidget(2, self.panel_overdrive_widget)
+        # Display Refresh Rates box just below Panel Overdrive
+        # --- Display Refresh Rates row (styled like Panel Overdrive) ---
+        self.refresh_widget = QtWidgets.QWidget()
+        rr_layout = QtWidgets.QHBoxLayout()
+        rr_layout.setContentsMargins(0, 0, 0, 0)
 
+        # toggle placeholder – disabled until switching logic is implemented
+        self.auto_refresh_checkbox = QtWidgets.QCheckBox()
+        self.auto_refresh_checkbox = QtWidgets.QCheckBox()
+        self.auto_refresh_checkbox.setEnabled(True)
+        self.auto_refresh_checkbox.setToolTip("Enable screen refresh switching on power change")
+        rr_layout.addWidget(self.auto_refresh_checkbox)
+        rr_layout.addWidget(QtWidgets.QLabel("Display Refresh Rates:"))
+
+        # single label that will show “eDP-2: 60 Hz,  HDMI-A-1: 144 Hz” etc.
+        self.refresh_rates_label = QtWidgets.QLabel("Unavailable")
+        rr_layout.addWidget(self.refresh_rates_label)
+
+        rr_layout.addStretch()
+        self.refresh_widget.setLayout(rr_layout)
+        layout.insertWidget(3, self.refresh_widget)
+     
         # Initialize checkbox state from config
         pov_enabled = _load_panel_overdrive()
         self.auto_panel_overdrive_checkbox.setChecked(pov_enabled)
         self.auto_panel_overdrive_status_label.setText("On" if pov_enabled else "Off")
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                data = yaml.safe_load(f) or {}
+            auto_refresh_enabled = bool(data.get("features", {}).get("screen_refresh", False))
+            self.auto_refresh_checkbox.setChecked(auto_refresh_enabled)
+        except FileNotFoundError:
+            self.auto_refresh_checkbox.setChecked(False)
 
         # Connect toggle handler
         self.auto_panel_overdrive_checkbox.stateChanged.connect(self._on_auto_panel_overdrive_toggled)
-
+        self.auto_refresh_checkbox.stateChanged.connect(self._on_auto_refresh_toggled)
         # Placeholder for process monitor buttons
         self.proc_layout = QtWidgets.QVBoxLayout()
         self.proc_group = QtWidgets.QGroupBox("Monitored Processes")
@@ -255,7 +306,9 @@ class MainWindow(QtWidgets.QWidget):
         self.data = self.data[-60:]
         self.plot.setData(self.data)
 
-    def update_state(self):
+    def update_ui_state(self):
+        if not self.isVisible():
+            return
         try:
             # --- Power source via DBus ---
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
@@ -281,8 +334,25 @@ class MainWindow(QtWidgets.QWidget):
                     if batt is not None:
                         label += f" ({batt}%)"
                     self.power_status_label.setText(label)
+
+                    # ✅ Smart refresh polling goes here
+                    current = sensors.get_refresh_info()
+                    if current != getattr(self, "_last_refresh_info", None):
+                        logging.debug("[command] Detected refresh info change: %s", current)
+                        self._last_refresh_info = current.copy()
+                        if current:
+                            text = ", ".join(
+                                f"{screen}: {info.get('current')} Hz"
+                                for screen, info in current.items()
+                            )
+                        else:
+                            text = "Unavailable"
+                        self.refresh_rates_label.setText(text)
+                    else:
+                        logging.debug("[command] Refresh info unchanged")
+
                 except Exception as e:
-                    logging.info(f"DBus GetMetrics failed: {e}")
+                    logging.info(f"DBus GetMetrics or refresh info failed: {e}")
                     self.power_status_label.setText("Power status: Unknown")
             else:
                 self.power_status_label.setText("Power status: Unavailable")
@@ -460,10 +530,27 @@ class MainWindow(QtWidgets.QWidget):
         logging.debug(f"[debug] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
 
-        #with open(CONFIG_PATH, "w") as f:
-        #    yaml.dump(self.config, f)
-        #    self.config["features"] = {}
-        #self.config["features"]["auto_panel_overdrive"] = enabled
+    # --- populate the refresh-rate label ---------------------------------
+    def update_refresh_rates(self):
+        try:
+            # returns dict or None
+            rates = sensors.get_refresh_info() or {}
+        except Exception as e:
+            logging.info(f"dynamic_power_command: Failed to get refresh rates: {e}")
+            rates = {}
+        
+        logging.debug(f"update_refresh_rates(): rates received → {rates}")
+
+        if rates:
+            text = ", ".join(
+                f"{screen}: {info.get('current')} Hz"
+                for screen, info in rates.items()
+            )
+        else:
+            text = "Unavailable"
+
+        self.refresh_rates_label.setText(text)
+
 def main():
     # Wait for X display to be ready before starting the app
     import os, time
