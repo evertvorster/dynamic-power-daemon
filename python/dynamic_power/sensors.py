@@ -114,7 +114,6 @@ def get_refresh_info(cfg=None):
             }
             logging.debug(f"[refresh] Current mode for {current_display}: {res} @ {hz}Hz")
 
-
     for name, rates in all_modes.items():
         if name in displays and rates:
             displays[name]["min"] = min(rates)
@@ -123,14 +122,38 @@ def get_refresh_info(cfg=None):
     logging.debug(f"sensors: Detected refresh info: {displays}")
     return displays if displays else None
 
+def set_refresh_rates_for_power(power_src: str):
+    """
+    Sets each screen to its min (on battery) or max (on AC) refresh rate
+    at the current resolution, using kscreen-doctor.
+    """
+    from .sensors import get_refresh_info  # avoid circular import if used elsewhere
 
-    for name, rates in all_modes.items():
-        if name in displays and rates:
-            displays[name]["min"] = min(rates)
-            displays[name]["max"] = max(rates)
+    refresh_data = get_refresh_info()
+    if not refresh_data:
+        logging.info("[sensors] No refresh data available, skipping refresh adjustment")
+        return
 
-    logging.debug(f"sensors: Detected refresh info: {displays}")
-    return displays if displays else None
+    for output, info in refresh_data.items():
+        resolution = info.get("resolution")
+        if not resolution:
+            logging.info(f"[sensors] No resolution info for {output}, skipping")
+            continue
+
+        target_rate = info.get("min") if power_src == "BAT" else info.get("max")
+        if not target_rate:
+            logging.info(f"[sensors] No target refresh rate for {output}, skipping")
+            continue
+
+        mode_string = f"{resolution}@{target_rate}"
+        cmd = ["kscreen-doctor", f"output.{output}.mode.{mode_string}"]
+
+        try:
+            subprocess.run(cmd, check=True)
+            logging.info(f"[sensors] Set {output} to {mode_string}")
+        except subprocess.CalledProcessError as e:
+            logging.info(f"[sensors] Failed to set {output} to {mode_string}: {e}")
+
 
 def get_panel_overdrive_status() -> bool | None:
     try:

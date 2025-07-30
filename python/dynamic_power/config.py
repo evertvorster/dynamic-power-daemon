@@ -95,6 +95,13 @@ class Config:
         enabled = self.data.get("features", {}).get("auto_panel_overdrive", False)
         return {"enabled": enabled}
 
+    def get_screen_refresh_config(self):
+        """Return the config block for screen_refresh inside features."""
+        features = self.data.get("features", {})
+        value = features.get("screen_refresh", False)
+        return {"enabled": bool(value)}
+
+
 
 
 # === Added for GUI support of user config ===
