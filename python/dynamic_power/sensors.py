@@ -1,5 +1,8 @@
 import os
-from .debug import debug_log
+import subprocess
+import re
+import logging
+from .config import is_debug_enabled
 
 def get_power_source(power_source_cfg=None):
     ac_id = "ADP0"
@@ -13,10 +16,10 @@ def get_power_source(power_source_cfg=None):
     try:
         with open(ac_path, "r") as f:
             online = f.read().strip() == "1"
-            debug_log("sensors", f"Detected power source: {'AC' if online else 'Battery'}")
+            logging.debug("sensors: Detected power source: AC" if online else "sensors: Detected power source: Battery")
             return "ac" if online else "battery"
     except FileNotFoundError:
-        debug_log("sensors", f"Fallback detection failed, using default AC device: {ac_id}")
+        logging.info(f"sensors: Fallback detection failed, using default AC device: {ac_id}")
         return "ac"
 
 def get_load_level(low_th=1.0, high_th=2.0):
@@ -24,7 +27,7 @@ def get_load_level(low_th=1.0, high_th=2.0):
         with open("/proc/loadavg", "r") as f:
             load_avg = float(f.read().split()[0])
     except Exception as e:
-        debug_log("sensors", f"Failed to read loadavg: {e}")
+        logging.info(f"sensors: Failed to read loadavg: {e}")
         return "low"
 
     level = "low"
@@ -33,10 +36,75 @@ def get_load_level(low_th=1.0, high_th=2.0):
     elif load_avg > low_th:
         level = "medium"
 
-    debug_log("sensors", f"Load average: {load_avg}, Level: {level}")
+    logging.debug(f"sensors: Load average: {load_avg}, Level: {level}")
     return level
 
-import subprocess
+def get_uptime_seconds():
+    with open("/proc/uptime", "r") as f:
+        return float(f.readline().split()[0])
+
+def get_process_override(config):
+    overrides = config.get("process_overrides", {})
+    if not overrides:
+        return None
+
+    max_priority = -1
+    selected_profile = None
+    for proc in os.listdir("/proc"):
+        if not proc.isdigit():
+            continue
+        try:
+            with open(f"/proc/{proc}/comm", "r") as f:
+                name = f.read().strip()
+            if name in overrides:
+                entry = overrides[name]
+                priority = entry.get("priority", 0)
+                if priority > max_priority:
+                    max_priority = priority
+                    selected_profile = entry.get("power_mode")
+        except FileNotFoundError:
+            continue
+    return selected_profile
+
+def get_refresh_info(cfg=None):
+    """Returns a dictionary of connected displays with current, min, and max refresh rates."""
+    if cfg and not cfg.get("features", {}).get("screen_refresh", False):
+        return None
+
+    try:
+        output = subprocess.check_output(["kscreen-doctor", "-o"], text=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        logging.info("sensors: kscreen-doctor not found or failed.")
+        return None
+
+    displays = {}
+    current_display = None
+    all_modes = {}
+
+    for line in output.splitlines():
+        line = line.strip()
+        if line.startswith("Output:"):
+            parts = line.split()
+            if len(parts) >= 3:
+                current_display = parts[2]
+                all_modes[current_display] = []
+        elif line.startswith("Modes:"):
+            matches = re.findall(r"@(\d+)", line)
+            all_modes[current_display].extend([int(r) for r in matches])
+        elif re.match(r"^\d+:.*@(\d+)", line):
+            matches = re.findall(r"@(\d+)", line)
+            all_modes[current_display].extend([int(r) for r in matches])
+            if "*" in line and current_display:
+                current = int(matches[0])
+                displays[current_display] = {"current": current}
+
+    for name, rates in all_modes.items():
+        if name in displays and rates:
+            displays[name]["min"] = min(rates)
+            displays[name]["max"] = max(rates)
+
+    logging.info(f"sensors: Detected refresh info: {displays}")
+    return displays if displays else None
 
 def get_panel_overdrive_status() -> bool | None:
     try:
@@ -56,5 +124,5 @@ def get_panel_overdrive_status() -> bool | None:
                     return False
                 break
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        debug_log("sensors", f"Failed to query panel overdrive status: {e}")
+        logging.info(f"sensors: Failed to query panel overdrive status: {e}")
     return None
