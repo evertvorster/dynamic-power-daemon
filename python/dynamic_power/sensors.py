@@ -112,7 +112,7 @@ def get_refresh_info(cfg=None):
             displays[name]["min"] = min(rates)
             displays[name]["max"] = max(rates)
 
-    logging.info(f"sensors: Detected refresh info: {displays}")
+    logging.debug(f"sensors: Detected refresh info: {displays}")
     return displays if displays else None
 
 def get_panel_overdrive_status() -> bool | None:

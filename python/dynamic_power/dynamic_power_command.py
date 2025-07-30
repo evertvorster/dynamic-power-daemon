@@ -220,10 +220,7 @@ class MainWindow(QtWidgets.QWidget):
         rr_layout.addStretch()
         self.refresh_widget.setLayout(rr_layout)
         layout.insertWidget(3, self.refresh_widget)
-
-        # one-shot populate (no polling)
-        self.update_refresh_rates()
-
+     
         # Initialize checkbox state from config
         pov_enabled = _load_panel_overdrive()
         self.auto_panel_overdrive_checkbox.setChecked(pov_enabled)
@@ -308,8 +305,25 @@ class MainWindow(QtWidgets.QWidget):
                     if batt is not None:
                         label += f" ({batt}%)"
                     self.power_status_label.setText(label)
+
+                    # ✅ Smart refresh polling goes here
+                    current = sensors.get_refresh_info()
+                    if current != getattr(self, "_last_refresh_info", None):
+                        logging.debug("[command] Detected refresh info change: %s", current)
+                        self._last_refresh_info = current.copy()
+                        if current:
+                            text = ", ".join(
+                                f"{screen}: {info.get('current')} Hz"
+                                for screen, info in current.items()
+                            )
+                        else:
+                            text = "Unavailable"
+                        self.refresh_rates_label.setText(text)
+                    else:
+                        logging.debug("[command] Refresh info unchanged")
+
                 except Exception as e:
-                    logging.info(f"DBus GetMetrics failed: {e}")
+                    logging.info(f"DBus GetMetrics or refresh info failed: {e}")
                     self.power_status_label.setText("Power status: Unknown")
             else:
                 self.power_status_label.setText("Power status: Unavailable")
