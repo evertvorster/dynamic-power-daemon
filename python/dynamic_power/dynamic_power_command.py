@@ -167,7 +167,7 @@ class MainWindow(QtWidgets.QWidget):
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.timeout.connect(self.update_state)
+        self.state_timer.timeout.connect(self.update_ui_state)
         self.state_timer.start(1000)
         self.match_timer = QtCore.QTimer()
         self.match_timer.timeout.connect(self.update_process_matches)
@@ -279,7 +279,9 @@ class MainWindow(QtWidgets.QWidget):
         self.data = self.data[-60:]
         self.plot.setData(self.data)
 
-    def update_state(self):
+    def update_ui_state(self):
+        if not self.isVisible():
+            return
         try:
             # --- Power source via DBus ---
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
@@ -500,11 +502,6 @@ class MainWindow(QtWidgets.QWidget):
     def on_high_drag_finished(self):
         logging.debug(f"[debug] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
-
-        #with open(CONFIG_PATH, "w") as f:
-        #    yaml.dump(self.config, f)
-        #    self.config["features"] = {}
-        #self.config["features"]["auto_panel_overdrive"] = enabled
 
     # --- populate the refresh-rate label ---------------------------------
     def update_refresh_rates(self):
