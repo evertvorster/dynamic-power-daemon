@@ -26,6 +26,7 @@ except ImportError:
     except Exception:
         pass
 from dynamic_power.config import load_user_config, save_user_config
+from dynamic_power import sensors
 
 
 
@@ -196,6 +197,32 @@ class MainWindow(QtWidgets.QWidget):
         pov_layout.addStretch()
         self.panel_overdrive_widget.setLayout(pov_layout)
         layout.insertWidget(2, self.panel_overdrive_widget)
+        # Display Refresh Rates box just below Panel Overdrive
+        # --- Display Refresh Rates row (styled like Panel Overdrive) ---
+        self.refresh_widget = QtWidgets.QWidget()
+        rr_layout = QtWidgets.QHBoxLayout()
+        rr_layout.setContentsMargins(0, 0, 0, 0)
+
+        # toggle placeholder – disabled until switching logic is implemented
+        self.auto_refresh_checkbox = QtWidgets.QCheckBox()
+        self.auto_refresh_checkbox.setEnabled(False)
+        self.auto_refresh_checkbox.setToolTip(
+            "Automatic refresh-rate switching (coming soon)"
+        )
+        rr_layout.addWidget(self.auto_refresh_checkbox)
+
+        rr_layout.addWidget(QtWidgets.QLabel("Display Refresh Rates:"))
+
+        # single label that will show “eDP-2: 60 Hz,  HDMI-A-1: 144 Hz” etc.
+        self.refresh_rates_label = QtWidgets.QLabel("Unavailable")
+        rr_layout.addWidget(self.refresh_rates_label)
+
+        rr_layout.addStretch()
+        self.refresh_widget.setLayout(rr_layout)
+        layout.insertWidget(3, self.refresh_widget)
+
+        # one-shot populate (no polling)
+        self.update_refresh_rates()
 
         # Initialize checkbox state from config
         pov_enabled = _load_panel_overdrive()
@@ -464,6 +491,28 @@ class MainWindow(QtWidgets.QWidget):
         #    yaml.dump(self.config, f)
         #    self.config["features"] = {}
         #self.config["features"]["auto_panel_overdrive"] = enabled
+
+    # --- populate the refresh-rate label ---------------------------------
+    def update_refresh_rates(self):
+        try:
+            # returns dict or None
+            rates = sensors.get_refresh_info() or {}
+        except Exception as e:
+            logging.info(f"dynamic_power_command: Failed to get refresh rates: {e}")
+            rates = {}
+        
+        logging.debug(f"update_refresh_rates(): rates received → {rates}")
+
+        if rates:
+            text = ", ".join(
+                f"{screen}: {info.get('current')} Hz"
+                for screen, info in rates.items()
+            )
+        else:
+            text = "Unavailable"
+
+        self.refresh_rates_label.setText(text)
+
 def main():
     # Wait for X display to be ready before starting the app
     import os, time

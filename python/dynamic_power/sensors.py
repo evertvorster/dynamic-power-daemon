@@ -73,6 +73,9 @@ def get_refresh_info(cfg=None):
 
     try:
         output = subprocess.check_output(["kscreen-doctor", "-o"], text=True)
+        # strip ANSI colour codes produced by kscreen-doctor
+        output = re.sub(r"\x1b\[[0-9;]*m", "", output)
+
     except (subprocess.CalledProcessError, FileNotFoundError):
         logging.info("sensors: kscreen-doctor not found or failed.")
         return None
@@ -81,22 +84,28 @@ def get_refresh_info(cfg=None):
     current_display = None
     all_modes = {}
 
-    for line in output.splitlines():
-        line = line.strip()
+    for raw in output.splitlines():
+        line = raw.strip()
+
+        # new display section
         if line.startswith("Output:"):
             parts = line.split()
             if len(parts) >= 3:
                 current_display = parts[2]
                 all_modes[current_display] = []
-        elif line.startswith("Modes:"):
-            matches = re.findall(r"@(\d+)", line)
-            all_modes[current_display].extend([int(r) for r in matches])
-        elif re.match(r"^\d+:.*@(\d+)", line):
-            matches = re.findall(r"@(\d+)", line)
-            all_modes[current_display].extend([int(r) for r in matches])
-            if "*" in line and current_display:
-                current = int(matches[0])
-                displays[current_display] = {"current": current}
+            continue
+
+        if current_display is None:
+            continue  # ignore lines until we know which display we’re in
+
+        # collect every numeric refresh rate on this line
+        for hz in re.findall(r"@(\d+)", line):
+            all_modes[current_display].append(int(hz))
+
+        # detect current mode marked with * or *!
+        star = re.search(r"@(?P<hz>\d+)\*(?:!?)", line)
+        if star:
+            displays[current_display] = {"current": int(star.group("hz"))}
 
     for name, rates in all_modes.items():
         if name in displays and rates:
