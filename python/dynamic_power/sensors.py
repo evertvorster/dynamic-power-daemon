@@ -67,15 +67,14 @@ def get_process_override(config):
     return selected_profile
 
 def get_refresh_info(cfg=None):
-    """Returns a dictionary of connected displays with current, min, and max refresh rates."""
+    """Returns a dictionary of connected displays with current, min, max refresh rates, and resolution."""
     if cfg and not cfg.get("features", {}).get("screen_refresh", False):
         return None
 
     try:
         output = subprocess.check_output(["kscreen-doctor", "-o"], text=True)
-        # strip ANSI colour codes produced by kscreen-doctor
+        # Strip ANSI color codes
         output = re.sub(r"\x1b\[[0-9;]*m", "", output)
-
     except (subprocess.CalledProcessError, FileNotFoundError):
         logging.info("sensors: kscreen-doctor not found or failed.")
         return None
@@ -83,12 +82,13 @@ def get_refresh_info(cfg=None):
     displays = {}
     current_display = None
     all_modes = {}
+    current_resolution = {}
 
     for raw in output.splitlines():
         line = raw.strip()
 
-        # new display section
         if line.startswith("Output:"):
+            logging.debug(f"[sensors:refresh] Output line: {line}")
             parts = line.split()
             if len(parts) >= 3:
                 current_display = parts[2]
@@ -96,16 +96,33 @@ def get_refresh_info(cfg=None):
             continue
 
         if current_display is None:
-            continue  # ignore lines until we know which display we’re in
+            continue
 
         # collect every numeric refresh rate on this line
         for hz in re.findall(r"@(\d+)", line):
+            logging.debug(f"[sensors:refresh] Found rate {hz} Hz for {current_display}")
             all_modes[current_display].append(int(hz))
 
         # detect current mode marked with * or *!
-        star = re.search(r"@(?P<hz>\d+)\*(?:!?)", line)
+        star = re.search(r"(\d+x\d+)@(\d+)\*(?:!?)?", line)
         if star:
-            displays[current_display] = {"current": int(star.group("hz"))}
+            res = star.group(1)
+            hz = int(star.group(2))
+            displays[current_display] = {
+                "current": hz,
+                "resolution": res
+            }
+            logging.debug(f"[refresh] Current mode for {current_display}: {res} @ {hz}Hz")
+
+
+    for name, rates in all_modes.items():
+        if name in displays and rates:
+            displays[name]["min"] = min(rates)
+            displays[name]["max"] = max(rates)
+
+    logging.debug(f"sensors: Detected refresh info: {displays}")
+    return displays if displays else None
+
 
     for name, rates in all_modes.items():
         if name in displays and rates:
