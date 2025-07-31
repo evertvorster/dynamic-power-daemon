@@ -113,9 +113,9 @@ class UserBusIface(ServiceInterface):
         pass
 
     def update_metrics(self, m):
-        panel_status = get_panel_overdrive_status()
-        logging.debug(f"[DEBUG] Panel overdrive status detected: {panel_status}")
-        self._metrics["panel_overdrive"] = panel_status
+        #panel_status = get_panel_overdrive_status()
+        #logging.debug(f"[DEBUG] Panel overdrive status detected: {panel_status}")
+        #self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
         logging.debug("[DEBUG] self._metrics = %s", self._metrics)
 
@@ -256,6 +256,12 @@ async def main():
 
 
     proc = await spawn_user_helper()
+    # Read the panel status just once when starting up. 
+    from dynamic_power.sensors import get_panel_overdrive_status
+    panel_status = get_panel_overdrive_status()
+    iface._metrics["panel_overdrive"] = panel_status
+    logging.debug(f"[DEBUG] Panel overdrive status (startup): {panel_status}")
+
     # Start GUI
     ui_proc = await spawn_ui()
 
