@@ -326,21 +326,28 @@ class MainWindow(QtWidgets.QWidget):
                     self.power_status_label.setText(label)
 
                     # ✅ Smart refresh polling goes here
-                    current = sensors.get_refresh_info()
-                    if current != getattr(self, "_last_refresh_info", None):
-                        logging.debug("[command] Detected refresh info change: %s", current)
-                        self._last_refresh_info = current.copy()
-                        if current:
-                            text = ", ".join(
-                                f"{screen}: {info.get('current')} Hz"
-                                for screen, info in current.items()
-                            )
-                        else:
-                            text = "Unavailable"
-                        self.refresh_rates_label.setText(text)
-                    else:
-                        logging.debug("[command] Refresh info unchanged")
+                    now = time.monotonic()
+                    if not hasattr(self, "_last_refresh_check_time"):
+                        self._last_refresh_check_time = 0
 
+                    # Only poll kscreen-doctor every 10 seconds
+                    if now - self._last_refresh_check_time >= 10:
+                        self._last_refresh_check_time = now
+
+                        current = sensors.get_refresh_info()
+                        if current != getattr(self, "_last_refresh_info", None):
+                            logging.debug("[command] Detected refresh info change: %s", current)
+                            self._last_refresh_info = current.copy()
+                            if current:
+                                text = ", ".join(
+                                    f"{screen}: {info.get('current')} Hz"
+                                    for screen, info in current.items()
+                                )
+                            else:
+                                text = "Unavailable"
+                            self.refresh_rates_label.setText(text)
+                        else:
+                            logging.debug("[command] Refresh info unchanged")
                 except Exception as e:
                     logging.info(f"DBus GetMetrics or refresh info failed: {e}")
                     self.power_status_label.setText("Power status: Unknown")
