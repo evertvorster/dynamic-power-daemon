@@ -349,28 +349,34 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             logging.info(f"Error updating power status: {e}")
         try:
-            if STATE_PATH.exists():
-                with open(STATE_PATH, "r") as f:
-                    state = yaml.safe_load(f) or {}
-                    thresholds = state.get("thresholds", {})
-                    active_profile = state.get("active_profile", "Unknown")
+            bus = dbus.SystemBus()
+            daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+            iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+            state = iface.GetDaemonState()
 
-                    # Update threshold lines
-                    if "low" in thresholds:
-                        self.low_line.setValue(thresholds["low"])
-                    if "high" in thresholds:
-                        self.high_line.setValue(thresholds["high"])
+            thresholds = {
+                "low": state.get("threshold_low", 1.0),
+                "high": state.get("threshold_high", 2.0),
+            }
+            active_profile = state.get("active_profile", "Unknown")
 
-                    # Check for manual override
-                    if OVERRIDE_PATH.exists():
-                        with open(OVERRIDE_PATH) as of:
-                            override = yaml.safe_load(of) or {}
-                            manual = override.get("manual_override", "")
-                            if manual and manual != "Dynamic":
-                                self.profile_button.setText(f"Mode: {manual}")
-                                return
+            self.low_line.setValue(thresholds["low"])
+            self.high_line.setValue(thresholds["high"])
 
-                    self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+            # Check for manual override
+            if OVERRIDE_PATH.exists():
+                with open(OVERRIDE_PATH) as of:
+                    override = yaml.safe_load(of) or {}
+                    manual = override.get("manual_override", "")
+                    if manual and manual != "Dynamic":
+                        self.profile_button.setText(f"Mode: {manual}")
+                        return
+
+            self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+
+        except Exception as e:
+            logging.info(f"[GUI] Failed to read daemon state from DBus: {e}")
+
         except Exception as e:
             logging.info(f"Error reading state file: {e}")
 
