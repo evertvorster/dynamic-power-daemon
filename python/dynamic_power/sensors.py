@@ -160,3 +160,22 @@ def get_panel_overdrive_status() -> bool | None:
     except Exception as e:
         logging.info(f"sensors: Failed to get panel_overdrive via DBus: {e}")
     return None
+
+def set_panel_overdrive(enable: bool) -> bool:
+    """
+    Sets the panel overdrive feature using the Asus DBus interface.
+    Returns True if the operation succeeded.
+    """
+    try:
+        import dbus
+        bus = dbus.SystemBus()
+        obj = bus.get_object("xyz.ljones.Asusd", "/xyz/ljones/asus_armoury/panel_overdrive")
+        props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
+        props.Set("xyz.ljones.AsusArmoury", "CurrentValue", dbus.Int32(1 if enable else 0))
+        logging.info(f"sensors: Set panel_overdrive to {'1' if enable else '0'} via DBus")
+        return True
+    except dbus.DBusException as e:
+        logging.info(f"sensors: DBus error setting panel_overdrive: {e}")
+    except Exception as e:
+        logging.info(f"sensors: Failed to set panel_overdrive via DBus: {e}")
+    return False

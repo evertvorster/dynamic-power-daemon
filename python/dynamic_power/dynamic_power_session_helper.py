@@ -4,7 +4,8 @@ if "--debug" in sys.argv:
     import os
     os.environ["DYNAMIC_POWER_DEBUG"] = "1"
 
-from dynamic_power.sensors import get_panel_overdrive_status, set_refresh_rates_for_power
+from dynamic_power.sensors import get_panel_overdrive_status, set_panel_overdrive
+from dynamic_power.sensors import set_refresh_rates_for_power
 import asyncio
 from inotify_simple import INotify, flags
 import os, logging, signal, time, dbus, psutil, getpass, sys
@@ -70,24 +71,6 @@ def get_battery_percent():
         return float(read_first(bats[0] / "capacity"))
     except (TypeError, ValueError):
         return None
-
-async def set_panel_overdrive(enable: bool):
-    cmd = ["asusctl", "armoury", "panel_overdrive", "1" if enable else "0"]
-    logging.info("Running %s", " ".join(cmd))
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-    except FileNotFoundError as e:
-        logging.debug("asusctl not found in PATH (%s); over‑drive toggle skipped", e)
-        return
-    out, _ = await proc.communicate()
-    if proc.returncode == 0:
-        logging.info("panel_overdrive set to %s", 1 if enable else 0)
-    else:
-        logging.debug("panel_overdrive failed (%s): %s", proc.returncode, out.decode().strip())
 
 # ───────────────────────────────────────── DBus iface ───
 class UserBusIface(ServiceInterface):
@@ -208,8 +191,10 @@ async def sensor_loop(iface, cfg_ref, inotify):
                 if cfg_ref["cfg"].get_panel_overdrive_config().get("enabled", True):
                     logging.debug("[DEBUG] Panel overdrive feature is enabled in config")
                     logging.debug("[DEBUG] Setting panel overdrive to: %s", power_src == "AC")
-                    await set_panel_overdrive(power_src == "AC")
+                    set_panel_overdrive(power_src == "AC")
+                    #time.sleep(1)
                     status = get_panel_overdrive_status()
+                    iface._metrics["panel_overdrive"] = status
                     logging.debug("Verified panel_overdrive status: %s", status)
                 else:
                     status = "Disabled"
@@ -287,8 +272,9 @@ async def main():
     await bus.request_name("org.dynamic_power.UserBus")
 
     #Changed to get the config to be global in this file.
-    from dynamic_power.config import load_config
+    from dynamic_power.config import Config
     cfg_ref = {"cfg": load_config()}
+
     
     # Wait until the system daemon registers its DBus name
     try:
