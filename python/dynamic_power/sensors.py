@@ -2,6 +2,7 @@ import os
 import subprocess
 import re
 import logging
+import json
 from .config import is_debug_enabled
 
 def get_power_source(power_source_cfg=None):
@@ -72,55 +73,46 @@ def get_refresh_info(cfg=None):
         return None
 
     try:
-        output = subprocess.check_output(["kscreen-doctor", "-o"], text=True)
-        # Strip ANSI color codes
-        output = re.sub(r"\x1b\[[0-9;]*m", "", output)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        logging.info("sensors: kscreen-doctor not found or failed.")
+        output = subprocess.check_output(["kscreen-doctor", "-j"], text=True)
+        data = json.loads(output)
+    except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e:
+        logging.info(f"sensors: Failed to query kscreen-doctor -j: {e}")
         return None
 
     displays = {}
-    current_display = None
-    all_modes = {}
-    current_resolution = {}
 
-    for raw in output.splitlines():
-        line = raw.strip()
-
-        if line.startswith("Output:"):
-            logging.debug(f"[sensors:refresh] Output line: {line}")
-            parts = line.split()
-            if len(parts) >= 3:
-                current_display = parts[2]
-                all_modes[current_display] = []
+    for output in data.get("outputs", []):
+        name = output.get("name")
+        current_mode_id = output.get("currentModeId")
+        modes = output.get("modes", [])
+        if not name or not current_mode_id or not modes:
             continue
 
-        if current_display is None:
+        refresh_rates = []
+        resolution = None
+        current_refresh = None
+
+        for mode in modes:
+            if mode.get("id") == current_mode_id:
+                current_refresh = int(round(mode.get("refreshRate", 0)))
+                resolution = f"{mode['size']['width']}x{mode['size']['height']}"
+            if "refreshRate" in mode:
+                refresh_rates.append(int(round(mode["refreshRate"])))
+
+        if not current_refresh or not resolution or not refresh_rates:
             continue
 
-        # collect every numeric refresh rate on this line
-        for hz in re.findall(r"@(\d+)", line):
-            logging.debug(f"[sensors:refresh] Found rate {hz} Hz for {current_display}")
-            all_modes[current_display].append(int(hz))
+        displays[name] = {
+            "current": current_refresh,
+            "resolution": resolution,
+            "min": min(refresh_rates),
+            "max": max(refresh_rates)
+        }
 
-        # detect current mode marked with * or *!
-        star = re.search(r"(\d+x\d+)@(\d+)\*(?:!?)?", line)
-        if star:
-            res = star.group(1)
-            hz = int(star.group(2))
-            displays[current_display] = {
-                "current": hz,
-                "resolution": res
-            }
-            logging.debug(f"[refresh] Current mode for {current_display}: {res} @ {hz}Hz")
+        logging.debug(f"sensors: Detected {name}: {resolution} @ {current_refresh}Hz (min={min(refresh_rates)}, max={max(refresh_rates)})")
 
-    for name, rates in all_modes.items():
-        if name in displays and rates:
-            displays[name]["min"] = min(rates)
-            displays[name]["max"] = max(rates)
-
-    logging.debug(f"sensors: Detected refresh info: {displays}")
     return displays if displays else None
+
 
 def set_refresh_rates_for_power(power_src: str):
     """
