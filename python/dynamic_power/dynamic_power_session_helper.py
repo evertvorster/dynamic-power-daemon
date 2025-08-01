@@ -108,6 +108,7 @@ class UserBusIface(ServiceInterface):
             k: (Variant('s', v) if isinstance(v, str)
                 else Variant('d', float(v)))
             for k, v in self._metrics.items()
+            if v is not None
         }
 
     @dbus_signal()
