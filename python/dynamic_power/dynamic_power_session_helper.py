@@ -95,6 +95,7 @@ class UserBusIface(ServiceInterface):
         super().__init__("org.dynamic_power.UserBus")
         self._metrics = {}
         self._process_matches = []
+        self._manual_override = None
 
     @method()
     def Ping(self) -> 's':
@@ -141,6 +142,18 @@ class UserBusIface(ServiceInterface):
             logging.info(f"[UserBusIface.UpdateProcessMatches] {e}")
             return False
 
+    @method()
+    def SetUserOverride(self, mode: 's') -> 'b':
+        self._manual_override = mode
+        logging.debug(f"[UserBusIface] Received manual override via DBus: {mode}")
+        return True
+
+    @method()
+    def GetUserOverride(self) -> 's':
+        return self._manual_override or "Dynamic"
+
+    def get_user_override(self):
+        return self._manual_override
 
     def update_metrics(self, m):
         #panel_status = get_panel_overdrive_status()

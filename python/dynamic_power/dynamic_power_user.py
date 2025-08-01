@@ -136,8 +136,15 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
     global last_seen_processes, threshold_override_active, active_profile_process
 
     # honour manual override first
-    override = read_control_override()
-    mode = override.get("manual_override", "Dynamic")
+    try:
+        session_bus = dbus.SessionBus()
+        helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+        iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+        mode = iface.GetUserOverride()  # ← to be added in a moment
+    except Exception as e:
+        logging.info(f"[read_override_from_dbus] {e}")
+        mode = "Dynamic"
+
 
     if mode == "Inhibit Powersave":
         send_thresholds(bus, 0, high_th)

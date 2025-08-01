@@ -271,17 +271,6 @@ class MainWindow(QtWidgets.QWidget):
         self.graph.addItem(self.high_line)
         self.low_line.sigPositionChangeFinished.connect(self.on_low_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
-
-        # Ensure override file exists with default "Dynamic" mode
-        override_state = {"manual_override": "Dynamic"}
-        try:
-            os.makedirs(OVERRIDE_PATH.parent, exist_ok=True)
-            with open(OVERRIDE_PATH, "w") as f:
-                yaml.dump(override_state, f)
-                logging.debug(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
-        except Exception as e:
-            logging.info(f"Failed to write override state: {e}")
-
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
