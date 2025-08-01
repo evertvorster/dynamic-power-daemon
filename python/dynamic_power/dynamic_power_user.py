@@ -119,18 +119,6 @@ def apply_process_policy(bus, name: str, policy: dict, high_th: float) -> None:
         return
 
 # ---------------------------------------------------------------------------
-def read_control_override() -> dict:
-    try:
-        uid  = os.getuid()
-        path = f"/run/user/{uid}/dynamic_power_control.yaml"
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return yaml.safe_load(f) or {}
-    except Exception as e:
-        logging.info(f"[read_control_override] {e}")
-    return {}
-
-# ---------------------------------------------------------------------------
 def check_processes(bus, process_overrides, high_th: float) -> None:
     """Match running processes against the overrides list and act."""
     global last_seen_processes, threshold_override_active, active_profile_process
