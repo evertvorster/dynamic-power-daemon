@@ -181,16 +181,6 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
-    uid        = os.getuid()
-    match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
-
-    # remove any stale file; will recreate below if needed
-    try:
-        if os.path.exists(match_file):
-            os.remove(match_file)
-    except Exception as e:
-        logging.info(f"[matches_file_remove] {e}")
-
     if matches:
         matches.sort(reverse=True)
         selected_prio, selected_name, selected_policy = matches[0]
@@ -214,11 +204,22 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             logging.info(f"[dbus_send_matches] {e}")
 
         apply_process_policy(bus, selected_name, selected_policy, high_th)
+    #
     else:
+        try:
+            session_bus = dbus.SessionBus()
+            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+            iface.UpdateProcessMatches([])  # Send empty list to clear matches
+            logging.debug("Sent empty process match list via DBus")
+        except Exception as e:
+            logging.info(f"[dbus_send_empty_matches] {e}")
+
         if threshold_override_active:
             threshold_override_active = False
             logging.info("No override process active. Resetting thresholds to config.")
         last_seen_processes &= running
+
 
 # ---------------------------------------------------------------------------
 def handle_sigint(signum, frame):
