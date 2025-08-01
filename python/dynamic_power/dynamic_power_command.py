@@ -41,7 +41,6 @@ import pyqtgraph as pg
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
-STATE_PATH = Path("/run/dynamic_power_state.yaml")
 MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
@@ -383,9 +382,6 @@ class MainWindow(QtWidgets.QWidget):
 
         except Exception as e:
             logging.info(f"[GUI] Failed to read daemon state from DBus: {e}")
-
-        except Exception as e:
-            logging.info(f"Error reading state file: {e}")
 
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")

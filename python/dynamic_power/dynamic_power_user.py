@@ -131,25 +131,6 @@ def read_control_override() -> dict:
     return {}
 
 # ---------------------------------------------------------------------------
-def write_state_file(profile: str, thresholds: dict) -> None:
-    try:
-        uid        = os.getuid()
-        state_file = f"/run/user/{uid}/dynamic_power_state.yaml"
-        state = {
-            "active_profile": profile,
-            "thresholds": {
-                "low":  thresholds.get("low", 1.0),
-                "high": thresholds.get("high", 2.0),
-            },
-            "timestamp": time.time(),
-        }
-        os.makedirs(os.path.dirname(state_file), exist_ok=True)
-        with open(state_file, "w") as f:
-            yaml.dump(state, f)
-    except Exception as e:
-        logging.info(f"[write_state_file] {e}")
-
-# ---------------------------------------------------------------------------
 def check_processes(bus, process_overrides, high_th: float) -> None:
     """Match running processes against the overrides list and act."""
     global last_seen_processes, threshold_override_active, active_profile_process
@@ -286,8 +267,6 @@ def main():
                 send_thresholds(bus,
                                 thresholds.get("low", 1.0),
                                 thresholds.get("high", 2.0))
-
-            write_state_file(last_sent_profile, thresholds)
 
             # event‑driven reload via inotify (no need to update last_mtime)
             for event in inotify.read(timeout=0):
