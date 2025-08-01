@@ -194,25 +194,24 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
     if matches:
         matches.sort(reverse=True)
         selected_prio, selected_name, selected_policy = matches[0]
-
-        # write matches file for GUI (legacy path, will later be replaced by DBus)
         try:
-            match_info = {
-                "matched_processes": [
-                    {
-                        "process_name": name,
-                        "priority": prio,
-                        "active": (name == selected_name),
-                    }
-                    for prio, name, _ in matches
-                ],
-                "timestamp": time.time(),
-            }
-            os.makedirs(os.path.dirname(match_file), exist_ok=True)
-            with open(match_file, "w") as f:
-                yaml.dump(match_info, f)
+            session_bus = dbus.SessionBus()
+            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+
+            iface.GetMetrics()  # sanity ping to ensure connection
+
+            iface.UpdateProcessMatches([
+                {
+                    "process_name": name,
+                    "priority": prio,
+                    "active": (name == selected_name),
+                }
+                for prio, name, _ in matches
+            ])
+            logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
-            logging.info(f"[matches_file_write] {e}")
+            logging.info(f"[dbus_send_matches] {e}")
 
         apply_process_policy(bus, selected_name, selected_policy, high_th)
     else:

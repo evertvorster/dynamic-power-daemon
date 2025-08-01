@@ -94,6 +94,7 @@ class UserBusIface(ServiceInterface):
     def __init__(self):
         super().__init__("org.dynamic_power.UserBus")
         self._metrics = {}
+        self._process_matches = []
 
     @method()
     def Ping(self) -> 's':
@@ -112,12 +113,46 @@ class UserBusIface(ServiceInterface):
     def PowerStateChanged(self, power_state: 's') -> None:
         pass
 
+    @method()
+    def GetProcessMatches(self) -> 'aa{sv}':  # returns list of dicts
+        return [
+            {
+                "process_name": Variant('s', match.get("process_name", "")),
+                "priority":     Variant('i', match.get("priority", 0)),
+                "active":       Variant('b', match.get("active", False)),
+            }
+            for match in self._process_matches
+        ]
+    
+    @method()
+    def UpdateProcessMatches(self, matches: 'aa{sv}') -> 'b':
+        try:
+            unpacked = []
+            for item in matches:
+                unpacked.append({
+                    "process_name": str(item["process_name"].value),
+                    "priority": int(item["priority"].value),
+                    "active": bool(item["active"].value),
+                })
+            self._process_matches = unpacked
+            logging.debug("Updated process matches via DBus call: %s", unpacked)
+            return True
+        except Exception as e:
+            logging.info(f"[UserBusIface.UpdateProcessMatches] {e}")
+            return False
+
+
     def update_metrics(self, m):
         #panel_status = get_panel_overdrive_status()
         #logging.debug(f"[DEBUG] Panel overdrive status detected: {panel_status}")
         #self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
         logging.debug("[DEBUG] self._metrics = %s", self._metrics)
+
+    def update_process_matches(self, matches):
+        self._process_matches = matches or []
+        logging.debug("[DEBUG] self._process_matches = %s", self._process_matches)
+
 
 # ───────────────────────────────────────── loops ───
 async def sensor_loop(iface, cfg_ref, inotify):

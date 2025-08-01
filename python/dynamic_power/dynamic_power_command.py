@@ -41,7 +41,6 @@ import pyqtgraph as pg
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
-MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 # --- Panel Overdrive Config Helpers ---
@@ -494,17 +493,19 @@ class MainWindow(QtWidgets.QWidget):
 
     def update_process_matches(self):
         try:
-            with open(MATCHES_PATH, "r") as f:
-                matches = yaml.safe_load(f) or {}
-                match_list = matches.get("matched_processes", matches if isinstance(matches, list) else [])
-
-                self.matched = {}
-                for item in match_list:
-                    name = item.get("process_name", "").lower()
-                    active = item.get("active", False)
-                    self.matched[name] = "active" if active else "inactive"
+            bus = dbus.SessionBus()
+            helper = bus.get_object('org.dynamic_power.UserBus', '/')
+            iface = dbus.Interface(helper, 'org.dynamic_power.UserBus')
+            matches = iface.GetProcessMatches()
+            self.matched = {}
+            logging.debug(f"[debug] Process match map: {self.matched}")
+            for item in matches:
+                name = str(item.get("process_name", "")).lower()
+                active = bool(item.get("active", False))
+                self.matched[name] = "active" if active else "inactive"
         except Exception as e:
             self.matched = {}
+            logging.info(f"[GUI] Failed to get process matches from DBus: {e}")
 
         active_exists = any(state == 'active' for state in self.matched.values())
         if hasattr(self, 'tray') and self.tray is not None:
@@ -516,6 +517,7 @@ class MainWindow(QtWidgets.QWidget):
                 continue
             name = btn.text().lower()
             state = self.matched.get(name)
+            logging.debug(f"[debug] Checking button '{name}' → state: {state}")
             if state == "active":
                 btn.setStyleSheet("background-color: #FFD700; color: black;")
             elif state == "inactive":
