@@ -19,7 +19,8 @@ def is_debug_enabled():
     return DEBUG
 
 DEFAULT_CONFIG_PATH = "/etc/dynamic-power.yaml"
-DEFAULT_TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power.yaml"
+DEFAULT_TEMPLATE_PATH_ROOT = "/usr/share/dynamic-power/dynamic-power.yaml"
+DEFAULT_TEMPLATE_PATH_USER = "/usr/share/dynamic-power/dynamic-power-user.yaml"
 
 class Config:
     def __init__(self, path=DEFAULT_CONFIG_PATH):
@@ -32,7 +33,8 @@ class Config:
     def _generate_from_default(self):
         try:
             os.makedirs(os.path.dirname(self.path), exist_ok=True)
-            shutil.copy(DEFAULT_TEMPLATE_PATH, self.path)
+            template = DEFAULT_TEMPLATE_PATH_ROOT if os.geteuid() == 0 else DEFAULT_TEMPLATE_PATH_USER
+            shutil.copy(template, self.path)
             if self.path.startswith("/etc/"):
                 uid = pwd.getpwnam("root").pw_uid
                 gid = grp.getgrnam("root").gr_gid
