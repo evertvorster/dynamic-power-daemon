@@ -392,10 +392,15 @@ class MainWindow(QtWidgets.QWidget):
     def load_config(self):
         if not CONFIG_PATH.exists():
             os.makedirs(CONFIG_PATH.parent, exist_ok=True)
-            if Path(TEMPLATE_PATH).exists():
-                with open(TEMPLATE_PATH) as src, open(CONFIG_PATH, "w") as dst:
+            template_path = (
+                "/usr/share/dynamic-power/dynamic-power.yaml"
+                if os.geteuid() == 0
+                else "/usr/share/dynamic-power/dynamic-power-user.yaml"
+            )
+            if Path(template_path).exists():
+                with open(template_path) as src, open(CONFIG_PATH, "w") as dst:
                     dst.write(src.read())
-
+                    
         with open(CONFIG_PATH, "r") as f:
             self.config = yaml.safe_load(f) or {}
 
