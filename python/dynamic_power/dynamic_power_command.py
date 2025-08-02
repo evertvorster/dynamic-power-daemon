@@ -4,9 +4,11 @@ import os
 import time
 import subprocess
 import yaml
-import dbus
 import sys
 import logging
+from dbus_next.aio import MessageBus
+import asyncio
+from dynamic_power.sensors import asusd_is_running
 from dynamic_power.config import is_debug_enabled
 logging.basicConfig(
     level=logging.DEBUG if is_debug_enabled() else logging.INFO,
@@ -76,14 +78,6 @@ def _save_panel_overdrive(enabled: bool):
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(data, f)
         logging.info("[debug] Config successfully written to disk")
-
-def asusd_is_running():
-    """Check if the Asus DBus service is available (asusd running)."""
-    try:
-        bus = dbus.SystemBus()
-        return bus.name_has_owner("xyz.ljones.Asusd")
-    except Exception:
-        return False
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -167,15 +161,6 @@ class MainWindow(QtWidgets.QWidget):
 
     def __init__(self, tray):
         super().__init__()
-        # --- Connect to session DBus for metrics ---
-        try:
-            bus = dbus.SessionBus()
-            proxy = bus.get_object('org.dynamic_power.UserBus', '/')
-            self._dbus_iface = dbus.Interface(proxy, 'org.dynamic_power.UserBus')
-        except Exception as e:
-            logging.debug('Failed to connect to org.dynamic_power.UserBus:', e)
-            self._dbus_iface = None
-
         self.tray = tray
         self.setWindowTitle("Dynamic Power Command")
         self.resize(600, 400)
@@ -195,10 +180,11 @@ class MainWindow(QtWidgets.QWidget):
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.timeout.connect(self.update_ui_state)
+        self.state_timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state_async()))
         self.state_timer.start(1000)
         self.match_timer = QtCore.QTimer()
-        self.match_timer.timeout.connect(self.update_process_matches)
+        self.match_timer.timeout.connect(lambda: asyncio.create_task(self.update_process_matches_async()))
+
         self.match_timer.start(1000)
 
         # Power profile button
@@ -237,7 +223,6 @@ class MainWindow(QtWidgets.QWidget):
         rr_layout.setContentsMargins(0, 0, 0, 0)
 
         # toggle placeholder – disabled until switching logic is implemented
-        self.auto_refresh_checkbox = QtWidgets.QCheckBox()
         self.auto_refresh_checkbox = QtWidgets.QCheckBox()
         self.auto_refresh_checkbox.setEnabled(True)
         self.auto_refresh_checkbox.setToolTip("Enable screen refresh switching on power change")
@@ -286,6 +271,85 @@ class MainWindow(QtWidgets.QWidget):
         self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
+    async def update_ui_state_async(self):
+        if not self.isVisible():
+            return
+
+        # 1. Session bus: GetMetrics()
+        try:
+            bus = await MessageBus(bus_type=MessageBus.TYPE_SESSION).connect()
+            introspection = await bus.introspect("org.dynamic_power.UserBus", "/")
+            obj = bus.get_proxy_object("org.dynamic_power.UserBus", "/", introspection)
+            iface = obj.get_interface("org.dynamic_power.UserBus")
+            metrics = await iface.call_get_metrics()
+
+            power_src = metrics.get("power_source", Variant("s", "Unknown")).value
+            batt = metrics.get("battery_percent", None)
+            panel = metrics.get("panel_overdrive", None)
+
+            label = f"Power source: {power_src}"
+            if batt is not None:
+                label += f" ({batt.value:.0f}%)"
+            self.power_status_label.setText(label)
+
+            auto_enabled = self.config.get("features", {}).get("auto_panel_overdrive", False)
+            if not auto_enabled:
+                self.auto_panel_overdrive_status_label.setText("Disabled")
+            else:
+                if panel is not None:
+                    self.auto_panel_overdrive_status_label.setText("On" if panel.value else "Off")
+                else:
+                    self.auto_panel_overdrive_status_label.setText("Unknown")
+
+        except Exception as e:
+            logging.info(f"[GUI] Failed to get UserBus metrics via dbus-next: {e}")
+            self.power_status_label.setText("Power status: Unknown")
+
+        # 2. Refresh polling (every 10s)
+        try:
+            now = time.monotonic()
+            if not hasattr(self, "_last_refresh_check_time"):
+                self._last_refresh_check_time = 0
+            if now - self._last_refresh_check_time >= 10:
+                self._last_refresh_check_time = now
+                current = sensors.get_refresh_info()
+                if current != getattr(self, "_last_refresh_info", None):
+                    logging.debug("[command] Detected refresh info change: %s", current)
+                    self._last_refresh_info = current.copy()
+                    if current:
+                        text = ", ".join(
+                            f"{screen}: {info.get('current')} Hz"
+                            for screen, info in current.items()
+                        )
+                    else:
+                        text = "Unavailable"
+                    self.refresh_rates_label.setText(text)
+                else:
+                    logging.debug("[command] Refresh info unchanged")
+        except Exception as e:
+            logging.info(f"[GUI] Refresh info error: {e}")
+            self.refresh_rates_label.setText("Unavailable")
+
+        # 3. System bus: GetDaemonState()
+        try:
+            bus = await MessageBus(bus_type=MessageBus.TYPE_SYSTEM).connect()
+            introspection = await bus.introspect("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+            obj = bus.get_proxy_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon", introspection)
+            iface = obj.get_interface("org.dynamic_power.Daemon")
+            state = await iface.call_get_daemon_state()
+
+            thresholds = {
+                "low": state.get("threshold_low", 1.0),
+                "high": state.get("threshold_high", 2.0),
+            }
+            active_profile = state.get("active_profile", "Unknown")
+
+            self.low_line.setValue(thresholds["low"])
+            self.high_line.setValue(thresholds["high"])
+            self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+        except Exception as e:
+            logging.info(f"[GUI] Failed to read daemon state via dbus-next: {e}")
+
     def update_graph(self):
         self.ptr += 1
         max_visible = max(self.data)
@@ -296,98 +360,21 @@ class MainWindow(QtWidgets.QWidget):
         self.data = self.data[-60:]
         self.plot.setData(self.data)
 
-    def update_ui_state(self):
-        if not self.isVisible():
-            return
-        try:
-            # --- Power source via DBus ---
-            if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
-                try:
-                    # Load config (only if not already loaded)
-                    if not hasattr(self, "config"):
-                        self.load_config()
-
-                    # Respect feature toggle
-                    metrics = self._dbus_iface.GetMetrics()
-                    auto_enabled = self.config.get("features", {}).get("auto_panel_overdrive", False)
-                    if not auto_enabled:
-                        self.auto_panel_overdrive_status_label.setText("Disabled")
-                    else:
-                        panel = metrics.get('panel_overdrive', None)
-                        if panel is not None:
-                            self.auto_panel_overdrive_status_label.setText("On" if panel else "Off")
-                        else:
-                            self.auto_panel_overdrive_status_label.setText("Unknown")
-                    power_src = metrics.get('power_source', 'Unknown')
-                    batt = metrics.get('battery_percent', None)
-                    label = f"Power source: {power_src}"
-                    if batt is not None:
-                        label += f" ({batt}%)"
-                    self.power_status_label.setText(label)
-
-                    # ✅ Smart refresh polling goes here
-                    now = time.monotonic()
-                    if not hasattr(self, "_last_refresh_check_time"):
-                        self._last_refresh_check_time = 0
-
-                    # Only poll kscreen-doctor every 10 seconds
-                    if now - self._last_refresh_check_time >= 10:
-                        self._last_refresh_check_time = now
-
-                        current = sensors.get_refresh_info()
-                        if current != getattr(self, "_last_refresh_info", None):
-                            logging.debug("[command] Detected refresh info change: %s", current)
-                            self._last_refresh_info = current.copy()
-                            if current:
-                                text = ", ".join(
-                                    f"{screen}: {info.get('current')} Hz"
-                                    for screen, info in current.items()
-                                )
-                            else:
-                                text = "Unavailable"
-                            self.refresh_rates_label.setText(text)
-                        else:
-                            logging.debug("[command] Refresh info unchanged")
-                except Exception as e:
-                    logging.info(f"DBus GetMetrics or refresh info failed: {e}")
-                    self.power_status_label.setText("Power status: Unknown")
-            else:
-                self.power_status_label.setText("Power status: Unavailable")
-        except Exception as e:
-            logging.info(f"Error updating power status: {e}")
-        try:
-            bus = dbus.SystemBus()
-            daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
-            iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
-            state = iface.GetDaemonState()
-
-            thresholds = {
-                "low": state.get("threshold_low", 1.0),
-                "high": state.get("threshold_high", 2.0),
-            }
-            active_profile = state.get("active_profile", "Unknown")
-
-            self.low_line.setValue(thresholds["low"])
-            self.high_line.setValue(thresholds["high"])
-
-            # Check for manual override
-            if OVERRIDE_PATH.exists():
-                with open(OVERRIDE_PATH) as of:
-                    override = yaml.safe_load(of) or {}
-                    manual = override.get("manual_override", "")
-                    if manual and manual != "Dynamic":
-                        self.profile_button.setText(f"Mode: {manual}")
-                        return
-
-            self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
-
-        except Exception as e:
-            logging.info(f"[GUI] Failed to read daemon state from DBus: {e}")
-
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")
-        with open(OVERRIDE_PATH, "w") as f:
-            yaml.dump({"manual_override": mode}, f)
+        asyncio.create_task(self.send_profile_async(mode))
+
+    async def send_profile_async(self, mode):
+        try:
+            bus = await MessageBus(bus_type=MessageBus.TYPE_SYSTEM).connect()
+            introspection = await bus.introspect("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+            obj = bus.get_proxy_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon", introspection)
+            iface = obj.get_interface("org.dynamic_power.Daemon")
+            await iface.call_set_user_profile(mode.lower())
+            logging.debug(f"[GUI] Sent SetUserProfile('{mode.lower()}') via dbus-next")
+        except Exception as e:
+            logging.info(f"[GUI] Failed to send SetUserProfile via dbus-next: {e}")
+
 
     def load_config(self):
         if not CONFIG_PATH.exists():
@@ -498,39 +485,6 @@ class MainWindow(QtWidgets.QWidget):
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
 
-    def update_process_matches(self):
-        try:
-            bus = dbus.SessionBus()
-            helper = bus.get_object('org.dynamic_power.UserBus', '/')
-            iface = dbus.Interface(helper, 'org.dynamic_power.UserBus')
-            matches = iface.GetProcessMatches()
-            self.matched = {}
-            logging.debug(f"[debug] Process match map: {self.matched}")
-            for item in matches:
-                name = str(item.get("process_name", "")).lower()
-                active = bool(item.get("active", False))
-                self.matched[name] = "active" if active else "inactive"
-        except Exception as e:
-            self.matched = {}
-            logging.info(f"[GUI] Failed to get process matches from DBus: {e}")
-
-        active_exists = any(state == 'active' for state in self.matched.values())
-        if hasattr(self, 'tray') and self.tray is not None:
-            self.tray.update_icon(active_exists)
-
-        for i in range(self.proc_layout.count()):
-            btn = self.proc_layout.itemAt(i).widget()
-            if not isinstance(btn, QtWidgets.QPushButton):
-                continue
-            name = btn.text().lower()
-            state = self.matched.get(name)
-            logging.debug(f"[debug] Checking button '{name}' → state: {state}")
-            if state == "active":
-                btn.setStyleSheet("background-color: #FFD700; color: black;")
-            elif state == "inactive":
-                btn.setStyleSheet("background-color: #FFFACD;")
-            else:
-                btn.setStyleSheet("")
     def on_low_drag_finished(self):
         logging.debug(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
         self.update_thresholds()

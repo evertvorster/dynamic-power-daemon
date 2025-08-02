@@ -1,111 +1,68 @@
-import dbus
-import dbus.service
-import dbus.mainloop.glib
-from gi.repository import GLib
-import threading
-import time
+from dbus_next.service import ServiceInterface, method
+from dbus_next.aio import MessageBus
+from dbus_next.constants import BusType
+from dbus_next import Variant
+import asyncio
+from .debug import debug_log, info_log, error_log
 
-from .debug import info_log, debug_log, error_log
+class DynamicPowerInterface(ServiceInterface):
+    def __init__(self):
+        super().__init__("org.dynamic_power.Daemon")
+        self._state_provider = None
+        self._set_user_profile_cb = None
+        self._set_thresholds_cb = None
 
-BUS_NAME = "org.dynamic_power.Daemon"
-OBJECT_PATH = "/org/dynamic_power/Daemon"
+    def register_state_provider(self, callback):
+        self._state_provider = callback
 
-_set_profile_override = None
-_set_poll_interval = None
-_set_thresholds = None
-_state_iface = None
+    def register_set_user_profile(self, callback):
+        self._set_user_profile_cb = callback
 
-def set_profile_override_callback(cb):
-    global _set_profile_override
-    _set_profile_override = cb
-    debug_log("dbus", "Profile override callback registered")
+    def register_set_load_thresholds(self, callback):
+        self._set_thresholds_cb = callback
 
-def set_poll_interval_callback(cb):
-    global _set_poll_interval
-    _set_poll_interval = cb
-    debug_log("dbus", "Poll interval callback registered")
+    @method()
+    def GetDaemonState(self) -> 'a{sv}':
+        if not self._state_provider:
+            error_log("dbus_interface", "GetDaemonState called with no provider")
+            return {}
+        try:
+            state = self._state_provider()
+            return {
+                "threshold_low": Variant('d', state["thresholds"]["low"]),
+                "threshold_high": Variant('d', state["thresholds"]["high"]),
+                "active_profile": Variant('s', state["active_profile"]),
+            }
+        except Exception as e:
+            error_log("dbus_interface", f"Exception in GetDaemonState: {e}")
+            return {}
 
-def set_thresholds_callback(cb):
-    global _set_thresholds
-    _set_thresholds = cb
-    debug_log("dbus", "Thresholds callback registered")
-
-def set_current_state(profile, low, high):
-    if _state_iface:
-        _state_iface._active_profile = profile
-        _state_iface._threshold_low = float(low)
-        _state_iface._threshold_high = float(high)
-
-class DynamicPowerInterface(dbus.service.Object):
-    def __init__(self, loop):
-        self.loop = loop
-        bus = dbus.SystemBus()
-        bus_name = dbus.service.BusName(BUS_NAME, bus=bus)
-        super().__init__(bus_name, OBJECT_PATH)
-        self._active_profile = None
-        self._threshold_low = None
-        self._threshold_high = None
-        info_log("dbus", f"System DBus service '{BUS_NAME}' registered at {OBJECT_PATH}")
-
-    @dbus.service.method(BUS_NAME, in_signature="", out_signature="a{sv}")
-    def GetDaemonState(self):
-        return {
-            "active_profile": self._active_profile or "unknown",
-            "threshold_low": self._threshold_low or 0.0,
-            "threshold_high": self._threshold_high or 0.0,
-            "timestamp": time.time()
-        }
-
-    @dbus.service.method(BUS_NAME, in_signature="", out_signature="s")
-    def Ping(self):
-        debug_log("dbus", "Ping received")
-        return "Pong from root dynamic_power daemon"
-
-    @dbus.service.method(BUS_NAME, in_signature="s", out_signature="b")
-    def SetProfile(self, profile):
-        debug_log("dbus", f"SetProfile requested: {profile}")
-        if _set_profile_override:
-            _set_profile_override(profile)
+    @method()
+    def SetUserProfile(self, profile: 's') -> 'b':
+        if not self._set_user_profile_cb:
+            error_log("dbus_interface", "SetUserProfile called but no callback registered")
+            return False
+        try:
+            self._set_user_profile_cb(profile)
             return True
-        error_log("dbus", "SetProfile called but no callback registered")
-        return False
+        except Exception as e:
+            error_log("dbus_interface", f"Failed to handle SetUserProfile: {e}")
+            return False
 
-    @dbus.service.method(BUS_NAME, in_signature="u", out_signature="b")
-    def SetPollInterval(self, interval):
-        debug_log("dbus", f"SetPollInterval requested: {interval}")
-        if _set_poll_interval:
-            _set_poll_interval(interval)
-            return True
-        error_log("dbus", "SetPollInterval called but no callback registered")
-        return False
+    @method()
+    def SetLoadThresholds(self, low: 'd', high: 'd') -> '':
+        if not self._set_thresholds_cb:
+            error_log("dbus_interface", "SetLoadThresholds called but no callback registered")
+            return
+        try:
+            self._set_thresholds_cb(low, high)
+        except Exception as e:
+            error_log("dbus_interface", f"Failed to set thresholds: {e}")
 
-    @dbus.service.method(BUS_NAME, in_signature="dd", out_signature="b")
-    def SetLoadThresholds(self, low, high):
-        debug_log("dbus", f"SetLoadThresholds requested: low={low}, high={high}")
-        if _set_thresholds:
-            _set_thresholds(low, high)
-            return True
-        error_log("dbus", "SetLoadThresholds called but no callback registered")
-        return False
 
-def start_dbus_interface():
-    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-    loop = GLib.MainLoop()
-    iface = DynamicPowerInterface(loop)
-
-    thread = threading.Thread(target=loop.run, daemon=True)
-    thread.start()
-    info_log("dbus", "DBus main loop started in background thread")
-    global _state_iface
-    _state_iface = iface
-
-_set_user_profile = None
-
-def set_user_profile_callback(func):
-    global _set_user_profile
-    _set_user_profile = func
-
-@dbus.service.method("org.dynamic_power.Daemon", in_signature="s", out_signature="")
-def SetUserProfile(self, profile):
-    if _set_user_profile:
-        _set_user_profile(profile)
+async def serve_on_dbus(interface: DynamicPowerInterface):
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    bus.export("/org/dynamic_power/Daemon", interface)
+    await bus.request_name("org.dynamic_power.Daemon")
+    info_log("dbus_interface", "org.dynamic_power.Daemon registered on system DBus")
+    return bus  # Return the bus so it can be closed if needed

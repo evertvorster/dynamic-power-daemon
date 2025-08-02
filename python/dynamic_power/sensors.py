@@ -179,3 +179,15 @@ def set_panel_overdrive(enable: bool) -> bool:
     except Exception as e:
         logging.info(f"sensors: Failed to set panel_overdrive via DBus: {e}")
     return False
+
+def asusd_is_running() -> bool:
+    try:
+        out = subprocess.run(
+            ["pgrep", "-x", "asusd"],
+            capture_output=True,
+            text=True,
+            timeout=1
+        )
+        return out.returncode == 0
+    except Exception:
+        return False

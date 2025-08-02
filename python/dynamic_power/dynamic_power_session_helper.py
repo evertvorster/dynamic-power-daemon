@@ -8,7 +8,7 @@ from dynamic_power.sensors import get_panel_overdrive_status, set_panel_overdriv
 from dynamic_power.sensors import set_refresh_rates_for_power
 import asyncio
 from inotify_simple import INotify, flags
-import os, logging, signal, time, dbus, psutil, getpass, sys
+import os, logging, signal, time, psutil, getpass, sys
 from pathlib import Path as _P
 if os.getenv("DYNAMIC_POWER_DEBUG") == "1":
     logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
@@ -245,13 +245,21 @@ async def supervise(proc):
         await asyncio.sleep(3)
         proc = await spawn_user_helper()
 
-def system_dbus_service_available(name):
+from dbus_next.aio import MessageBus
+from dbus_next.constants import BusType
+from dbus_next.errors import DBusError
+
+async def system_dbus_service_available(name: str) -> bool:
     try:
-        bus = dbus.SystemBus()
-        return bus.name_has_owner(name)
-    except Exception as e:
-        logging.info(f"DBus check failed: {e}")
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        return await bus.name_has_owner(name)
+    except DBusError as e:
+        logging.info(f"DBus name check failed: {e}")
         return False
+    except Exception as e:
+        logging.info(f"Unexpected DBus error: {e}")
+        return False
+
 
 
 # ───────────────────────────────────────── main ───

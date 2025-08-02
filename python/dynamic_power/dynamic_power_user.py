@@ -6,7 +6,8 @@ import time
 import yaml
 import psutil
 import types
-import dbus
+from dbus_next.aio import MessageBus
+from dbus_next.constants import BusType
 from inotify_simple import INotify, flags
 import signal
 from systemd import journal
@@ -57,32 +58,48 @@ def load_config():
 
 # ---------------------------------------------------------------------------
 # DBus helpers
-def send_thresholds(bus, low: float, high: float) -> None:
+async def send_thresholds(low: float, high: float) -> None:
     global last_sent_threshold
     if (low, high) == last_sent_threshold and not DEBUG:
         return
     try:
-        daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
-        iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
-        iface.SetLoadThresholds(float(low), float(high))
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        introspect = await bus.introspect("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+        obj = bus.get_proxy_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon", introspect)
+        iface = obj.get_interface("org.dynamic_power.Daemon")
+        await iface.call_set_load_thresholds(float(low), float(high))
         last_sent_threshold = (low, high)
         logging.debug(f"Sent thresholds: low={low}, high={high}")
     except Exception as e:
         logging.debug(f"[send_thresholds] {e}")
 
-def send_profile(bus, profile: str) -> None:
+async def send_profile(profile: str) -> None:
     """Forward a power‑profilesd profile to the root daemon."""
     global last_sent_profile
     if profile == last_sent_profile and not DEBUG:
         return
     try:
-        daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
-        iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
-        iface.SetProfile(profile)
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        introspect = await bus.introspect("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+        obj = bus.get_proxy_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon", introspect)
+        iface = obj.get_interface("org.dynamic_power.Daemon")
+        await iface.call_set_profile(profile)
         last_sent_profile = profile
         logging.info(f"Sent profile override: {profile}")
     except Exception as e:
         logging.info(f"[send_profile] {e}")
+
+async def get_user_override() -> str:
+    try:
+        bus = await MessageBus(bus_type=BusType.SESSION).connect()
+        introspect = await bus.introspect("org.dynamic_power.UserBus", "/")
+        obj = bus.get_proxy_object("org.dynamic_power.UserBus", "/", introspect)
+        iface = obj.get_interface("org.dynamic_power.UserBus")
+        result = await iface.call_get_user_override()
+        return str(result)
+    except Exception as e:
+        logging.info(f"[read_override_from_dbus] {e}")
+        return "Dynamic"    
 
 # ---------------------------------------------------------------------------
 PROFILE_ALIASES = {
@@ -98,7 +115,7 @@ def normalize_profile(name: str) -> str:
     return PROFILE_ALIASES.get(name.lower(), name)
 
 # ---------------------------------------------------------------------------
-def apply_process_policy(bus, name: str, policy: dict, high_th: float) -> None:
+async def apply_process_policy(name: str, policy: dict, high_th: float) -> None:
     """Enforce the policy for the *highest‑priority* matched process."""
     global threshold_override_active, active_profile_process
 
@@ -107,48 +124,37 @@ def apply_process_policy(bus, name: str, policy: dict, high_th: float) -> None:
     # special “responsive” mode – blocks powersave by setting low threshold 0
     if profile == "responsive":
         threshold_override_active = True
-        send_thresholds(bus, 0, high_th)
+        await send_thresholds(0, high_th)
         logging.debug(f"{name} -> prevent_powersave (responsive)")
         return
 
     if profile:
         threshold_override_active = False
         active_profile_process = name
-        send_profile(bus, normalize_profile(profile))
+        await send_profile(normalize_profile(profile))
         logging.debug(f"{name} -> active_profile={profile}")
         return
-
 # ---------------------------------------------------------------------------
-def check_processes(bus, process_overrides, high_th: float) -> None:
+async def check_processes(process_overrides, high_th: float) -> None:
     """Match running processes against the overrides list and act."""
     global last_seen_processes, threshold_override_active, active_profile_process
 
     # honour manual override first
-    try:
-        session_bus = dbus.SessionBus()
-        helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
-        iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-        mode = iface.GetUserOverride()  # ← to be added in a moment
-    except Exception as e:
-        logging.info(f"[read_override_from_dbus] {e}")
-        mode = "Dynamic"
-
-
+    mode = await get_user_override()
     if mode == "Inhibit Powersave":
-        send_thresholds(bus, 0, high_th)
+        await send_thresholds(0, high_th)
         threshold_override_active = True
         logging.debug("Override → Inhibit Powersave")
         return
     elif mode in ["Performance", "Balanced", "Powersave"]:
-        send_profile(bus, normalize_profile(mode))
+        await send_profile(normalize_profile(mode))
         logging.debug(f"Override → {mode}")
         return
     else:
         # ensure any previous override is cleared
         if active_profile_process:
-            send_profile(bus, "")
+            await send_profile("")
             active_profile_process = None
-
     # ------------------------------------------------------------------
     # process matching: only check processes owned by current user
     user_uid = os.getuid()
@@ -180,13 +186,7 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         matches.sort(reverse=True)
         selected_prio, selected_name, selected_policy = matches[0]
         try:
-            session_bus = dbus.SessionBus()
-            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
-            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-
-            iface.GetMetrics()  # sanity ping to ensure connection
-
-            iface.UpdateProcessMatches([
+            await update_process_matches([
                 {
                     "process_name": name,
                     "priority": prio,
@@ -198,18 +198,10 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
 
-        apply_process_policy(bus, selected_name, selected_policy, high_th)
-    #
+        await apply_process_policy(selected_name, selected_policy, high_th)
     else:
-        try:
-            session_bus = dbus.SessionBus()
-            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
-            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-            iface.UpdateProcessMatches([])  # Send empty list to clear matches
-            logging.debug("Sent empty process match list via DBus")
-        except Exception as e:
-            logging.info(f"[dbus_send_empty_matches] {e}")
-
+        await update_process_matches([])
+        logging.debug("Sent empty process match list via DBus")
         if threshold_override_active:
             threshold_override_active = False
             logging.info("No override process active. Resetting thresholds to config.")
@@ -223,13 +215,11 @@ def handle_sigint(signum, frame):
     terminate = True
 
 # ---------------------------------------------------------------------------
-def main():
+async def main():
     global terminate, threshold_override_active
 
     setproctitle("dynamic_power_user")
     signal.signal(signal.SIGINT, handle_sigint)
-
-    bus = dbus.SystemBus()
     config = load_config()
 
     inotify       = INotify()
@@ -256,12 +246,10 @@ def main():
                     last_mtime        = mtime
                     logging.debug("Reloaded config due to mtime change.")
 
-            check_processes(bus, process_overrides, thresholds.get("high", 2.0))
-
+            await check_processes(process_overrides, thresholds.get("high", 2.0))
             if not threshold_override_active:
-                send_thresholds(bus,
-                                thresholds.get("low", 1.0),
-                                thresholds.get("high", 2.0))
+                await send_thresholds(thresholds.get("low", 1.0),
+                                    thresholds.get("high", 2.0))
 
             # event‑driven reload via inotify (no need to update last_mtime)
             for event in inotify.read(timeout=0):
@@ -282,4 +270,5 @@ def main():
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
