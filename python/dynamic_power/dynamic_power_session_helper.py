@@ -136,6 +136,13 @@ class UserBusIface(ServiceInterface):
     def GetUserOverride(self) -> 's':
         return self._manual_override or "Dynamic"
 
+    @method()
+    def UpdateDaemonState(self, profile: 's') -> 'b':
+        self._metrics["active_profile"] = profile
+        logging.debug(f"[UserBusIface] Updated active_profile = {profile}")
+        return True
+
+
     def get_user_override(self):
         return self._manual_override
 
@@ -149,6 +156,8 @@ class UserBusIface(ServiceInterface):
     def update_process_matches(self, matches):
         self._process_matches = matches or []
         logging.debug("[DEBUG] self._process_matches = %s", self._process_matches)
+
+    
 
 
 # ───────────────────────────────────────── loops ───

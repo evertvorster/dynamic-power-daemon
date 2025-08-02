@@ -26,6 +26,7 @@ last_sent_profile         = None
 last_sent_threshold       = None
 threshold_override_active = False
 active_profile_process    = None
+last_manual_override      = None
 
 # ---------------------------------------------------------------------------
 # logging helpers
@@ -72,6 +73,7 @@ def send_thresholds(bus, low: float, high: float) -> None:
 
 def send_profile(bus, profile: str) -> None:
     """Forward a power‑profilesd profile to the root daemon."""
+    logging.debug("[dynamic_power_user][send_profile] sending profile override: %s", profile)
     global last_sent_profile
     if profile == last_sent_profile and not DEBUG:
         return
@@ -81,6 +83,13 @@ def send_profile(bus, profile: str) -> None:
         iface.SetProfile(profile)
         last_sent_profile = profile
         logging.info(f"Sent profile override: {profile}")
+        try:
+            session_bus = dbus.SessionBus()
+            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+            iface.UpdateDaemonState(profile)
+        except Exception as e:
+            logging.debug(f"[send_profile] Failed to update GUI: {e}")
     except Exception as e:
         logging.info(f"[send_profile] {e}")
 
@@ -124,24 +133,41 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
     global last_seen_processes, threshold_override_active, active_profile_process
 
     # honour manual override first
+    logging.debug("[dynamic_power_user][check_processes] called hidden message")
     try:
         session_bus = dbus.SessionBus()
         helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
         iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-        mode = iface.GetUserOverride()  # ← to be added in a moment
-        if mode != "Dynamic":
-            return  # manual override active, skip process matching
+        mode = iface.GetUserOverride()
     except Exception as e:
         logging.info(f"[read_override_from_dbus] {e}")
         mode = "Dynamic"
 
+    mode = str(mode)
+    logging.debug("[dynamic_power_user][check_processes] GetUserOverride() returned: %r", mode)
+    global last_manual_override
+    if mode != last_manual_override:
+        logging.debug("[dynamic_power_user][check_processes] New override received: %s", mode)
+    last_manual_override = mode
+
+    if mode == "Dynamic":
+        logging.debug("[dynamic_power_user][check_processes] Matched Dynamic")
+        if last_sent_profile:
+            send_profile(bus, "")
+            logging.debug("[dynamic_power_user][check_processes] Cleared previous manual override")
+        if threshold_override_active:
+            threshold_override_active = False
+            logging.info("[dynamic_power_user][check_processes] Cleared threshold override")
+        return  # manual override active, skip process matching
 
     if mode == "Inhibit Powersave":
+        logging.debug("[dynamic_power_user][check_processes] Matched Inhibit Powersave")
         send_thresholds(bus, 0, high_th)
         threshold_override_active = True
         logging.debug("Override → Inhibit Powersave")
         return
     elif mode in ["Performance", "Balanced", "Powersave"]:
+        logging.debug("[dynamic_power_user][check_processes] Matched a direct mode")
         send_profile(bus, normalize_profile(mode))
         logging.debug(f"Override → {mode}")
         return
@@ -209,7 +235,9 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
             iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
             iface.UpdateProcessMatches([])  # Send empty list to clear matches
-            iface.SetUserOverride("Dynamic")
+            if last_manual_override == "Dynamic":
+                iface.SetUserOverride("Dynamic")
+                logging.debug("[dynamic_power_user][check_processes] Cleared manual override")
 
             logging.debug("Sent empty process match list via DBus")
         except Exception as e:
@@ -261,6 +289,7 @@ def main():
                     logging.debug("Reloaded config due to mtime change.")
 
             check_processes(bus, process_overrides, thresholds.get("high", 2.0))
+            logging.debug("[dynamic_power_user][main_loop] tick")
 
             if not threshold_override_active:
                 send_thresholds(bus,

@@ -205,7 +205,7 @@ class MainWindow(QtWidgets.QWidget):
         # Power profile button
         self.profile_button = QtWidgets.QPushButton("Dynamic")
         self.profile_menu = QtWidgets.QMenu()
-        for mode in ["Dynamic", "Responsive", "Performance", "Balanced", "Powersave"]:
+        for mode in ["Dynamic", "Inhibit Powersave", "Performance", "Balanced", "Powersave"]:
             self.profile_menu.addAction(mode, lambda m=mode: self.set_profile(m))
         self.profile_button.setMenu(self.profile_menu)
         layout.addWidget(self.profile_button)
@@ -444,7 +444,7 @@ class MainWindow(QtWidgets.QWidget):
 
         profile_button = QtWidgets.QPushButton(proc.get("active_profile", "Dynamic"))
         profile_menu = QtWidgets.QMenu()
-        for mode in ["Dynamic", "Responsive", "Performance", "Balanced", "Powersave"]:
+        for mode in ["Dynamic", "Inhibit Powersave", "Performance", "Balanced", "Powersave"]:
             profile_menu.addAction(mode, lambda m=mode: profile_button.setText(m))
         profile_button.setMenu(profile_menu)
         dlg_layout.addRow("Power Mode", profile_button)
