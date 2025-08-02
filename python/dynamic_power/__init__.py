@@ -5,6 +5,7 @@ import yaml
 import signal
 from . import config, sensors, power_profiles, dbus_interface
 from .debug import info_log, debug_log, error_log, DEBUG_ENABLED
+from inotify_simple import INotify, flags
 try:
     import setproctitle
     setproctitle.setproctitle('dynamic_power')
@@ -39,6 +40,8 @@ def run():
     info_log("main", "dynamic_power: starting daemon loop")
 
     cfg = config.Config()
+    inotify = INotify()
+    watch_fd = inotify.add_watch(cfg.path, flags.MODIFY)
 
     # Start DBus interface
     try:
@@ -63,10 +66,22 @@ def run():
     thresholds = cfg.get_thresholds()
     current_threshold_low = thresholds.get("low", 1.0)
     current_threshold_high = thresholds.get("high", 2.0)
+    # Wait for DBus interface to be ready
+    for _ in range(10):  # wait up to 1 second
+        if dbus_interface._state_iface:
+            break
+        time.sleep(0.1)
+
+    # Set initial state (for DBus access)
+    initial_profile = cfg.get_profile("low", "ac")
+    dbus_interface.set_current_state(initial_profile, current_threshold_low, current_threshold_high)
 
     while not terminate:
-        cfg.reload_if_needed()
-
+        for event in inotify.read(timeout=0):
+            if event.mask & flags.MODIFY:
+                debug_log("main", "Config file modified – reloading")
+                cfg.load()
+       
         if not thresholds_overridden:
             thresholds = cfg.get_thresholds()
             current_threshold_low = thresholds.get("low", 1.0)
@@ -88,7 +103,10 @@ def run():
 
         profile = cfg.get_profile(load_level, power_source)
         power_profiles.set_profile(profile)
+        dbus_interface.set_current_state(profile, current_threshold_low, current_threshold_high)
+
         # Write system state to /run/user/<uid>/dynamic_power_state.yaml
+        ## ---- to be replaced soon
         try:
             uid = os.getuid()
             state_path = f"/run/dynamic_power_state.yaml"
@@ -103,6 +121,8 @@ def run():
                 }, f)
         except Exception as e:
             error_log("main", f"Failed to write state file: {e}")
+
+        # end of file writing block to be removed. 
 
         time.sleep(current_poll_interval)
 

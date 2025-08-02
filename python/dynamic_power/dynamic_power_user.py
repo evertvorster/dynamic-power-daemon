@@ -119,44 +119,20 @@ def apply_process_policy(bus, name: str, policy: dict, high_th: float) -> None:
         return
 
 # ---------------------------------------------------------------------------
-def read_control_override() -> dict:
-    try:
-        uid  = os.getuid()
-        path = f"/run/user/{uid}/dynamic_power_control.yaml"
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return yaml.safe_load(f) or {}
-    except Exception as e:
-        logging.info(f"[read_control_override] {e}")
-    return {}
-
-# ---------------------------------------------------------------------------
-def write_state_file(profile: str, thresholds: dict) -> None:
-    try:
-        uid        = os.getuid()
-        state_file = f"/run/user/{uid}/dynamic_power_state.yaml"
-        state = {
-            "active_profile": profile,
-            "thresholds": {
-                "low":  thresholds.get("low", 1.0),
-                "high": thresholds.get("high", 2.0),
-            },
-            "timestamp": time.time(),
-        }
-        os.makedirs(os.path.dirname(state_file), exist_ok=True)
-        with open(state_file, "w") as f:
-            yaml.dump(state, f)
-    except Exception as e:
-        logging.info(f"[write_state_file] {e}")
-
-# ---------------------------------------------------------------------------
 def check_processes(bus, process_overrides, high_th: float) -> None:
     """Match running processes against the overrides list and act."""
     global last_seen_processes, threshold_override_active, active_profile_process
 
     # honour manual override first
-    override = read_control_override()
-    mode = override.get("manual_override", "Dynamic")
+    try:
+        session_bus = dbus.SessionBus()
+        helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+        iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+        mode = iface.GetUserOverride()  # ← to be added in a moment
+    except Exception as e:
+        logging.info(f"[read_override_from_dbus] {e}")
+        mode = "Dynamic"
+
 
     if mode == "Inhibit Powersave":
         send_thresholds(bus, 0, high_th)
@@ -174,63 +150,71 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             active_profile_process = None
 
     # ------------------------------------------------------------------
-    # process matching
-    running = set((p.info.get("name") or "").lower() for p in psutil.process_iter(attrs=["name"]))
+    # process matching: only check processes owned by current user
+    user_uid = os.getuid()
+
+    # Accept both list and dict format from config
     if isinstance(process_overrides, list):
         proc_map = { (entry.get("process_name") or "").lower(): entry for entry in process_overrides }
     else:
         proc_map = { (k or "").lower(): v for k, v in process_overrides.items() }
 
+    match_names = set(proc_map.keys())
+    running = set()
+
     matches = []
-    for proc_name, policy in proc_map.items():
-        if proc_name and proc_name in running:
-            prio = policy.get("priority", 0)
-            matches.append((prio, proc_name, policy))
-            last_seen_processes.add(proc_name)
-
-    uid        = os.getuid()
-    match_file = f"/run/user/{uid}/dynamic_power_matches.yaml"
-
-    # remove any stale file; will recreate below if needed
-    try:
-        if os.path.exists(match_file):
-            os.remove(match_file)
-    except Exception as e:
-        logging.info(f"[matches_file_remove] {e}")
+    for proc in psutil.process_iter(['name', 'uids']):
+        try:
+            if not proc.info or proc.info['uids'].real != user_uid:
+                continue
+            name = (proc.info.get("name") or "").lower()
+            if name in match_names:
+                running.add(name)
+                policy = proc_map[name]
+                prio = policy.get("priority", 0)
+                matches.append((prio, name, policy))
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
 
     if matches:
-        # select highest‑priority match (max prio)
         matches.sort(reverse=True)
         selected_prio, selected_name, selected_policy = matches[0]
-
-        # write matches file for the UI
         try:
-            match_info = {
-                "matched_processes": [
-                    {
-                        "process_name": name,
-                        "priority": prio,
-                        "active": (name == selected_name),
-                    }
-                    for prio, name, _ in matches
-                ],
-                "timestamp": time.time(),
-            }
-            os.makedirs(os.path.dirname(match_file), exist_ok=True)
-            with open(match_file, "w") as f:
-                yaml.dump(match_info, f)
+            session_bus = dbus.SessionBus()
+            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+
+            iface.GetMetrics()  # sanity ping to ensure connection
+
+            iface.UpdateProcessMatches([
+                {
+                    "process_name": name,
+                    "priority": prio,
+                    "active": (name == selected_name),
+                }
+                for prio, name, _ in matches
+            ])
+            logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
-            logging.info(f"[matches_file_write] {e}")
+            logging.info(f"[dbus_send_matches] {e}")
 
         apply_process_policy(bus, selected_name, selected_policy, high_th)
+    #
     else:
-        # no matches – reset threshold override if it was driven by a process
+        try:
+            session_bus = dbus.SessionBus()
+            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
+            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
+            iface.UpdateProcessMatches([])  # Send empty list to clear matches
+            logging.debug("Sent empty process match list via DBus")
+        except Exception as e:
+            logging.info(f"[dbus_send_empty_matches] {e}")
+
         if threshold_override_active:
             threshold_override_active = False
             logging.info("No override process active. Resetting thresholds to config.")
-
-        # clean out last_seen_processes set
         last_seen_processes &= running
+
 
 # ---------------------------------------------------------------------------
 def handle_sigint(signum, frame):
@@ -278,8 +262,6 @@ def main():
                 send_thresholds(bus,
                                 thresholds.get("low", 1.0),
                                 thresholds.get("high", 2.0))
-
-            write_state_file(last_sent_profile, thresholds)
 
             # event‑driven reload via inotify (no need to update last_mtime)
             for event in inotify.read(timeout=0):

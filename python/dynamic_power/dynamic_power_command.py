@@ -41,8 +41,6 @@ import pyqtgraph as pg
 
 CONFIG_PATH = Path.home() / ".config" / "dynamic_power" / "config.yaml"
 TEMPLATE_PATH = "/usr/share/dynamic-power/dynamic-power-user.yaml"
-STATE_PATH = Path("/run/dynamic_power_state.yaml")
-MATCHES_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_matches.yaml")
 OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 # --- Panel Overdrive Config Helpers ---
@@ -78,6 +76,14 @@ def _save_panel_overdrive(enabled: bool):
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(data, f)
         logging.info("[debug] Config successfully written to disk")
+
+def asusd_is_running():
+    """Check if the Asus DBus service is available (asusd running)."""
+    try:
+        bus = dbus.SystemBus()
+        return bus.name_has_owner("xyz.ljones.Asusd")
+    except Exception:
+        return False
 
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
@@ -219,6 +225,11 @@ class MainWindow(QtWidgets.QWidget):
         pov_layout.addStretch()
         self.panel_overdrive_widget.setLayout(pov_layout)
         layout.insertWidget(2, self.panel_overdrive_widget)
+        # Hide Asus-specific UI if asusd is not running
+        if not asusd_is_running():
+            logging.info("[GUI] asusd not detected. Hiding panel overdrive controls.")
+            self.panel_overdrive_widget.setVisible(False)
+
         # Display Refresh Rates box just below Panel Overdrive
         # --- Display Refresh Rates row (styled like Panel Overdrive) ---
         self.refresh_widget = QtWidgets.QWidget()
@@ -273,17 +284,6 @@ class MainWindow(QtWidgets.QWidget):
         self.graph.addItem(self.high_line)
         self.low_line.sigPositionChangeFinished.connect(self.on_low_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
-
-        # Ensure override file exists with default "Dynamic" mode
-        override_state = {"manual_override": "Dynamic"}
-        try:
-            os.makedirs(OVERRIDE_PATH.parent, exist_ok=True)
-            with open(OVERRIDE_PATH, "w") as f:
-                yaml.dump(override_state, f)
-                logging.debug(f"[debug] Wrote default override state to {OVERRIDE_PATH}")
-        except Exception as e:
-            logging.info(f"Failed to write override state: {e}")
-
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
@@ -326,21 +326,28 @@ class MainWindow(QtWidgets.QWidget):
                     self.power_status_label.setText(label)
 
                     # ✅ Smart refresh polling goes here
-                    current = sensors.get_refresh_info()
-                    if current != getattr(self, "_last_refresh_info", None):
-                        logging.debug("[command] Detected refresh info change: %s", current)
-                        self._last_refresh_info = current.copy()
-                        if current:
-                            text = ", ".join(
-                                f"{screen}: {info.get('current')} Hz"
-                                for screen, info in current.items()
-                            )
-                        else:
-                            text = "Unavailable"
-                        self.refresh_rates_label.setText(text)
-                    else:
-                        logging.debug("[command] Refresh info unchanged")
+                    now = time.monotonic()
+                    if not hasattr(self, "_last_refresh_check_time"):
+                        self._last_refresh_check_time = 0
 
+                    # Only poll kscreen-doctor every 10 seconds
+                    if now - self._last_refresh_check_time >= 10:
+                        self._last_refresh_check_time = now
+
+                        current = sensors.get_refresh_info()
+                        if current != getattr(self, "_last_refresh_info", None):
+                            logging.debug("[command] Detected refresh info change: %s", current)
+                            self._last_refresh_info = current.copy()
+                            if current:
+                                text = ", ".join(
+                                    f"{screen}: {info.get('current')} Hz"
+                                    for screen, info in current.items()
+                                )
+                            else:
+                                text = "Unavailable"
+                            self.refresh_rates_label.setText(text)
+                        else:
+                            logging.debug("[command] Refresh info unchanged")
                 except Exception as e:
                     logging.info(f"DBus GetMetrics or refresh info failed: {e}")
                     self.power_status_label.setText("Power status: Unknown")
@@ -349,30 +356,33 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             logging.info(f"Error updating power status: {e}")
         try:
-            if STATE_PATH.exists():
-                with open(STATE_PATH, "r") as f:
-                    state = yaml.safe_load(f) or {}
-                    thresholds = state.get("thresholds", {})
-                    active_profile = state.get("active_profile", "Unknown")
+            bus = dbus.SystemBus()
+            daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+            iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+            state = iface.GetDaemonState()
 
-                    # Update threshold lines
-                    if "low" in thresholds:
-                        self.low_line.setValue(thresholds["low"])
-                    if "high" in thresholds:
-                        self.high_line.setValue(thresholds["high"])
+            thresholds = {
+                "low": state.get("threshold_low", 1.0),
+                "high": state.get("threshold_high", 2.0),
+            }
+            active_profile = state.get("active_profile", "Unknown")
 
-                    # Check for manual override
-                    if OVERRIDE_PATH.exists():
-                        with open(OVERRIDE_PATH) as of:
-                            override = yaml.safe_load(of) or {}
-                            manual = override.get("manual_override", "")
-                            if manual and manual != "Dynamic":
-                                self.profile_button.setText(f"Mode: {manual}")
-                                return
+            self.low_line.setValue(thresholds["low"])
+            self.high_line.setValue(thresholds["high"])
 
-                    self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+            # Check for manual override
+            if OVERRIDE_PATH.exists():
+                with open(OVERRIDE_PATH) as of:
+                    override = yaml.safe_load(of) or {}
+                    manual = override.get("manual_override", "")
+                    if manual and manual != "Dynamic":
+                        self.profile_button.setText(f"Mode: {manual}")
+                        return
+
+            self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+
         except Exception as e:
-            logging.info(f"Error reading state file: {e}")
+            logging.info(f"[GUI] Failed to read daemon state from DBus: {e}")
 
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")
@@ -485,17 +495,19 @@ class MainWindow(QtWidgets.QWidget):
 
     def update_process_matches(self):
         try:
-            with open(MATCHES_PATH, "r") as f:
-                matches = yaml.safe_load(f) or {}
-                match_list = matches.get("matched_processes", matches if isinstance(matches, list) else [])
-
-                self.matched = {}
-                for item in match_list:
-                    name = item.get("process_name", "").lower()
-                    active = item.get("active", False)
-                    self.matched[name] = "active" if active else "inactive"
+            bus = dbus.SessionBus()
+            helper = bus.get_object('org.dynamic_power.UserBus', '/')
+            iface = dbus.Interface(helper, 'org.dynamic_power.UserBus')
+            matches = iface.GetProcessMatches()
+            self.matched = {}
+            logging.debug(f"[debug] Process match map: {self.matched}")
+            for item in matches:
+                name = str(item.get("process_name", "")).lower()
+                active = bool(item.get("active", False))
+                self.matched[name] = "active" if active else "inactive"
         except Exception as e:
             self.matched = {}
+            logging.info(f"[GUI] Failed to get process matches from DBus: {e}")
 
         active_exists = any(state == 'active' for state in self.matched.values())
         if hasattr(self, 'tray') and self.tray is not None:
@@ -507,6 +519,7 @@ class MainWindow(QtWidgets.QWidget):
                 continue
             name = btn.text().lower()
             state = self.matched.get(name)
+            logging.debug(f"[debug] Checking button '{name}' → state: {state}")
             if state == "active":
                 btn.setStyleSheet("background-color: #FFD700; color: black;")
             elif state == "inactive":

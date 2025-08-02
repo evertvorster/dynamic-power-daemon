@@ -4,7 +4,8 @@ if "--debug" in sys.argv:
     import os
     os.environ["DYNAMIC_POWER_DEBUG"] = "1"
 
-from dynamic_power.sensors import get_panel_overdrive_status, set_refresh_rates_for_power
+from dynamic_power.sensors import get_panel_overdrive_status, set_panel_overdrive
+from dynamic_power.sensors import set_refresh_rates_for_power
 import asyncio
 from inotify_simple import INotify, flags
 import os, logging, signal, time, dbus, psutil, getpass, sys
@@ -71,29 +72,13 @@ def get_battery_percent():
     except (TypeError, ValueError):
         return None
 
-async def set_panel_overdrive(enable: bool):
-    cmd = ["asusctl", "armoury", "panel_overdrive", "1" if enable else "0"]
-    logging.info("Running %s", " ".join(cmd))
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-    except FileNotFoundError as e:
-        logging.debug("asusctl not found in PATH (%s); over‑drive toggle skipped", e)
-        return
-    out, _ = await proc.communicate()
-    if proc.returncode == 0:
-        logging.info("panel_overdrive set to %s", 1 if enable else 0)
-    else:
-        logging.debug("panel_overdrive failed (%s): %s", proc.returncode, out.decode().strip())
-
 # ───────────────────────────────────────── DBus iface ───
 class UserBusIface(ServiceInterface):
     def __init__(self):
         super().__init__("org.dynamic_power.UserBus")
         self._metrics = {}
+        self._process_matches = []
+        self._manual_override = None
 
     @method()
     def Ping(self) -> 's':
@@ -106,11 +91,53 @@ class UserBusIface(ServiceInterface):
             k: (Variant('s', v) if isinstance(v, str)
                 else Variant('d', float(v)))
             for k, v in self._metrics.items()
+            if v is not None
         }
 
     @dbus_signal()
     def PowerStateChanged(self, power_state: 's') -> None:
         pass
+
+    @method()
+    def GetProcessMatches(self) -> 'aa{sv}':  # returns list of dicts
+        return [
+            {
+                "process_name": Variant('s', match.get("process_name", "")),
+                "priority":     Variant('i', match.get("priority", 0)),
+                "active":       Variant('b', match.get("active", False)),
+            }
+            for match in self._process_matches
+        ]
+    
+    @method()
+    def UpdateProcessMatches(self, matches: 'aa{sv}') -> 'b':
+        try:
+            unpacked = []
+            for item in matches:
+                unpacked.append({
+                    "process_name": str(item["process_name"].value),
+                    "priority": int(item["priority"].value),
+                    "active": bool(item["active"].value),
+                })
+            self._process_matches = unpacked
+            logging.debug("Updated process matches via DBus call: %s", unpacked)
+            return True
+        except Exception as e:
+            logging.info(f"[UserBusIface.UpdateProcessMatches] {e}")
+            return False
+
+    @method()
+    def SetUserOverride(self, mode: 's') -> 'b':
+        self._manual_override = mode
+        logging.debug(f"[UserBusIface] Received manual override via DBus: {mode}")
+        return True
+
+    @method()
+    def GetUserOverride(self) -> 's':
+        return self._manual_override or "Dynamic"
+
+    def get_user_override(self):
+        return self._manual_override
 
     def update_metrics(self, m):
         #panel_status = get_panel_overdrive_status()
@@ -118,6 +145,11 @@ class UserBusIface(ServiceInterface):
         #self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
         logging.debug("[DEBUG] self._metrics = %s", self._metrics)
+
+    def update_process_matches(self, matches):
+        self._process_matches = matches or []
+        logging.debug("[DEBUG] self._process_matches = %s", self._process_matches)
+
 
 # ───────────────────────────────────────── loops ───
 async def sensor_loop(iface, cfg_ref, inotify):
@@ -159,8 +191,10 @@ async def sensor_loop(iface, cfg_ref, inotify):
                 if cfg_ref["cfg"].get_panel_overdrive_config().get("enabled", True):
                     logging.debug("[DEBUG] Panel overdrive feature is enabled in config")
                     logging.debug("[DEBUG] Setting panel overdrive to: %s", power_src == "AC")
-                    await set_panel_overdrive(power_src == "AC")
+                    set_panel_overdrive(power_src == "AC")
+                    #time.sleep(1)
                     status = get_panel_overdrive_status()
+                    iface._metrics["panel_overdrive"] = status
                     logging.debug("Verified panel_overdrive status: %s", status)
                 else:
                     status = "Disabled"
@@ -238,8 +272,9 @@ async def main():
     await bus.request_name("org.dynamic_power.UserBus")
 
     #Changed to get the config to be global in this file.
-    from dynamic_power.config import load_config
+    from dynamic_power.config import Config
     cfg_ref = {"cfg": load_config()}
+
     
     # Wait until the system daemon registers its DBus name
     try:

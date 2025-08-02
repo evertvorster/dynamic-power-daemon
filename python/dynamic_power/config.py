@@ -31,14 +31,17 @@ class Config:
     # ───────────────────────────────────────── internal helpers ───
     def _generate_from_default(self):
         try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
             shutil.copy(DEFAULT_TEMPLATE_PATH, self.path)
-            uid = pwd.getpwnam("root").pw_uid
-            gid = grp.getgrnam("root").gr_gid
-            os.chown(self.path, uid, gid)
+            if self.path.startswith("/etc/"):
+                uid = pwd.getpwnam("root").pw_uid
+                gid = grp.getgrnam("root").gr_gid
+                os.chown(self.path, uid, gid)
             info_log("config", f"Default config copied to {self.path}")
         except Exception as e:
             error_log("config", f"Failed to copy default config: {e}")
             sys.exit(1)
+
 
     def _maybe_upgrade(self):
         # future‑proof placeholder

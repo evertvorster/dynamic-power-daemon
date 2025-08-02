@@ -3,6 +3,7 @@ import dbus.service
 import dbus.mainloop.glib
 from gi.repository import GLib
 import threading
+import time
 
 from .debug import info_log, debug_log, error_log
 
@@ -12,6 +13,7 @@ OBJECT_PATH = "/org/dynamic_power/Daemon"
 _set_profile_override = None
 _set_poll_interval = None
 _set_thresholds = None
+_state_iface = None
 
 def set_profile_override_callback(cb):
     global _set_profile_override
@@ -28,13 +30,31 @@ def set_thresholds_callback(cb):
     _set_thresholds = cb
     debug_log("dbus", "Thresholds callback registered")
 
+def set_current_state(profile, low, high):
+    if _state_iface:
+        _state_iface._active_profile = profile
+        _state_iface._threshold_low = float(low)
+        _state_iface._threshold_high = float(high)
+
 class DynamicPowerInterface(dbus.service.Object):
     def __init__(self, loop):
         self.loop = loop
         bus = dbus.SystemBus()
         bus_name = dbus.service.BusName(BUS_NAME, bus=bus)
         super().__init__(bus_name, OBJECT_PATH)
+        self._active_profile = None
+        self._threshold_low = None
+        self._threshold_high = None
         info_log("dbus", f"System DBus service '{BUS_NAME}' registered at {OBJECT_PATH}")
+
+    @dbus.service.method(BUS_NAME, in_signature="", out_signature="a{sv}")
+    def GetDaemonState(self):
+        return {
+            "active_profile": self._active_profile or "unknown",
+            "threshold_low": self._threshold_low or 0.0,
+            "threshold_high": self._threshold_high or 0.0,
+            "timestamp": time.time()
+        }
 
     @dbus.service.method(BUS_NAME, in_signature="", out_signature="s")
     def Ping(self):
@@ -76,6 +96,8 @@ def start_dbus_interface():
     thread = threading.Thread(target=loop.run, daemon=True)
     thread.start()
     info_log("dbus", "DBus main loop started in background thread")
+    global _state_iface
+    _state_iface = iface
 
 _set_user_profile = None
 

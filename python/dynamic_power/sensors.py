@@ -149,21 +149,33 @@ def set_refresh_rates_for_power(power_src: str):
 
 def get_panel_overdrive_status() -> bool | None:
     try:
-        result = subprocess.run(
-            ["asusctl", "armoury", "--help"],
-            capture_output=True, text=True, check=True
-        )
-        lines = result.stdout.splitlines()
-        inside_panel_block = False
-        for line in lines:
-            if "panel_overdrive:" in line:
-                inside_panel_block = True
-            elif inside_panel_block and "current:" in line:
-                if "[0,(1)]" in line:
-                    return True
-                elif "[(0),1]" in line:
-                    return False
-                break
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        logging.info(f"sensors: Failed to query panel overdrive status: {e}")
+        import dbus
+        bus = dbus.SystemBus()
+        obj = bus.get_object("xyz.ljones.Asusd", "/xyz/ljones/asus_armoury/panel_overdrive")
+        props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
+        value = props.Get("xyz.ljones.AsusArmoury", "CurrentValue")
+        return bool(value)
+    except dbus.DBusException as e:
+        logging.info(f"sensors: DBus error querying panel_overdrive: {e}")
+    except Exception as e:
+        logging.info(f"sensors: Failed to get panel_overdrive via DBus: {e}")
     return None
+
+def set_panel_overdrive(enable: bool) -> bool:
+    """
+    Sets the panel overdrive feature using the Asus DBus interface.
+    Returns True if the operation succeeded.
+    """
+    try:
+        import dbus
+        bus = dbus.SystemBus()
+        obj = bus.get_object("xyz.ljones.Asusd", "/xyz/ljones/asus_armoury/panel_overdrive")
+        props = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
+        props.Set("xyz.ljones.AsusArmoury", "CurrentValue", dbus.Int32(1 if enable else 0))
+        logging.info(f"sensors: Set panel_overdrive to {'1' if enable else '0'} via DBus")
+        return True
+    except dbus.DBusException as e:
+        logging.info(f"sensors: DBus error setting panel_overdrive: {e}")
+    except Exception as e:
+        logging.info(f"sensors: Failed to set panel_overdrive via DBus: {e}")
+    return False
