@@ -129,6 +129,8 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
         iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
         mode = iface.GetUserOverride()  # ← to be added in a moment
+        if mode != "Dynamic":
+            return  # manual override active, skip process matching
     except Exception as e:
         logging.info(f"[read_override_from_dbus] {e}")
         mode = "Dynamic"
@@ -194,6 +196,7 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
                 }
                 for prio, name, _ in matches
             ])
+            iface.SetUserOverride(selected_policy.get("mode", "Dynamic").capitalize())
             logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
@@ -206,10 +209,11 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
             iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
             iface.UpdateProcessMatches([])  # Send empty list to clear matches
+            iface.SetUserOverride("Dynamic")
+
             logging.debug("Sent empty process match list via DBus")
         except Exception as e:
             logging.info(f"[dbus_send_empty_matches] {e}")
-
         if threshold_override_active:
             threshold_override_active = False
             logging.info("No override process active. Resetting thresholds to config.")

@@ -192,6 +192,7 @@ class MainWindow(QtWidgets.QWidget):
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_graph)
+        self.timer.timeout.connect(self.update_ui_state)
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
@@ -371,23 +372,37 @@ class MainWindow(QtWidgets.QWidget):
             self.high_line.setValue(thresholds["high"])
 
             # Check for manual override
-            if OVERRIDE_PATH.exists():
-                with open(OVERRIDE_PATH) as of:
-                    override = yaml.safe_load(of) or {}
-                    manual = override.get("manual_override", "")
-                    if manual and manual != "Dynamic":
-                        self.profile_button.setText(f"Mode: {manual}")
-                        return
+            try:
+                requested = "Unknown"
+                if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
+                    requested = self._dbus_iface.GetUserOverride().strip().capitalize()
 
-            self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
+                bus = dbus.SystemBus()
+                daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
+                iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+                state = iface.GetDaemonState()
+                actual = state.get("active_profile", "unknown").replace("-", " ").capitalize()
 
+                self.profile_button.setText(f"Mode: {requested} – {actual}")
+
+                # Highlight manual override modes only
+                if requested in ["Performance", "Balanced", "Powersave"]:
+                    self.profile_button.setStyleSheet("background-color: #4a90e2; color: white;")  # TODO: Replace with system color later
+                else:
+                    self.profile_button.setStyleSheet("")  # Default
+                          
+            except Exception as e:
+                logging.info(f"[GUI] Failed to update profile button: {e}")
+                self.profile_button.setText("Mode: Unknown")
         except Exception as e:
             logging.info(f"[GUI] Failed to read daemon state from DBus: {e}")
 
     def set_profile(self, mode):
-        self.profile_button.setText(f"Mode: {mode}")
-        with open(OVERRIDE_PATH, "w") as f:
-            yaml.dump({"manual_override": mode}, f)
+        if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
+            try:
+                self._dbus_iface.SetUserOverride(mode)
+            except Exception as e:
+                logging.info(f"[GUI] Failed to set override: {e}")
 
     def load_config(self):
         if not CONFIG_PATH.exists():
