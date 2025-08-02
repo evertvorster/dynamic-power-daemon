@@ -6,7 +6,10 @@ import subprocess
 import yaml
 import sys
 import logging
+import threading
 from dbus_next.aio import MessageBus
+from dbus_next.constants import BusType
+from dbus_next import Variant
 import asyncio
 from dynamic_power.sensors import asusd_is_running
 from dynamic_power.config import is_debug_enabled
@@ -180,12 +183,10 @@ class MainWindow(QtWidgets.QWidget):
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state_async()))
+        self.state_timer.timeout.connect(
+            lambda: asyncio.run_coroutine_threadsafe(self.update_ui_state_async(), self._loop)
+        )
         self.state_timer.start(1000)
-        self.match_timer = QtCore.QTimer()
-        self.match_timer.timeout.connect(lambda: asyncio.create_task(self.update_process_matches_async()))
-
-        self.match_timer.start(1000)
 
         # Power profile button
         self.profile_button = QtWidgets.QPushButton("Dynamic")
@@ -270,6 +271,16 @@ class MainWindow(QtWidgets.QWidget):
         self.low_line.sigPositionChangeFinished.connect(self.on_low_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
+        # Setup asyncio loop in background thread
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._loop_thread.start()
+
+        # Patch state_timer to use this loop
+        self.state_timer.timeout.connect(
+            lambda: asyncio.run_coroutine_threadsafe(self.update_ui_state_async(), self._loop)
+        )
+
 
     async def update_ui_state_async(self):
         if not self.isVisible():
@@ -277,7 +288,7 @@ class MainWindow(QtWidgets.QWidget):
 
         # 1. Session bus: GetMetrics()
         try:
-            bus = await MessageBus(bus_type=MessageBus.TYPE_SESSION).connect()
+            bus = await MessageBus(bus_type=BusType.SESSION).connect()
             introspection = await bus.introspect("org.dynamic_power.UserBus", "/")
             obj = bus.get_proxy_object("org.dynamic_power.UserBus", "/", introspection)
             iface = obj.get_interface("org.dynamic_power.UserBus")
@@ -332,23 +343,22 @@ class MainWindow(QtWidgets.QWidget):
 
         # 3. System bus: GetDaemonState()
         try:
-            bus = await MessageBus(bus_type=MessageBus.TYPE_SYSTEM).connect()
+            bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
             introspection = await bus.introspect("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
             obj = bus.get_proxy_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon", introspection)
             iface = obj.get_interface("org.dynamic_power.Daemon")
             state = await iface.call_get_daemon_state()
 
             thresholds = {
-                "low": state.get("threshold_low", 1.0),
-                "high": state.get("threshold_high", 2.0),
-            }
-            active_profile = state.get("active_profile", "Unknown")
-
+                "low": state.get("threshold_low", Variant("d", 1.0)).value,
+                "high": state.get("threshold_high", Variant("d", 2.0)).value,
+                        }
+            active_profile = state.get("active_profile", Variant("s", "unknown")).value
             self.low_line.setValue(thresholds["low"])
             self.high_line.setValue(thresholds["high"])
             self.profile_button.setText(f"Mode: Dynamic – {active_profile}")
         except Exception as e:
-            logging.info(f"[GUI] Failed to read daemon state via dbus-next: {e}")
+            logging.info("[GUI] Failed to read daemon state via dbus-next")
 
     def update_graph(self):
         self.ptr += 1
@@ -362,11 +372,11 @@ class MainWindow(QtWidgets.QWidget):
 
     def set_profile(self, mode):
         self.profile_button.setText(f"Mode: {mode}")
-        asyncio.create_task(self.send_profile_async(mode))
+        asyncio.run_coroutine_threadsafe(self.send_profile_async(mode), self._loop)
 
     async def send_profile_async(self, mode):
         try:
-            bus = await MessageBus(bus_type=MessageBus.TYPE_SYSTEM).connect()
+            bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
             introspection = await bus.introspect("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
             obj = bus.get_proxy_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon", introspection)
             iface = obj.get_interface("org.dynamic_power.Daemon")

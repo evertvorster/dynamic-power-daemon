@@ -6,6 +6,7 @@ import time
 import yaml
 import psutil
 import types
+from dbus_next import Variant
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
 from inotify_simple import INotify, flags
@@ -100,6 +101,30 @@ async def get_user_override() -> str:
     except Exception as e:
         logging.info(f"[read_override_from_dbus] {e}")
         return "Dynamic"    
+
+async def update_process_matches(matches):
+    """
+    Pushes process match data to the UserBus via DBus.
+    Each item must be a dict with process_name, priority, active.
+    """
+    try:
+        bus = await MessageBus(bus_type=BusType.SESSION).connect()
+        introspect = await bus.introspect("org.dynamic_power.UserBus", "/")
+        obj = bus.get_proxy_object("org.dynamic_power.UserBus", "/", introspect)
+        iface = obj.get_interface("org.dynamic_power.UserBus")
+        
+        # Wrap the match data in Variants
+        wrapped = []
+        for m in matches:
+            wrapped.append({
+                "process_name": Variant("s", m.get("process_name", "")),
+                "priority":     Variant("i", m.get("priority", 0)),
+                "active":       Variant("b", m.get("active", False)),
+            })
+        
+        await iface.call_update_process_matches(wrapped)
+    except Exception as e:
+        logging.info(f"[dbus_send_matches] {e}")
 
 # ---------------------------------------------------------------------------
 PROFILE_ALIASES = {
