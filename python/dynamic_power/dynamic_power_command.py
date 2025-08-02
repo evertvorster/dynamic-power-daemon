@@ -77,6 +77,14 @@ def _save_panel_overdrive(enabled: bool):
         yaml.safe_dump(data, f)
         logging.info("[debug] Config successfully written to disk")
 
+def asusd_is_running():
+    """Check if the Asus DBus service is available (asusd running)."""
+    try:
+        bus = dbus.SystemBus()
+        return bus.name_has_owner("xyz.ljones.Asusd")
+    except Exception:
+        return False
+
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
         super().__init__(icon)
@@ -217,6 +225,11 @@ class MainWindow(QtWidgets.QWidget):
         pov_layout.addStretch()
         self.panel_overdrive_widget.setLayout(pov_layout)
         layout.insertWidget(2, self.panel_overdrive_widget)
+        # Hide Asus-specific UI if asusd is not running
+        if not asusd_is_running():
+            logging.info("[GUI] asusd not detected. Hiding panel overdrive controls.")
+            self.panel_overdrive_widget.setVisible(False)
+
         # Display Refresh Rates box just below Panel Overdrive
         # --- Display Refresh Rates row (styled like Panel Overdrive) ---
         self.refresh_widget = QtWidgets.QWidget()
