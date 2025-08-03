@@ -23,6 +23,11 @@ current_poll_interval = 1  # Default, overridden at runtime
 current_threshold_low = 1.0
 current_threshold_high = 2.0
 thresholds_overridden = False  # New flag to track if thresholds were overridden via DBus
+override_is_boss = False # Sometimes the user get what they want, regardless.
+override_profile = None
+override_is_boss = False
+current_profile = None
+current_is_boss = False
 
 def handle_term(signum, frame):
     global terminate
@@ -36,6 +41,8 @@ def run():
     global override_profile, current_poll_interval
     global current_threshold_low, current_threshold_high
     global thresholds_overridden
+    global override_profile, override_is_boss
+    global current_profile, current_is_boss
 
     info_log("main", "dynamic_power: starting daemon loop")
 
@@ -46,7 +53,7 @@ def run():
     # Start DBus interface
     try:
         debug_log("main", "Attempting to start DBus interface...")
-        dbus_interface.set_profile_override_callback(lambda p: set_override(p))
+        dbus_interface.set_profile_override_callback(lambda p, b: set_override(p, b))
         dbus_interface.set_poll_interval_callback(lambda v: set_poll_interval(v))
         dbus_interface.set_thresholds_callback(lambda low, high: set_thresholds(low, high))
         dbus_interface.start_dbus_interface()
@@ -88,8 +95,13 @@ def run():
             current_threshold_high = thresholds.get("high", 2.0)
 
         if override_profile:
-            debug_log("main", f"DBus override active: {override_profile}")
-            power_profiles.set_profile(override_profile)
+            if override_profile == current_profile and override_is_boss == current_is_boss:
+                debug_log("main", f"Override '{override_profile}' already active – skipping")
+            else:
+                debug_log("main", f"Applying override '{override_profile}' (boss={override_is_boss})")
+                power_profiles.set_profile(override_profile)
+                current_profile = override_profile
+                current_is_boss = override_is_boss
             time.sleep(current_poll_interval)
             continue
 
@@ -102,36 +114,20 @@ def run():
         debug_log("main", f"Detected load level: {load_level}")
 
         profile = cfg.get_profile(load_level, power_source)
-        power_profiles.set_profile(profile)
+        if power_source == "battery" and profile != "power-saver" and not override_is_boss:
+            info_log("main", f"Ignoring '{profile}' on battery (not a boss override)")
+        else:
+            power_profiles.set_profile(profile)
         dbus_interface.set_current_state(profile, current_threshold_low, current_threshold_high)
-
-        # Write system state to /run/user/<uid>/dynamic_power_state.yaml
-        ## ---- to be replaced soon
-        try:
-            uid = os.getuid()
-            state_path = f"/run/dynamic_power_state.yaml"
-            with open(state_path, "w") as f:
-                yaml.safe_dump({
-                    "active_profile": profile,
-                    "thresholds": {
-                        "low": current_threshold_low,
-                        "high": current_threshold_high,
-                    },
-                    "timestamp": time.time()
-                }, f)
-        except Exception as e:
-            error_log("main", f"Failed to write state file: {e}")
-
-        # end of file writing block to be removed. 
-
         time.sleep(current_poll_interval)
 
     info_log("main", "dynamic_power shut down cleanly.")
 
-def set_override(profile):
-    global override_profile
+def set_override(profile, is_boss=False):
+    global override_profile, override_is_boss
     override_profile = profile
-    info_log("main", f"DBus override set: {profile}")
+    override_is_boss = is_boss
+    info_log("main", f"DBus override set: {profile} (boss={is_boss})")
 
 def set_poll_interval(interval):
     global current_poll_interval

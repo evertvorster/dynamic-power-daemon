@@ -61,11 +61,11 @@ class DynamicPowerInterface(dbus.service.Object):
         debug_log("dbus", "Ping received")
         return "Pong from root dynamic_power daemon"
 
-    @dbus.service.method(BUS_NAME, in_signature="s", out_signature="b")
-    def SetProfile(self, profile):
+    @dbus.service.method(BUS_NAME, in_signature="sb", out_signature="b")
+    def SetProfile(self, profile, is_user_override):
         debug_log("dbus", f"SetProfile requested: {profile}")
         if _set_profile_override:
-            _set_profile_override(profile)
+            _set_profile_override(profile, is_user_override)
             return True
         error_log("dbus", "SetProfile called but no callback registered")
         return False
@@ -104,8 +104,3 @@ _set_user_profile = None
 def set_user_profile_callback(func):
     global _set_user_profile
     _set_user_profile = func
-
-@dbus.service.method("org.dynamic_power.Daemon", in_signature="s", out_signature="")
-def SetUserProfile(self, profile):
-    if _set_user_profile:
-        _set_user_profile(profile)

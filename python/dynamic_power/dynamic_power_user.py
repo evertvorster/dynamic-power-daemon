@@ -27,6 +27,7 @@ last_sent_threshold       = None
 threshold_override_active = False
 active_profile_process    = None
 last_manual_override      = None
+last_process_policy       = None
 
 # ---------------------------------------------------------------------------
 # logging helpers
@@ -60,8 +61,6 @@ def load_config():
 # DBus helpers
 def send_thresholds(bus, low: float, high: float) -> None:
     global last_sent_threshold
-    if (low, high) == last_sent_threshold and not DEBUG:
-        return
     try:
         daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
         iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
@@ -71,18 +70,18 @@ def send_thresholds(bus, low: float, high: float) -> None:
     except Exception as e:
         logging.debug(f"[send_thresholds] {e}")
 
-def send_profile(bus, profile: str) -> None:
+def send_profile(bus, profile: str, is_user: bool = False) -> None:
     """Forward a power‑profilesd profile to the root daemon."""
-    logging.debug("[dynamic_power_user][send_profile] sending profile override: %s", profile)
+    logging.debug("[dynamic_power_user][send_profile] sending profile override: %s (boss=%s)", profile, is_user)
     global last_sent_profile
     if profile == last_sent_profile and not DEBUG:
         return
     try:
         daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
-        iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
-        iface.SetProfile(profile)
+        iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
+        iface.SetProfile(profile, is_user)
         last_sent_profile = profile
-        logging.info(f"Sent profile override: {profile}")
+        logging.info(f"Sent profile override: {profile} (boss={is_user})")
         try:
             session_bus = dbus.SessionBus()
             helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
@@ -107,76 +106,44 @@ def normalize_profile(name: str) -> str:
     return PROFILE_ALIASES.get(name.lower(), name)
 
 # ---------------------------------------------------------------------------
-def apply_process_policy(bus, name: str, policy: dict, high_th: float) -> None:
-    """Enforce the policy for the *highest‑priority* matched process."""
-    global threshold_override_active, active_profile_process
-
-    profile = (policy.get("active_profile") or "").lower()
-
-    # special “responsive” mode – blocks powersave by setting low threshold 0
-    if profile == "responsive":
-        threshold_override_active = True
-        send_thresholds(bus, 0, high_th)
-        logging.debug(f"{name} -> prevent_powersave (responsive)")
-        return
-
-    if profile:
-        threshold_override_active = False
-        active_profile_process = name
-        send_profile(bus, normalize_profile(profile))
-        logging.debug(f"{name} -> active_profile={profile}")
-        return
-
-# ---------------------------------------------------------------------------
 def check_processes(bus, process_overrides, high_th: float) -> None:
     """Match running processes against the overrides list and act."""
     global last_seen_processes, threshold_override_active, active_profile_process
-
-    # honour manual override first
-    logging.debug("[dynamic_power_user][check_processes] called hidden message")
+    # Get the mode from DBus
+    logging.debug("[User][check_processes] called hidden message")
     try:
         session_bus = dbus.SessionBus()
         helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
         iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
         mode = iface.GetUserOverride()
     except Exception as e:
-        logging.info(f"[read_override_from_dbus] {e}")
+        logging.info(f"[User][read_override_from_dbus] {e}")
         mode = "Dynamic"
+    mode = str(mode).strip() # Convert Mode to a string
+    logging.debug("[User][check_processes] GetUserOverride() returned: %r", mode)
+    is_user = (mode != "Dynamic") # Set the flag to whether this is a user override. 
 
-    mode = str(mode)
-    logging.debug("[dynamic_power_user][check_processes] GetUserOverride() returned: %r", mode)
+    # Check if the override has changed. # Just emits a message for now... 
     global last_manual_override
-    if mode != last_manual_override:
-        logging.debug("[dynamic_power_user][check_processes] New override received: %s", mode)
-    last_manual_override = mode
-
-    if mode == "Dynamic":
-        logging.debug("[dynamic_power_user][check_processes] Matched Dynamic")
+    mode_changed =(mode != last_manual_override) # Sets a bool to use later.
+    if mode_changed:
+        logging.debug("[User][check_processes] New override received: %s", mode)
+        last_manual_override = mode
+    if not is_user and mode_changed:
+        # User switched back to Dynamic — clear any manual override
+        logging.debug("[User][check_processes] Matched Dynamic")
         if last_sent_profile:
             send_profile(bus, "")
-            logging.debug("[dynamic_power_user][check_processes] Cleared previous manual override")
+            logging.debug("[User][check_processes] Cleared previous manual override")
         if threshold_override_active:
             threshold_override_active = False
-            logging.info("[dynamic_power_user][check_processes] Cleared threshold override")
-        return  # manual override active, skip process matching
-
-    if mode == "Inhibit Powersave":
-        logging.debug("[dynamic_power_user][check_processes] Matched Inhibit Powersave")
+            logging.info("[User][check_processes] Cleared threshold override")
+    
+    if mode == "Inhibit Powersave" and mode_changed and is_user:
+        logging.debug("[User][check_processes] Matched Inhibit Powersave")
         send_thresholds(bus, 0, high_th)
         threshold_override_active = True
-        logging.debug("Override → Inhibit Powersave")
-        return
-    elif mode in ["Performance", "Balanced", "Powersave"]:
-        logging.debug("[dynamic_power_user][check_processes] Matched a direct mode")
-        send_profile(bus, normalize_profile(mode))
-        logging.debug(f"Override → {mode}")
-        return
-    else:
-        # ensure any previous override is cleared
-        if active_profile_process:
-            send_profile(bus, "")
-            active_profile_process = None
-
+    
     # ------------------------------------------------------------------
     # process matching: only check processes owned by current user
     user_uid = os.getuid()
@@ -227,7 +194,26 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
 
-        apply_process_policy(bus, selected_name, selected_policy, high_th)
+        # selected_policy now contains ony of the valid policies
+        # User override !!!
+        if is_user:
+            selected_policy = {"mode": mode}
+        # Check to see if it had changed. 
+        global last_process_policy
+
+        if selected_policy != last_process_policy:
+            last_process_policy = selected_policy.copy()
+            # Proceed to apply the new policy
+            # This one is special, it sets thresholds. 
+            selected_mode = selected_policy.get("mode", "Dynamic")
+            if selected_mode == "Inhibit Powersave":
+                logging.debug("[User][check_processes]: process match powersave inhibit")
+                send_thresholds(bus, 0, high_th)
+                threshold_override_active = True
+            if selected_mode in ["Inhibit Powersave", "Dynamic"]:
+                return
+            selected_mode = selected_mode.lower()
+            send_profile(bus, selected_mode, is_user)
     #
     else:
         try:
@@ -235,17 +221,24 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
             iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
             iface.UpdateProcessMatches([])  # Send empty list to clear matches
-            if last_manual_override == "Dynamic":
+            if mode_changed and mode == "Dynamic":
                 iface.SetUserOverride("Dynamic")
-                logging.debug("[dynamic_power_user][check_processes] Cleared manual override")
+                logging.debug("[User][check_processes]: Cleared manual override")
 
-            logging.debug("Sent empty process match list via DBus")
+            logging.debug("[User][check_processes]:Sent empty process match list via DBus")
         except Exception as e:
-            logging.info(f"[dbus_send_empty_matches] {e}")
-        if threshold_override_active:
+            logging.info(f"[User][check_processes]:BDus_send_empty_matches {e}")
+        if not is_user and threshold_override_active:
             threshold_override_active = False
-            logging.info("No override process active. Resetting thresholds to config.")
+            logging.info("[User][check_processes]:No override process active. Resetting thresholds to config.")
+        # If a user override is active, and it's not handled elsewhere (e.g., no match),
+        # send the profile manually.
+        if is_user and mode not in ["Inhibit Powersave", "Dynamic"]:
+            send_profile(bus, mode.lower(), is_user=True)
         last_seen_processes &= running
+
+    # Tail recursive bits go here.
+
 
 
 # ---------------------------------------------------------------------------
