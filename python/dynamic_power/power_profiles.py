@@ -31,16 +31,27 @@ def get_current_profile():
         error_log("power_profiles", f"Failed to get current profile: {e}")
         return None
 
-def set_profile(profile_name):
+def set_profile(profile_name, retries=2, delay=0.2):
     actual_profile = normalize_profile(profile_name)
     current = get_current_profile()
     if current == actual_profile:
-        return  # Already active
-    try:
-        subprocess.check_call(["powerprofilesctl", "set", actual_profile])
-        info_log("power_profiles", f"Switched to profile: {actual_profile}")
-    except Exception as e:
-        error_log("power_profiles", f"Failed to set profile '{actual_profile}': {e}")
+        debug_log("power_profiles", f"Profile '{actual_profile}' already active – skipping")
+        return
+
+    for attempt in range(1, retries + 2):  # 1 initial try + N retries
+        try:
+            subprocess.check_call(["powerprofilesctl", "set", actual_profile])
+            time.sleep(delay)
+            confirmed = get_current_profile()
+            if confirmed == actual_profile:
+                info_log("power_profiles", f"Switched to profile: {actual_profile} (confirmed on attempt {attempt})")
+                return
+            else:
+                debug_log("power_profiles", f"Attempt {attempt}: profile still '{confirmed}', expected '{actual_profile}'")
+        except Exception as e:
+            error_log("power_profiles", f"Attempt {attempt} failed to set profile '{actual_profile}': {e}")
+
+    error_log("power_profiles", f"Failed to confirm profile '{actual_profile}' after {retries + 1} attempts")
 
 def set_profiles(profile_name):
     set_profile(profile_name)

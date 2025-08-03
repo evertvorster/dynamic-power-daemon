@@ -114,11 +114,12 @@ def run():
         debug_log("main", f"Detected load level: {load_level}")
 
         profile = cfg.get_profile(load_level, power_source)
-        if power_source == "battery" and profile != "power-saver" and not override_is_boss:
+        if power_source == "battery" and profile in ["performance", "balanced"] and not override_is_boss:
             info_log("main", f"Ignoring '{profile}' on battery (not a boss override)")
         else:
             power_profiles.set_profile(profile)
-        dbus_interface.set_current_state(profile, current_threshold_low, current_threshold_high)
+            current_profile = profile
+            current_is_boss = override_is_boss
         time.sleep(current_poll_interval)
 
     info_log("main", "dynamic_power shut down cleanly.")
