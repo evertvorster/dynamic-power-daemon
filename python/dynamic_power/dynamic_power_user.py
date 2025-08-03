@@ -61,6 +61,8 @@ def load_config():
 # DBus helpers
 def send_thresholds(bus, low: float, high: float) -> None:
     global last_sent_threshold
+    if last_sent_threshold == (low, high):
+            return  # Skip redundant sends       
     try:
         daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
         iface  = dbus.Interface(daemon, "org.dynamic_power.Daemon")
@@ -189,7 +191,7 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
                 }
                 for prio, name, _ in matches
             ])
-            iface.SetUserOverride(selected_policy.get("mode", "Dynamic").capitalize())
+            iface.SetUserOverride(selected_policy.get("mode", "Dynamic").title())
             logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
@@ -205,12 +207,14 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
             last_process_policy = selected_policy.copy()
             # Proceed to apply the new policy
             # This one is special, it sets thresholds. 
-            selected_mode = selected_policy.get("mode", "Dynamic")
+            selected_mode = selected_policy.get("active_profile", "Dynamic").title()
             if selected_mode == "Inhibit Powersave":
                 logging.debug("[User][check_processes]: process match powersave inhibit")
                 send_thresholds(bus, 0, high_th)
                 threshold_override_active = True
-            if selected_mode in ["Inhibit Powersave", "Dynamic"]:
+            # Throw out any invalid profiles.
+            if selected_mode not in ["Performance", "Balanced", "Powersave"]:
+                logging.debug(f"[User][check_processes] Ignoring invalid profile: {selected_mode!r}")
                 return
             selected_mode = selected_mode.lower()
             send_profile(bus, selected_mode, is_user)

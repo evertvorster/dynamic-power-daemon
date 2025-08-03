@@ -375,13 +375,13 @@ class MainWindow(QtWidgets.QWidget):
             try:
                 requested = "Unknown"
                 if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
-                    requested = self._dbus_iface.GetUserOverride().strip().capitalize()
+                    requested = self._dbus_iface.GetUserOverride().strip().title()
 
                 bus = dbus.SystemBus()
                 daemon = bus.get_object("org.dynamic_power.Daemon", "/org/dynamic_power/Daemon")
                 iface = dbus.Interface(daemon, "org.dynamic_power.Daemon")
                 state = iface.GetDaemonState()
-                actual = state.get("active_profile", "unknown").replace("-", " ").capitalize()
+                actual = state.get("active_profile", "unknown").replace("-", " ").title()
 
                 self.profile_button.setText(f"Mode: {requested} – {actual}")
 
@@ -442,7 +442,9 @@ class MainWindow(QtWidgets.QWidget):
         name_edit = QtWidgets.QLineEdit(proc.get("process_name", ""))
         dlg_layout.addRow("Process Name", name_edit)
 
-        profile_button = QtWidgets.QPushButton(proc.get("active_profile", "Dynamic"))
+        raw = proc.get("active_profile", "dynamic")
+        label = raw.replace("-", " ").title()
+        profile_button = QtWidgets.QPushButton(label)       
         profile_menu = QtWidgets.QMenu()
         for mode in ["Dynamic", "Inhibit Powersave", "Performance", "Balanced", "Powersave"]:
             profile_menu.addAction(mode, lambda m=mode: profile_button.setText(m))
