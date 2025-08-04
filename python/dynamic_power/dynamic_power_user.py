@@ -187,12 +187,13 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
                 {
                     "process_name": name,
                     "priority": prio,
-                    "active": (name == selected_name),
+                    "active": (name == selected_name) and not is_user,
                 }
                 for prio, name, _ in matches
             ])
-            iface.SetUserOverride(selected_policy.get("mode", "Dynamic").title())
-            logging.debug("Sent process matches via DBus to UserBus")
+            if not is_user:
+                iface.SetUserOverride(selected_policy.get("mode", "Dynamic").title())
+                logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
 
@@ -203,7 +204,7 @@ def check_processes(bus, process_overrides, high_th: float) -> None:
         # Check to see if it had changed. 
         global last_process_policy
 
-        if selected_policy != last_process_policy:
+        if not is_user and selected_policy != last_process_policy:
             last_process_policy = selected_policy.copy()
             # Proceed to apply the new policy
             # This one is special, it sets thresholds. 
