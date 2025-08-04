@@ -11,7 +11,7 @@
 - **CPU power profiles (performance, balanced, powersave)**
 - **Panel overdrive (Asus laptops)**
 - **Display refresh rates**
-- **Desktop panel auto-hide (KDE)**
+- **Desktop panel auto-hide (KDE)** <- Coming soon!
 
 It monitors system load, power source, and running applications to deliver the optimal performance or power saving profile — automatically, or with user control.
 
