@@ -386,10 +386,14 @@ class MainWindow(QtWidgets.QWidget):
                 self.profile_button.setText(f"Mode: {requested} – {actual}")
 
                 # Highlight manual override modes only
-                if requested in ["Performance", "Balanced", "Powersave"]:
-                    self.profile_button.setStyleSheet("background-color: #4a90e2; color: white;")  # TODO: Replace with system color later
+                if requested != "Dynamic":
+                    palette = self.profile_button.palette()
+                    bg = palette.color(QtGui.QPalette.ColorRole.Highlight)
+                    fg = palette.color(QtGui.QPalette.ColorRole.HighlightedText)
+                    self.profile_button.setStyleSheet(f"background-color: {bg.name()}; color: {fg.name()};")
                 else:
-                    self.profile_button.setStyleSheet("")  # Default
+                    self.profile_button.setStyleSheet("")
+
                           
             except Exception as e:
                 logging.info(f"[GUI] Failed to update profile button: {e}")
@@ -522,7 +526,6 @@ class MainWindow(QtWidgets.QWidget):
             iface = dbus.Interface(helper, 'org.dynamic_power.UserBus')
             matches = iface.GetProcessMatches()
             self.matched = {}
-            logging.debug(f"[debug] Process match map: {self.matched}")
             for item in matches:
                 name = str(item.get("process_name", "")).lower()
                 active = bool(item.get("active", False))
@@ -541,11 +544,20 @@ class MainWindow(QtWidgets.QWidget):
                 continue
             name = btn.text().lower()
             state = self.matched.get(name)
-            logging.debug(f"[debug] Checking button '{name}' → state: {state}")
+            palette = btn.palette()
+
             if state == "active":
-                btn.setStyleSheet("background-color: #FFD700; color: black;")
+                bg = palette.color(QtGui.QPalette.ColorRole.Highlight)
+                fg = palette.color(QtGui.QPalette.ColorRole.HighlightedText)
+                btn.setStyleSheet(f"background-color: {bg.name()}; color: {fg.name()};")
+
             elif state == "inactive":
-                btn.setStyleSheet("background-color: #FFFACD;")
+                base = palette.color(QtGui.QPalette.ColorRole.Base)
+                highlight = palette.color(QtGui.QPalette.ColorRole.Highlight)
+                bg = highlight.lighter(140)  # 140% lighter highlight
+                fg = palette.color(QtGui.QPalette.ColorRole.Text)
+                btn.setStyleSheet(f"background-color: {bg.name()}; color: {fg.name()};")
+
             else:
                 btn.setStyleSheet("")
     def on_low_drag_finished(self):
