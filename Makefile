@@ -49,7 +49,12 @@ install:
 		"$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
 
 	@echo "# --- Icon -----------------------------------------------------------"
-	install -Dm644 $(RESOURCE_DIR)/dynamic-power.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.default_ac.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.default_ac.svg"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.default_battery.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.default_battery.svg"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.match_ac.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.match_ac.svg"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.match_battery.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.match_battery.svg"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.override_ac.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.override_ac.svg"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.override_battery.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.override_battery.svg"
 
 	@echo "# --- YAML templates ------------------------------------------------"
 	install -Dm644 $(TEMPLATE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
@@ -65,5 +70,10 @@ uninstall:
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
-	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic-power.svg"
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.default_ac.svg"
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.default_battery.svg"
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.match_ac.svg"
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.match_battery.svg"
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.override_ac.svg"
+	@rm -vf "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.override_battery.svg"
 	@echo "Uninstall complete."

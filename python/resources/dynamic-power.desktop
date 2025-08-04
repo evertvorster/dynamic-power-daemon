@@ -2,7 +2,7 @@
 Name=Dynamic Power
 Comment=Dynamic system power management and tray UI
 Exec=dynamic_power_session_helper
-Icon=dynamic-power.svg
+Icon=dynamic_power.default_ac.svg
 Type=Application
 Categories=System;Utility;Tray;
 StartupNotify=false
