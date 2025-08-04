@@ -9,7 +9,6 @@
 `dynamic-power-daemon` is a lightweight power management suite for Linux systems that dynamically adjusts:
 
 - **CPU power profiles (performance, balanced, powersave)**
-- **Energy Performance Preference (EPP) values**
 - **Panel overdrive (Asus laptops)**
 - **Display refresh rates**
 - **Desktop panel auto-hide (KDE)**
@@ -37,7 +36,7 @@ It monitors system load, power source, and running applications to deliver the o
 ✅ Power source triggers:
 - Enable/disable **panel overdrive** (Asus only)
 - Set **display refresh rates** (e.g. 144 Hz → 60 Hz on battery)
-- Auto-hide desktop panel in KDE (optional)
+- Auto-hide desktop panel in KDE (optional) - coming soon!
 
 ✅ Manual override via tray icon:
 - One-click switch to Performance / Balanced / Powersave
@@ -85,7 +84,7 @@ sudo systemctl enable --now dynamic_power.service
 Start the GUI controller from your user session:
 
 ```bash
-dynamic_power_command &
+dynamic_power_session_helper &
 ```
 
 ---
@@ -174,21 +173,23 @@ dynamic_power_session_helper --debug
 ## 🧷 Dependencies
 
 The following system packages are required:
+-  'python'
+-  'python-dbus'
+-  'python-psutil'
+-  'python-pyqt6'
+-  'python-pyqtgraph'
+-  'python-pyyaml'
+-  'python-inotify-simple'
+-  'python-setproctitle'
+-  'python-dbus-next'
+-  'python-systemd'
+-  'qt6-base'
+-  'qt6-tools'
+-  'power-profiles-daemon'
+-  'kscreen'
 
-- `python`
-- `python-dbus`
-- `python-psutil`
-- `python-pyqt6`
-- `python-pyqt6-qt6`
-- `python-pyqtgraph`
-- `python-pyyaml`
-- `python-inotify`
-- `python-setproctitle`
-- `python-dbus-next`
-- `kscreen`
-- `asusctl` (optional, for panel overdrive)
-- `qt6-base`
-- `qt6-tools`
+optionally:
+'asusctl: panel overdrive toggle on Asus laptops'
 
 ---
 
