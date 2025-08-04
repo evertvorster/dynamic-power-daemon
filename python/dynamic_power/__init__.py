@@ -141,3 +141,9 @@ def set_thresholds(low, high):
     current_threshold_high = max(current_threshold_low + 0.1, float(high))
     thresholds_overridden = True
     info_log("main", f"Thresholds updated via DBus: low={current_threshold_low}, high={current_threshold_high}")
+     # FIX: Update DBus state 
+    dbus_interface.set_current_state(
+        current_profile or "unknown",
+        current_threshold_low,
+        current_threshold_high
+    )

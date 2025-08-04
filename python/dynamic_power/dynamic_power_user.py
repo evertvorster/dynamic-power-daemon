@@ -272,6 +272,11 @@ def main():
 
     logging.info("dynamic_power_user started.")
 
+    # Send config thresholds once at startup
+    send_thresholds(bus,
+        thresholds.get("low", 1.0),
+        thresholds.get("high", 2.0))
+        
     while not terminate:
         try:
             # hot‑reload config when mtime changes (fallback polling)
