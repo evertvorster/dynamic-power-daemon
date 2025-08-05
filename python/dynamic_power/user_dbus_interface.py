@@ -9,12 +9,11 @@ Used by dynamic_power_user and dynamic_power_command to send and receive DBus me
 
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
-from dbus_next.proxy_object import ProxyInterface
 from dbus_next import Variant
 import asyncio
 
 class UserBusClient:
-    def __init__(self, iface: ProxyInterface):
+    def __init__(self, iface):
         self.iface = iface
         self._power_state_handler = None
 
@@ -26,8 +25,14 @@ class UserBusClient:
         iface = obj.get_interface("org.dynamic_power.UserBus")
         client = cls(iface)
 
-        # Optional: connect signal handler if user sets one
-        iface.on_power_state_changed(lambda s: client._handle_power_state(s))
+        # Optional: connect signal handler if introspection is correct
+        try:
+            iface.on_power_state_changed(lambda s: client._handle_power_state(s))
+        except TypeError as e:
+            # Fallback for broken introspection (usually reports 0 args)
+            import logging
+            logging.debug(f"user_dbus_interface: Could not bind PowerStateChanged signal: {e}")
+
         return client
 
     def _handle_power_state(self, state):

@@ -6,6 +6,8 @@ import time
 import yaml
 import psutil
 import types
+import asyncio
+from dynamic_power.user_dbus_interface import UserBusClient
 import dbus
 from inotify_simple import INotify, flags
 import signal
@@ -108,16 +110,13 @@ def normalize_profile(name: str) -> str:
     return PROFILE_ALIASES.get(name.lower(), name)
 
 # ---------------------------------------------------------------------------
-def check_processes(bus, process_overrides, high_th: float) -> None:
+async def check_processes(bus, client, process_overrides, high_th: float) -> None:
     """Match running processes against the overrides list and act."""
     global last_seen_processes, threshold_override_active, active_profile_process
     # Get the mode from DBus
-    logging.debug("[User][check_processes] called hidden message")
+    logging.debug("[User][check_processes] calling get_user_override()")
     try:
-        session_bus = dbus.SessionBus()
-        helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
-        iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-        mode = iface.GetUserOverride()
+        mode = await client.get_user_override()
     except Exception as e:
         logging.info(f"[User][read_override_from_dbus] {e}")
         mode = "Dynamic"
@@ -253,8 +252,9 @@ def handle_sigint(signum, frame):
     terminate = True
 
 # ---------------------------------------------------------------------------
-def main():
+async def main():
     global terminate, threshold_override_active
+    client = await UserBusClient.connect()
 
     setproctitle("dynamic_power_user")
     signal.signal(signal.SIGINT, handle_sigint)
@@ -291,7 +291,7 @@ def main():
                     last_mtime        = mtime
                     logging.debug("Reloaded config due to mtime change.")
 
-            check_processes(bus, process_overrides, thresholds.get("high", 2.0))
+            await check_processes(bus, client, process_overrides, thresholds.get("high", 2.0))
             logging.debug("[dynamic_power_user][main_loop] tick")
 
             if not threshold_override_active:
@@ -308,14 +308,15 @@ def main():
                     process_overrides = config.get("process_overrides", {})
                     logging.debug("Reloaded config via inotify.")
 
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
 
         except Exception as e:
             logging.info(f"[main_loop] {e}")
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
 
     logging.info("dynamic_power_user exited cleanly.")
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
