@@ -57,26 +57,26 @@ def _load_panel_overdrive():
 
 def _save_panel_overdrive(enabled: bool):
     """Persist features.panel_overdrive to user config file."""
-    logging.debug(f"[debug] Called _save_panel_overdrive with enabled={enabled}")
-    logging.debug(f"[debug] Target config path: {CONFIG_PATH}")
+    logging.debug(f"[GUI][_save_panel_overdrive] Called _save_panel_overdrive with enabled={enabled}")
+    logging.debug(f"[GUI][_save_panel_overdrive] Target config path: {CONFIG_PATH}")
     try:
         with open(CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f) or {}
-            logging.debug(f"[debug] Loaded existing config: {data}")
+            logging.debug(f"[GUI][_save_panel_overdrive] Loaded existing config: {data}")
     except FileNotFoundError:
         data = {}
-        logging.info("[debug] Config file not found, starting with empty config")
+        logging.info("[GUI][_save_panel_overdrive] Config file not found, starting with empty config")
 
     if not isinstance(data.get("features"), dict):
         data["features"] = {}
-        logging.info("[debug] Created new 'features' section")
+        logging.info("[GUI][_save_panel_overdrive] Created new 'features' section")
 
     data["features"]["auto_panel_overdrive"] = bool(enabled)
-    logging.info(f"[debug] Updated config value: {data['features']}")
+    logging.info(f"[GUI][_save_panel_overdrive] Updated config value: {data['features']}")
     os.makedirs(CONFIG_PATH.parent, exist_ok=True)
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(data, f)
-        logging.info("[debug] Config successfully written to disk")
+        logging.info("[GUI][_save_panel_overdrive] Config successfully written to disk")
 
 def asusd_is_running():
     """Check if the Asus DBus service is available (asusd running)."""
@@ -161,38 +161,38 @@ class MainWindow(QtWidgets.QWidget):
         self.tray.set_icon_by_name(name)
 
     def _on_auto_panel_overdrive_toggled(self, state):
-        logging.debug(f"[debug] Toggle clicked – state: {state}")
+        logging.debug(f"[GUI][_on_auto_panel_overdrive_toggled] Toggle clicked – state: {state}")
         auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
-        logging.debug(f"[debug] Resolved auto_enabled = {auto_enabled}")
+        logging.debug(f"[GUI][_on_auto_panel_overdrive_toggled] Resolved auto_enabled = {auto_enabled}")
         self.auto_panel_overdrive_status_label.setText("On" if auto_enabled else "Off")
         if hasattr(self, "config"):
             if not isinstance(self.config.get("features"), dict):
                 self.config["features"] = {}
             self.config["features"]["auto_panel_overdrive"] = auto_enabled
-            logging.debug("[debug] Updating config")
+            logging.debug("[GUI][_on_auto_panel_overdrive_toggled] Updating config")
         _save_panel_overdrive(auto_enabled)
 
     def _on_auto_refresh_toggled(self, state):
-        logging.debug(f"[debug] Refresh toggle clicked – state: {state}")
+        logging.debug(f"[GUI][_on_auto_refresh_toggled] Refresh toggle clicked – state: {state}")
         auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
-        logging.debug(f"[debug] Resolved auto_refresh_enabled = {auto_enabled}")
+        logging.debug(f"[GUI][_on_auto_refresh_toggled] Resolved auto_refresh_enabled = {auto_enabled}")
         try:
             with open(CONFIG_PATH, "r") as f:
                 data = yaml.safe_load(f) or {}
-                logging.debug(f"[debug] Loaded existing config for refresh toggle: {data}")
+                logging.debug(f"[GUI][_on_auto_refresh_toggled] Loaded existing config for refresh toggle: {data}")
         except FileNotFoundError:
             data = {}
-            logging.info("[debug] Config file not found, starting with empty config for refresh toggle")
+            logging.info("[GUI][_on_auto_refresh_toggled] Config file not found, starting with empty config for refresh toggle")
 
         if not isinstance(data.get("features"), dict):
             data["features"] = {}
-            logging.info("[debug] Created new 'features' section for refresh toggle")
+            logging.info("[GUI][_on_auto_refresh_toggled] Created new 'features' section for refresh toggle")
 
         data["features"]["screen_refresh"] = bool(auto_enabled)
         os.makedirs(CONFIG_PATH.parent, exist_ok=True)
         with open(CONFIG_PATH, "w") as f:
             yaml.safe_dump(data, f)
-            logging.info("[debug] Refresh toggle config successfully written to disk")  
+            logging.info("[GUI][_on_auto_refresh_toggled] Refresh toggle config successfully written to disk")  
 
     def __init__(self, tray):
         super().__init__()
@@ -202,7 +202,7 @@ class MainWindow(QtWidgets.QWidget):
             proxy = bus.get_object('org.dynamic_power.UserBus', '/')
             self._dbus_iface = dbus.Interface(proxy, 'org.dynamic_power.UserBus')
         except Exception as e:
-            logging.debug('Failed to connect to org.dynamic_power.UserBus:', e)
+            logging.debug('[GUI][__init__]: Failed to connect to org.dynamic_power.UserBus:', e)
             self._dbus_iface = None
 
         self.current_state = {"power_source": "AC", "user_override": "Dynamic", "process_matched": False}
@@ -258,7 +258,7 @@ class MainWindow(QtWidgets.QWidget):
         layout.insertWidget(2, self.panel_overdrive_widget)
         # Hide Asus-specific UI if asusd is not running
         if not asusd_is_running():
-            logging.info("[GUI] asusd not detected. Hiding panel overdrive controls.")
+            logging.info("[GUI][__init__] asusd not detected. Hiding panel overdrive controls.")
             self.panel_overdrive_widget.setVisible(False)
 
         # Display Refresh Rates box just below Panel Overdrive
@@ -339,12 +339,12 @@ class MainWindow(QtWidgets.QWidget):
                 try:
                     requested = self._dbus_iface.GetUserOverride().strip().title()
                 except Exception as e:
-                    logging.info(f"[GUI] Failed to get user override: {e}")
+                    logging.info(f"[GUI][update_ui_state]: Failed to get user override: {e}")
 
                 self.current_state["user_override"] = requested
                 self.update_tray_icon()
         except Exception as e:
-            logging.info(f"[GUI] Failed to update power state for tray: {e}")
+            logging.info(f"[GUI][update_ui_state]: Failed to update power state for tray: {e}")
 
         # Skip rest of UI updates if window is hidden
         if not self.isVisible():
@@ -381,7 +381,7 @@ class MainWindow(QtWidgets.QWidget):
                     self._last_refresh_check_time = now
                     current = sensors.get_refresh_info()
                     if current != getattr(self, "_last_refresh_info", None):
-                        logging.debug("[command] Detected refresh info change: %s", current)
+                        logging.debug("[GUI][update_ui_state] Detected refresh info change: %s", current)
                         self._last_refresh_info = current.copy()
                         if current:
                             text = ", ".join(
@@ -392,7 +392,7 @@ class MainWindow(QtWidgets.QWidget):
                             text = "Unavailable"
                         self.refresh_rates_label.setText(text)
                     else:
-                        logging.debug("[command] Refresh info unchanged")
+                        logging.debug("[GUI][update_ui_state] Refresh info unchanged")
         except Exception as e:
             logging.info(f"DBus GetMetrics or refresh info failed: {e}")
             self.power_status_label.setText("Power status: Unknown")
@@ -430,17 +430,17 @@ class MainWindow(QtWidgets.QWidget):
                 else:
                     self.profile_button.setStyleSheet("")
             except Exception as e:
-                logging.info(f"[GUI] Failed to update profile button: {e}")
+                logging.info(f"[GUI][update_ui_state] Failed to update profile button: {e}")
                 self.profile_button.setText("Mode: Unknown")
         except Exception as e:
-            logging.info(f"[GUI] Failed to read daemon state from DBus: {e}")
+            logging.info(f"[GUI][update_ui_state] Failed to read daemon state from DBus: {e}")
 
     def set_profile(self, mode):
         if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
             try:
                 self._dbus_iface.SetUserOverride(mode)
             except Exception as e:
-                logging.info(f"[GUI] Failed to set override: {e}")
+                logging.info(f"[GUI][set_profile] Failed to set override: {e}")
 
     def load_config(self):
         if not CONFIG_PATH.exists():
@@ -502,7 +502,7 @@ class MainWindow(QtWidgets.QWidget):
         dlg_layout.addRow(button_row)
 
         def apply():
-            logging.debug("[debug] Apply button pressed.")
+            logging.debug("[GUI][edit_process] Apply button pressed.")
             proc["process_name"] = name_edit.text()
             selected = profile_button.text()
             # Store the profile in lowercase for backend
@@ -568,7 +568,7 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             self.matched = {}
             self.current_state["process_matched"] = False
-            logging.info(f"[GUI] Failed to get process matches from DBus: {e}")
+            logging.info(f"[GUI][update_process_matches] Failed to get process matches from DBus: {e}")
 
         active_exists = any(state == 'active' for state in self.matched.values())
         if hasattr(self, 'tray') and self.tray is not None:
@@ -598,10 +598,10 @@ class MainWindow(QtWidgets.QWidget):
             else:
                 btn.setStyleSheet("")
     def on_low_drag_finished(self):
-        logging.debug(f"[debug] Low threshold drag finished at: {self.low_line.value()}")
+        logging.debug(f"[GUI][on_low_drag_finished] Low threshold drag finished at: {self.low_line.value()}")
         self.update_thresholds()
     def on_high_drag_finished(self):
-        logging.debug(f"[debug] High threshold drag finished at: {self.high_line.value()}")
+        logging.debug(f"[debug][on_high_drag_finished] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
 
     # --- populate the refresh-rate label ---------------------------------
@@ -613,7 +613,7 @@ class MainWindow(QtWidgets.QWidget):
             logging.info(f"dynamic_power_command: Failed to get refresh rates: {e}")
             rates = {}
         
-        logging.debug(f"update_refresh_rates(): rates received → {rates}")
+        logging.debug(f"[GUI][update_refresh_rates]: rates received → {rates}")
 
         if rates:
             text = ", ".join(
@@ -634,10 +634,10 @@ async def main():
     for i in range(max_tries):
         if os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"):
             break
-        logging.debug("[startup] Waiting for DISPLAY or WAYLAND_DISPLAY...")
+        logging.debug("[GUI][main] Waiting for DISPLAY or WAYLAND_DISPLAY...")
         time.sleep(0.5)
     else:
-        logging.info("[error] DISPLAY not found after delay; exiting")
+        logging.info("[GUI][main] DISPLAY not found after delay; exiting")
         return
 
     app = QtWidgets.QApplication(sys.argv)

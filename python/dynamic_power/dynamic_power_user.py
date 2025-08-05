@@ -187,7 +187,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
                 for prio, name, _ in matches
             ])
             if not is_user:
-                await send_profile(bus, client, selected_policy.get("mode", "Dynamic").lower(), is_user=False)
+                await send_profile(bus, client, selected_policy.get("mode", "").lower(), is_user=False)
                 logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
