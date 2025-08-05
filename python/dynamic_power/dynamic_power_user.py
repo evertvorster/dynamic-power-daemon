@@ -74,7 +74,7 @@ def send_thresholds(bus, low: float, high: float) -> None:
     except Exception as e:
         logging.debug(f"[send_thresholds] {e}")
 
-def send_profile(bus, profile: str, is_user: bool = False) -> None:
+async def send_profile(bus, client, profile: str, is_user: bool = False) -> None:
     """Forward a power‑profilesd profile to the root daemon."""
     logging.debug("[dynamic_power_user][send_profile] sending profile override: %s (boss=%s)", profile, is_user)
     global last_sent_profile
@@ -87,12 +87,9 @@ def send_profile(bus, profile: str, is_user: bool = False) -> None:
         last_sent_profile = profile
         logging.info(f"Sent profile override: {profile} (boss={is_user})")
         try:
-            session_bus = dbus.SessionBus()
-            helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
-            iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-            iface.UpdateDaemonState(profile)
+            await client.update_daemon_state(profile)
         except Exception as e:
-            logging.debug(f"[send_profile] Failed to update GUI: {e}")
+            logging.debug(f"[send_profile] Failed to update GUI via dbus-next: {e}")
     except Exception as e:
         logging.info(f"[send_profile] {e}")
 
@@ -124,7 +121,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
     logging.debug("[User][check_processes] GetUserOverride() returned: %r", mode)
     is_user = (mode != "Dynamic") # Set the flag to whether this is a user override. 
 
-    # Check if the override has changed. # Just emits a message for now... 
+    # Check if the override has changed.
     global last_manual_override
     mode_changed =(mode != last_manual_override) # Sets a bool to use later.
     if mode_changed:
@@ -134,7 +131,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
         # User switched back to Dynamic — clear any manual override
         logging.debug("[User][check_processes] Matched Dynamic")
         if last_sent_profile:
-            send_profile(bus, "")
+            await send_profile(bus, client, "", is_user=False)
             logging.debug("[User][check_processes] Cleared previous manual override")
         if threshold_override_active:
             threshold_override_active = False
@@ -143,6 +140,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
     if mode == "Inhibit Powersave" and mode_changed and is_user:
         logging.debug("[User][check_processes] Matched Inhibit Powersave")
         send_thresholds(bus, 0, high_th)
+        await send_profile(bus, client, "", is_user=True)
         threshold_override_active = True
     
     # ------------------------------------------------------------------
@@ -217,7 +215,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
                 logging.debug(f"[User][check_processes] Ignoring invalid profile: {selected_mode!r}")
                 return
             selected_mode = selected_mode.lower()
-            send_profile(bus, selected_mode, is_user)
+            await send_profile(bus, client, selected_mode, is_user)
     #
     else:
         try:
@@ -238,7 +236,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
         # If a user override is active, and it's not handled elsewhere (e.g., no match),
         # send the profile manually.
         if is_user and mode not in ["Inhibit Powersave", "Dynamic"]:
-            send_profile(bus, mode.lower(), is_user=True)
+            await send_profile(bus, client, mode.lower(), is_user=True)
         last_seen_processes &= running
 
     # Tail recursive bits go here.
