@@ -267,13 +267,6 @@ def system_dbus_service_available(name):
 async def main():
     logging.debug("[debug] main() started")
     username = getpass.getuser()
-    for proc in psutil.process_iter(['pid', 'name', 'username', 'cmdline']):
-        if proc.info['username'] == username and proc.info.get('cmdline'):
-            cmd = proc.info['cmdline'][0]
-            if cmd == '/usr/bin/dynamic_power':
-                logging.info("Detected unexpected user-owned dynamic_power process. Skipping launch.")
-                return
-
 
     bus = await MessageBus().connect()
     iface = UserBusIface()

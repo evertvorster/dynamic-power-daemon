@@ -1,14 +1,12 @@
 
+import time
 import subprocess
 from .debug import DEBUG_ENABLED, debug_log, info_log, error_log
 
 PROFILE_ALIASES = {
-    "powersave": "power-saver",
-    "power_save": "power-saver",
-    "power-saver": "power-saver",
-    "balanced": "balanced",
-    "performance": "performance",
-    "quiet": "power-saver",  # quiet mode still uses power-saver profile
+    "powersave":    "power-saver",
+    "balanced":     "balanced",
+    "performance":  "performance",
 }
 
 def normalize_profile(profile):

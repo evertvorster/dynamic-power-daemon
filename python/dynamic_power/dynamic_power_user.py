@@ -8,6 +8,7 @@ import psutil
 import types
 import asyncio
 from dynamic_power.user_dbus_interface import UserBusClient
+
 import dbus
 from inotify_simple import INotify, flags
 import signal
@@ -96,11 +97,8 @@ async def send_profile(bus, client, profile: str, is_user: bool = False) -> None
 # ---------------------------------------------------------------------------
 PROFILE_ALIASES = {
     "powersave":    "power-saver",
-    "power_save":   "power-saver",
-    "power-saver":  "power-saver",
     "balanced":     "balanced",
     "performance":  "performance",
-    "quiet":        "power-saver",
 }
 
 def normalize_profile(name: str) -> str:
@@ -214,8 +212,8 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
             if selected_mode not in ["Performance", "Balanced", "Powersave"]:
                 logging.debug(f"[User][check_processes] Ignoring invalid profile: {selected_mode!r}")
                 return
-            selected_mode = selected_mode.lower()
-            await send_profile(bus, client, selected_mode, is_user)
+            normalized = normalize_profile(selected_mode.lower())
+            await send_profile(bus, client, normalized, is_user)
     #
     else:
         try:
