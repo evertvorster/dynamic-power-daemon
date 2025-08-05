@@ -18,7 +18,7 @@ SYSTEMD_USER_PRESET    := $(PREFIX)/lib/systemd/user-preset
 DBUS_SYSTEM_POLICY_DIR := /etc/dbus-1/system.d
 SHARE_DIR              := /usr/share/dynamic-power
 DESKTOP_DIR            := $(PREFIX)/share/applications
-PIXMAPS_DIR 	       := $(PREFIX)/share/pixmaps
+PIXMAPS_DIR 	       := $(PREFIX)/share/icons/hicolor/scalable/apps/
 
 .PHONY: all install uninstall
 
