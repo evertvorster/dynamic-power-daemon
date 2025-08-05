@@ -42,7 +42,7 @@ def set_profile(profile_name, retries=2, delay=0.2):
             time.sleep(delay)
             confirmed = get_current_profile()
             if confirmed == actual_profile:
-                info_log("power_profiles", f"Switched to profile: {actual_profile} (confirmed on attempt {attempt})")
+                debug_log("power_profiles", f"Switched to profile: {actual_profile} (confirmed on attempt {attempt})")
                 return
             else:
                 debug_log("power_profiles", f"Attempt {attempt}: profile still '{confirmed}', expected '{actual_profile}'")
