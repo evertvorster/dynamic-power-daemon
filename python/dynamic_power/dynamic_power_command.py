@@ -7,6 +7,7 @@ import yaml
 import dbus
 import sys
 import logging
+import asyncio
 from dynamic_power.config import is_debug_enabled
 logging.basicConfig(
     level=logging.DEBUG if is_debug_enabled() else logging.INFO,
@@ -27,7 +28,7 @@ except ImportError:
         pass
 from dynamic_power.config import load_user_config, save_user_config
 from dynamic_power import sensors
-
+from dynamic_power.user_dbus_interface import UserBusClient
 
 
 import signal
@@ -624,7 +625,7 @@ class MainWindow(QtWidgets.QWidget):
 
         self.refresh_rates_label.setText(text)
 
-def main():
+async def main():
     # Wait for X display to be ready before starting the app
     import os, time
     from PyQt6.QtGui import QGuiApplication
@@ -658,6 +659,6 @@ def main():
     app.aboutToQuit.connect(cleanup)
 
     sys.exit(app.exec())
-
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
