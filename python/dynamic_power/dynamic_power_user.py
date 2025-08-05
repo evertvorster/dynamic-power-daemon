@@ -180,7 +180,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
 
             iface.GetMetrics()  # sanity ping to ensure connection
 
-            iface.UpdateProcessMatches([
+            await client.update_process_matches([
                 {
                     "process_name": name,
                     "priority": prio,
@@ -189,7 +189,7 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
                 for prio, name, _ in matches
             ])
             if not is_user:
-                iface.SetUserOverride(selected_policy.get("mode", "Dynamic").title())
+                await send_profile(bus, client, selected_policy.get("mode", "Dynamic").lower(), is_user=False)
                 logging.debug("Sent process matches via DBus to UserBus")
         except Exception as e:
             logging.info(f"[dbus_send_matches] {e}")
@@ -222,9 +222,9 @@ async def check_processes(bus, client, process_overrides, high_th: float) -> Non
             session_bus = dbus.SessionBus()
             helper = session_bus.get_object("org.dynamic_power.UserBus", "/")
             iface = dbus.Interface(helper, "org.dynamic_power.UserBus")
-            iface.UpdateProcessMatches([])  # Send empty list to clear matches
+            await client.update_process_matches([])  # Send empty list to clear matches
             if mode_changed and mode == "Dynamic":
-                iface.SetUserOverride("Dynamic")
+#                iface.SetUserOverride("Dynamic")
                 logging.debug("[User][check_processes]: Cleared manual override")
 
             logging.debug("[User][check_processes]:Sent empty process match list via DBus")
