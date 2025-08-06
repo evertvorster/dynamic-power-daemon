@@ -63,7 +63,12 @@ class DynamicPowerInterface(dbus.service.Object):
 
     @dbus.service.method(BUS_NAME, in_signature="sb", out_signature="b")
     def SetProfile(self, profile, is_user_override):
-        debug_log("dbus", f"SetProfile requested: {profile}")
+        request = (profile, is_user_override)
+        if request == getattr(self, "_last_set_profile", None):
+            debug_log("dbus", f"Duplicate SetProfile request ignored: {profile} (boss={is_user_override})")
+            return True
+        self._last_set_profile = request
+        debug_log("dbus", f"SetProfile requested: {profile} (boss={is_user_override})")
         if _set_profile_override:
             _set_profile_override(profile, is_user_override)
             return True
