@@ -352,20 +352,12 @@ class MainWindow(QtWidgets.QWidget):
             metrics = await self.client.get_metrics()
             power_src = metrics.get('power_source', 'Unknown')
             batt = metrics.get('battery_percent', None)
-            label = f"Power source: {power_src}"
-            if batt is not None:
-                label += f" ({batt}%)"
-            self.power_status_label.setText(label)
         except Exception as e:
             logging.info(f"[GUI][update_ui_state] Failed to get metrics: {e}")
         #logging.debug("[GUI][update_ui_state(self)]")
         # Always update power source + override + tray icon, even if UI is hidden
         try:
             if self.client is not None:
-                metrics = await self.client.get_metrics()
-                power_src = metrics.get('power_source', 'Unknown')
-                self.current_state["power_source"] = power_src
-
                 requested = "Unknown"
                 try:
                     requested = (await self.client.get_user_override()).strip().title()
@@ -376,8 +368,12 @@ class MainWindow(QtWidgets.QWidget):
                 self.update_tray_icon()
         except Exception as e:
             logging.info(f"[GUI][update_ui_state]: Failed to update power state for tray: {e}")
-
-        # Skip rest of UI updates if window is hidden
+        
+        label = f"Power source: {power_src}"
+        if batt is not None:
+            label += f" ({batt}%)"
+        self.power_status_label.setText(label)
+        # Skip rest of UI updates if window is hidden    
         if not self.isVisible():
             return
         try:
@@ -394,10 +390,6 @@ class MainWindow(QtWidgets.QWidget):
                         self.auto_panel_overdrive_status_label.setText("Unknown")
                 power_src = metrics.get('power_source', 'Unknown')
                 batt = metrics.get('battery_percent', None)
-                label = f"Power source: {power_src}"
-                if batt is not None:
-                    label += f" ({batt}%)"
-                self.power_status_label.setText(label)
 
                 # ✅ Smart refresh polling goes here
                 now = time.monotonic()
