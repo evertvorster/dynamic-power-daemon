@@ -130,7 +130,7 @@ async def _bootstrap():
     # signal handler
     try:
         iface.on_power_state_changed(
-            lambda: (log.debug("[GUI] PowerStateChanged"), asyncio.create_task(win.refresh()))
+            lambda s=None: log.info(f"PowerStateChanged signal received: {s}")
         )
     except TypeError as e:
         log.debug(f"Failed to bind PowerStateChanged: {e}")
