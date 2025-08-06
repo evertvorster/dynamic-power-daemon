@@ -158,6 +158,7 @@ class MainWindow(QtWidgets.QWidget):
     async def async_init(self):
         try:
             self.client = await UserBusClient.connect()
+            await self.client.bind_power_signal(self.on_power_state_changed)
             logging.debug("[GUI] UserBusClient connected")
         except Exception as e:
             logging.info(f"[GUI] Failed to connect to UserBusClient: {e}")
@@ -369,7 +370,7 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             logging.info(f"[GUI][update_ui_state]: Failed to update power state for tray: {e}")
         
-        label = f"Power source: {power_src}"
+        label = f"Power source: {self.current_state.get('power_source', 'Unknown')}"
         if batt is not None:
             label += f" ({batt}%)"
         self.power_status_label.setText(label)
