@@ -30,10 +30,41 @@ logging.basicConfig(
 if DEBUG_ENABLED:
     logging.debug("[GUI][main]: Debug mode enabled")
 
-async def main():
-    logging.info("Starting minimal dynamic_power_command")
-    stop_event = asyncio.Event()
+# ───────────────────────────────────────── DBus Setup ───
+from dbus_next.aio import MessageBus
+from dbus_next.constants import BusType
 
+dbus_iface = None  # global reference for use later
+
+async def connect_to_userbus():
+    global dbus_iface
+    try:
+        bus = await MessageBus(bus_type=BusType.SESSION).connect()
+        introspection = await bus.introspect("org.dynamic_power.UserBus", "/")
+        obj = bus.get_proxy_object("org.dynamic_power.UserBus", "/", introspection)
+        iface = obj.get_interface("org.dynamic_power.UserBus")
+        dbus_iface = iface
+
+        # Optional signal hookup
+        def handle_power_change(state):
+            logging.debug(f"[GUI][signal] PowerStateChanged: {state}")
+            try:
+                iface.on_power_state_changed(lambda s: handle_power_change(s))
+            except TypeError as e:
+                logging.debug(f"[GUI][signal] Could not bind PowerStateChanged (fallback triggered): {e}")
+
+
+        logging.debug("[GUI][dbus] Connected to org.dynamic_power.UserBus")
+
+    except Exception as e:
+        logging.info(f"[GUI][dbus] Failed to connect to DBus: {e}")
+
+# ───────────────────────────────────────── Main ───
+async def main():
+    logging.info("Starting dynamic_power_command")
+    await connect_to_userbus()
+
+    stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop_event.set)
