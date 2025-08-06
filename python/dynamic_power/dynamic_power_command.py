@@ -355,7 +355,6 @@ class MainWindow(QtWidgets.QWidget):
             self.power_status_label.setText(label)
         except Exception as e:
             logging.info(f"[GUI][update_ui_state] Failed to get metrics: {e}")
-            self.power_status_label.setText("Power status: Unknown")
         #logging.debug("[GUI][update_ui_state(self)]")
         # Always update power source + override + tray icon, even if UI is hidden
         try:
@@ -419,7 +418,6 @@ class MainWindow(QtWidgets.QWidget):
                         logging.debug("[GUI][update_ui_state] Refresh info unchanged")
         except Exception as e:
             logging.info(f"DBus GetMetrics or refresh info failed: {e}")
-            self.power_status_label.setText("Power status: Unknown")
 
         try:
             bus = dbus.SystemBus()
