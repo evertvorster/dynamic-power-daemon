@@ -163,6 +163,9 @@ class MainWindow(QtWidgets.QWidget):
             logging.info(f"[GUI] Failed to connect to UserBusClient: {e}")
             self.client = None
         # Start timers only after DBus client is ready
+        self.timer.start(1000)
+        self.state_timer.start(1000)
+        self.match_timer.start(1000)
         self.timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
         self.state_timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
         self.match_timer.timeout.connect(lambda: asyncio.create_task(self.update_process_matches()))
@@ -240,12 +243,9 @@ class MainWindow(QtWidgets.QWidget):
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_graph)
-        self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.start(1000)
         self.match_timer = QtCore.QTimer()
-        self.match_timer.start(1000)
 
         # Power profile button
         self.profile_button = QtWidgets.QPushButton("Dynamic")
@@ -332,6 +332,9 @@ class MainWindow(QtWidgets.QWidget):
         self.high_line.sigPositionChangeFinished.connect(self.on_high_drag_finished)
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
+        self.timer.start(1000)
+        self.state_timer.start(1000)
+        self.match_timer.start(1000)
     def update_graph(self):
         #logging.debug("[GUI][update_graph(self)]")
         self.ptr += 1
