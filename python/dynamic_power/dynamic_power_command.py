@@ -22,6 +22,17 @@ from qasync import QEventLoop
 from dbus_next.aio import MessageBus
 from dbus_next.constants import BusType
 
+try:
+    import setproctitle
+    setproctitle.setproctitle("dynamic_power_command")
+except ImportError:
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None)
+        libc.prctl(15, b"dynamic_power_command", 0, 0, 0)
+    except Exception:
+        pass
+
 DEBUG_ENABLED = os.getenv("DYNAMIC_POWER_DEBUG") == "1"
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_ENABLED else logging.INFO,
