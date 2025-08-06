@@ -38,8 +38,7 @@ logging.basicConfig(
     level=logging.DEBUG if DEBUG_ENABLED else logging.INFO,
     format="%(levelname)s: [%(name)s] %(message)s",
 )
-log = logging.getLogger("dynamic_power_command")
-
+logging.debug("[GUI][DEBUG]: Debug enabled.")
 # ─────────────────────── DBus helper ───────────────────────────────────────
 async def connect_userbus() -> Tuple[MessageBus, object]:
     bus = await MessageBus(bus_type=BusType.SESSION).connect()
@@ -48,7 +47,7 @@ async def connect_userbus() -> Tuple[MessageBus, object]:
         await bus.introspect("org.dynamic_power.UserBus", "/")
     )
     iface = proxy.get_interface("org.dynamic_power.UserBus")
-    log.debug("Connected to org.dynamic_power.UserBus")
+    logging.debug("Connected to org.dynamic_power.UserBus")
     return bus, iface
 
 # ─────────────────────── GUI window ────────────────────────────────────────
@@ -82,13 +81,13 @@ class MainWindow(QtWidgets.QWidget):
     # plain Qt slot — schedules coroutine so it doesn’t block Qt thread
     def _handle_timer(self):
         if DEBUG_ENABLED:
-            log.debug("[GUI] timer fired")
+            logging.debug("[GUI] timer fired")
         asyncio.create_task(self.refresh())
 
     # ───────── async refresh ─────────
     async def refresh(self):
         if DEBUG_ENABLED:
-            log.debug("[GUI] refresh start")
+            logging.debug("[GUI] refresh start")
 
         # Timestamp
         now = datetime.now().strftime("%H:%M:%S")
@@ -101,7 +100,7 @@ class MainWindow(QtWidgets.QWidget):
             self.metrics_label.setText(f"Metrics:\n{text}")
         except Exception as e:
             self.metrics_label.setText("Metrics: [error]")
-            log.debug(f"GetMetrics failed: {e}")
+            logging.debug(f"GetMetrics failed: {e}")
 
         # GetUserOverride
         try:
@@ -109,7 +108,7 @@ class MainWindow(QtWidgets.QWidget):
             self.override_label.setText(f"Override: {override}")
         except Exception as e:
             self.override_label.setText("Override: [error]")
-            log.debug(f"GetUserOverride failed: {e}")
+            logging.debug(f"GetUserOverride failed: {e}")
 
         # GetProcessMatches
         try:
@@ -121,7 +120,7 @@ class MainWindow(QtWidgets.QWidget):
             self.process_list.setPlainText(plist)
         except Exception as e:
             self.process_list.setPlainText("[error]")
-            log.debug(f"GetProcessMatches failed: {e}")
+            logging.debug(f"GetProcessMatches failed: {e}")
 
         # Force paint
         for w in (self.timestamp_label, self.metrics_label, self.override_label, self.process_list):
@@ -129,7 +128,7 @@ class MainWindow(QtWidgets.QWidget):
         self.repaint()
 
         if DEBUG_ENABLED:
-            log.debug("[GUI] refresh end")
+            logging.debug("[GUI] refresh end")
 
 # ─────────────────────── App bootstrap ─────────────────────────────────────
 async def _bootstrap():
@@ -141,17 +140,17 @@ async def _bootstrap():
     # signal handler
     try:
         iface.on_power_state_changed(
-            lambda s=None: log.info(f"PowerStateChanged signal received: {s}")
+            lambda s=None: logging.info(f"PowerStateChanged signal received: {s}")
         )
     except TypeError as e:
-        log.debug(f"Failed to bind PowerStateChanged: {e}")
+        logging.debug(f"Failed to bind PowerStateChanged: {e}")
     # MetricsUpdated signal (0‑arg)
     try:
         iface.on_metrics_updated(
-            lambda: (log.debug("[GUI] MetricsUpdated"), asyncio.create_task(win.refresh()))
+            lambda: (logging.debug("[GUI] MetricsUpdated"), asyncio.create_task(win.refresh()))
         )
     except TypeError as e:
-        log.debug(f"Failed to bind MetricsUpdated: {e}")
+        logging.debug(f"Failed to bind MetricsUpdated: {e}")
 
     QtWidgets.QApplication.instance().aboutToQuit.connect(bus.disconnect)  # type: ignore[arg-type]
     win.show()
