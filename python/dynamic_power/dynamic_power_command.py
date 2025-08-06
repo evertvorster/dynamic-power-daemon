@@ -37,6 +37,7 @@ import psutil
 from pathlib import Path
 from datetime import datetime
 from PyQt6 import QtWidgets, QtCore, QtGui
+import qasync
 import pyqtgraph as pg
 
 
@@ -645,23 +646,21 @@ class MainWindow(QtWidgets.QWidget):
         self.refresh_rates_label.setText(text)
 
 async def main():
-    logging.debug("[GUI][async def main()]")
-    # Wait for X display to be ready before starting the app
-    import os, time
-    from PyQt6.QtGui import QGuiApplication
-
+    logging.debug("[GUI][main()]")
+    import os
     max_tries = 20
     for i in range(max_tries):
         if os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"):
             break
         logging.debug("[GUI][main] Waiting for DISPLAY or WAYLAND_DISPLAY...")
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
     else:
         logging.info("[GUI][main] DISPLAY not found after delay; exiting")
         return
 
     app = QtWidgets.QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
 
     icon = QtGui.QIcon.fromTheme("battery")
     tray = PowerCommandTray(icon, app)
@@ -679,7 +678,10 @@ async def main():
 
     app.aboutToQuit.connect(cleanup)
 
-    sys.exit(app.exec())
+    with loop:
+        loop.run_forever()
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+
