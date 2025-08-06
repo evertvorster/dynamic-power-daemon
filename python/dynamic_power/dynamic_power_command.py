@@ -9,6 +9,7 @@ import sys
 import logging
 import asyncio
 from dynamic_power.config import is_debug_enabled
+from dynamic_power.user_dbus_interface import UserBusClient
 logging.basicConfig(
     level=logging.DEBUG if is_debug_enabled() else logging.INFO,
     format="%(levelname)s: %(message)s"
@@ -28,7 +29,6 @@ except ImportError:
         pass
 from dynamic_power.config import load_user_config, save_user_config
 from dynamic_power import sensors
-from dynamic_power.user_dbus_interface import UserBusClient
 
 
 import signal
@@ -153,7 +153,16 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
         self.window.raise_()
         self.window.activateWindow()
 
-class MainWindow(QtWidgets.QWidget): 
+class MainWindow(QtWidgets.QWidget):
+
+    async def async_init(self):
+        try:
+            self.client = await UserBusClient.connect()
+            logging.debug("[GUI] UserBusClient connected")
+        except Exception as e:
+            logging.info(f"[GUI] Failed to connect to UserBusClient: {e}")
+            self.client = None
+ 
     def update_tray_icon(self):
         #logging.debug("[GUI][update_tray_icon]")
         if not hasattr(self, "tray"):
@@ -204,15 +213,10 @@ class MainWindow(QtWidgets.QWidget):
 
     def __init__(self, tray):
         super().__init__()
+        self.client = None  # Will be set in async_init
+        asyncio.create_task(self.async_init())
         logging.debug("[GUI][__init__(self, tray)]")
         # --- Connect to session DBus for metrics ---
-        try:
-            bus = dbus.SessionBus()
-            proxy = bus.get_object('org.dynamic_power.UserBus', '/')
-            self._dbus_iface = dbus.Interface(proxy, 'org.dynamic_power.UserBus')
-        except Exception as e:
-            logging.debug('[GUI][__init__]: Failed to connect to org.dynamic_power.UserBus:', e)
-            self._dbus_iface = None
 
         self.current_state = {"power_source": "AC", "user_override": "Dynamic", "process_matched": False}
         self.tray = tray
@@ -231,14 +235,14 @@ class MainWindow(QtWidgets.QWidget):
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_graph)
-        self.timer.timeout.connect(self.update_ui_state)
+        self.timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.timeout.connect(self.update_ui_state)
+        self.state_timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
         self.state_timer.start(1000)
         self.match_timer = QtCore.QTimer()
-        self.match_timer.timeout.connect(self.update_process_matches)
+        self.match_timer.timeout.connect(lambda: asyncio.create_task(self.update_process_matches()))
         self.match_timer.start(1000)
 
         # Power profile button
@@ -337,18 +341,18 @@ class MainWindow(QtWidgets.QWidget):
         self.data = self.data[-60:]
         self.plot.setData(self.data)
 
-    def update_ui_state(self):
+    async def update_ui_state(self):
         #logging.debug("[GUI][update_ui_state(self)]")
         # Always update power source + override + tray icon, even if UI is hidden
         try:
-            if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
-                metrics = self._dbus_iface.GetMetrics()
+            if self.client is not None:
+                metrics = await self.client.get_metrics()
                 power_src = metrics.get('power_source', 'Unknown')
                 self.current_state["power_source"] = power_src
 
                 requested = "Unknown"
                 try:
-                    requested = self._dbus_iface.GetUserOverride().strip().title()
+                    requested = (await self.client.get_user_override()).strip().title()
                 except Exception as e:
                     logging.info(f"[GUI][update_ui_state]: Failed to get user override: {e}")
 
@@ -361,13 +365,13 @@ class MainWindow(QtWidgets.QWidget):
         if not self.isVisible():
             return
         try:
-            if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
+            if self.client is not None:
                 # Load config (only if not already loaded)
                 if not hasattr(self, "config"):
                     self.load_config()
 
                 # Respect feature toggle
-                metrics = self._dbus_iface.GetMetrics()
+                metrics = await self.client.get_metrics()
                 auto_enabled = self.config.get("features", {}).get("auto_panel_overdrive", False)
                 if not auto_enabled:
                     self.auto_panel_overdrive_status_label.setText("Disabled")
@@ -427,7 +431,7 @@ class MainWindow(QtWidgets.QWidget):
             try:
                 requested = "Unknown"
                 if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
-                    requested = self._dbus_iface.GetUserOverride().strip().title()
+                    requested = (await self.client.get_user_override()).strip().title()
 
                 actual = state.get("active_profile", "unknown").replace("-", " ").title()
                 self.profile_button.setText(f"Mode: {requested} – {actual}")
@@ -446,11 +450,11 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             logging.info(f"[GUI][update_ui_state] Failed to read daemon state from DBus: {e}")
 
-    def set_profile(self, mode):
+    async def set_profile(self, mode):
         logging.debug("[GUI][set_profile(self, mode)]")
         if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
             try:
-                self._dbus_iface.SetUserOverride(mode)
+                await self.client.set_user_override(mode)
                 logging.debug(f"[GUI][set_profile(self, mode)]:Set user override:{mode}")
             except Exception as e:
                 logging.info(f"[GUI][set_profile] Failed to set override: {e}")
@@ -571,7 +575,7 @@ class MainWindow(QtWidgets.QWidget):
         with open(CONFIG_PATH, "w") as f:
             yaml.dump(self.config, f)
 
-    def update_process_matches(self):
+    async def update_process_matches(self):
         #logging.debug("[GUI][update_process_matches(self)]")
         try:
             bus = dbus.SessionBus()
