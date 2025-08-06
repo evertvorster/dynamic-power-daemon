@@ -162,6 +162,11 @@ class MainWindow(QtWidgets.QWidget):
         except Exception as e:
             logging.info(f"[GUI] Failed to connect to UserBusClient: {e}")
             self.client = None
+        # Start timers only after DBus client is ready
+        self.timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
+        self.state_timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
+        self.match_timer.timeout.connect(lambda: asyncio.create_task(self.update_process_matches()))
+
  
     def update_tray_icon(self):
         #logging.debug("[GUI][update_tray_icon]")
@@ -235,14 +240,11 @@ class MainWindow(QtWidgets.QWidget):
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_graph)
-        self.timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
         self.timer.start(1000)
 
         self.state_timer = QtCore.QTimer()
-        self.state_timer.timeout.connect(lambda: asyncio.create_task(self.update_ui_state()))
         self.state_timer.start(1000)
         self.match_timer = QtCore.QTimer()
-        self.match_timer.timeout.connect(lambda: asyncio.create_task(self.update_process_matches()))
         self.match_timer.start(1000)
 
         # Power profile button
