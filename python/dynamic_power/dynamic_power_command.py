@@ -344,6 +344,18 @@ class MainWindow(QtWidgets.QWidget):
         self.plot.setData(self.data)
 
     async def update_ui_state(self):
+        # Always update power source label, even if not visible
+        try:
+            metrics = await self.client.get_metrics()
+            power_src = metrics.get('power_source', 'Unknown')
+            batt = metrics.get('battery_percent', None)
+            label = f"Power source: {power_src}"
+            if batt is not None:
+                label += f" ({batt}%)"
+            self.power_status_label.setText(label)
+        except Exception as e:
+            logging.info(f"[GUI][update_ui_state] Failed to get metrics: {e}")
+            self.power_status_label.setText("Power status: Unknown")
         #logging.debug("[GUI][update_ui_state(self)]")
         # Always update power source + override + tray icon, even if UI is hidden
         try:
@@ -407,6 +419,7 @@ class MainWindow(QtWidgets.QWidget):
                         logging.debug("[GUI][update_ui_state] Refresh info unchanged")
         except Exception as e:
             logging.info(f"DBus GetMetrics or refresh info failed: {e}")
+            self.power_status_label.setText("Power status: Unknown")
 
         try:
             bus = dbus.SystemBus()
@@ -425,6 +438,10 @@ class MainWindow(QtWidgets.QWidget):
 
             # Check for manual override
             try:
+                requested = "Unknown"
+                if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
+                    requested = (await self.client.get_user_override()).strip().title()
+
                 actual = state.get("active_profile", "unknown").replace("-", " ").title()
                 self.profile_button.setText(f"Mode: {requested} – {actual}")
 
