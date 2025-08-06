@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Dynamic Power Command GUI (dbus‑next, Qt6, qasync).
-
 * Polls `org.dynamic_power.UserBus` every 10 s for Metrics / Override /
   ProcessMatches.
 * Also refreshes immediately on the `PowerStateChanged` signal.
@@ -135,6 +134,13 @@ async def _bootstrap():
         )
     except TypeError as e:
         log.debug(f"Failed to bind PowerStateChanged: {e}")
+    # MetricsUpdated signal (0‑arg)
+    try:
+        iface.on_metrics_updated(
+            lambda: (log.debug("[GUI] MetricsUpdated"), asyncio.create_task(win.refresh()))
+        )
+    except TypeError as e:
+        log.debug(f"Failed to bind MetricsUpdated: {e}")
 
     QtWidgets.QApplication.instance().aboutToQuit.connect(bus.disconnect)  # type: ignore[arg-type]
     win.show()

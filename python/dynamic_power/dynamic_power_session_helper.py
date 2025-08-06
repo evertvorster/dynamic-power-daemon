@@ -98,6 +98,10 @@ class UserBusIface(ServiceInterface):
     def PowerStateChanged(self, power_state: 's') -> None:
         pass
 
+    @dbus_signal()
+    def MetricsUpdated(self) -> None:
+        pass
+
     @method()
     def GetProcessMatches(self) -> 'aa{sv}':  # returns list of dicts
         return [
@@ -152,6 +156,10 @@ class UserBusIface(ServiceInterface):
         #self._metrics["panel_overdrive"] = panel_status
         self._metrics.update(m)
         logging.debug("[DEBUG] self._metrics = %s", self._metrics)
+        try:
+            self.MetricsUpdated()
+        except Exception as e:
+            logging.debug("Failed to emit MetricsUpdated: %s", e)
 
     def update_process_matches(self, matches):
         self._process_matches = matches or []
