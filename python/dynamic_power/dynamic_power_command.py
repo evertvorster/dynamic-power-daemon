@@ -13,7 +13,7 @@ logging.basicConfig(
     level=logging.DEBUG if is_debug_enabled() else logging.INFO,
     format="%(levelname)s: %(message)s"
 )
-logging.debug("Debug mode in dynamic_power_command is enabled (via config)")
+logging.debug("[GUI][Debug]:Debug mode in dynamic_power_command is enabled (via config)")
 
 try:
     import setproctitle
@@ -46,6 +46,7 @@ OVERRIDE_PATH = Path(f"/run/user/{os.getuid()}/dynamic_power_control.yaml")
 USER_HELPER_CMD = ["/usr/bin/dynamic_power_user"]
 # --- Panel Overdrive Config Helpers ---
 def _load_panel_overdrive():
+    logging.debug("[GUI][_load_panel_overdrive]")
     """Return boolean for features.panel_overdrive in user config.
     Defaults to False if key or file missing."""
     try:
@@ -79,6 +80,7 @@ def _save_panel_overdrive(enabled: bool):
         logging.info("[GUI][_save_panel_overdrive] Config successfully written to disk")
 
 def asusd_is_running():
+    logging.debug("[GUI][asusd_is_running]")
     """Check if the Asus DBus service is available (asusd running)."""
     try:
         bus = dbus.SystemBus()
@@ -89,6 +91,7 @@ def asusd_is_running():
 class PowerCommandTray(QtWidgets.QSystemTrayIcon):
     def __init__(self, icon, app):
         super().__init__(icon)
+        logging.debug("[GUI][__init__(self, icon, app)]")
         # store default and active icons
         self.default_icon = icon
         self.active_icon = self.create_color_icon(QtGui.QColor('#FFD700'))  # yellow when matched
@@ -113,11 +116,13 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
         self.action_quit.triggered.connect(app.quit)
         self.activated.connect(self.icon_activated)
     def create_color_icon(self, color):
+        logging.debug("[GUI][create_color_icon]")
         pixmap = QtGui.QPixmap(16, 16)
         pixmap.fill(color)
         return QtGui.QIcon(pixmap)
 
     def update_icon(self, active: bool):
+        logging.debug("[GUI][update_icon]")
         """Switch tray icon based on process match state."""
         if active:
             self.setIcon(self.active_icon)
@@ -125,6 +130,7 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
             self.setIcon(self.default_icon)
 
     def set_icon_by_name(self, name):
+        #logging.debug("[GUI][set_icon_by_name]")
         icon = self.icon_map.get(name)
         if icon and not icon.isNull():
             self.setIcon(icon)
@@ -132,7 +138,7 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
             self.setIcon(self.default_icon)
 
     def icon_activated(self, reason):
-
+        logging.debug("[GUI][icon_activated]")
         if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
             if self.window.isVisible():
                 self.window.hide()
@@ -141,13 +147,14 @@ class PowerCommandTray(QtWidgets.QSystemTrayIcon):
                 self.window.raise_()
                 self.window.activateWindow()
     def show_window(self):
+        logging.debug("[GUI][show_window]")
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()
 
-class MainWindow(QtWidgets.QWidget):
-    
+class MainWindow(QtWidgets.QWidget): 
     def update_tray_icon(self):
+        #logging.debug("[GUI][update_tray_icon]")
         if not hasattr(self, "tray"):
             return
         state = self.current_state
@@ -161,7 +168,7 @@ class MainWindow(QtWidgets.QWidget):
         self.tray.set_icon_by_name(name)
 
     def _on_auto_panel_overdrive_toggled(self, state):
-        logging.debug(f"[GUI][_on_auto_panel_overdrive_toggled] Toggle clicked – state: {state}")
+        logging.debug("[GUI][_on_auto_panel_overdrive_toggled]")
         auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
         logging.debug(f"[GUI][_on_auto_panel_overdrive_toggled] Resolved auto_enabled = {auto_enabled}")
         self.auto_panel_overdrive_status_label.setText("On" if auto_enabled else "Off")
@@ -173,7 +180,7 @@ class MainWindow(QtWidgets.QWidget):
         _save_panel_overdrive(auto_enabled)
 
     def _on_auto_refresh_toggled(self, state):
-        logging.debug(f"[GUI][_on_auto_refresh_toggled] Refresh toggle clicked – state: {state}")
+        logging.debug("[GUI][_on_auto_refresh_toggled]")
         auto_enabled = int(state) == QtCore.Qt.CheckState.Checked.value
         logging.debug(f"[GUI][_on_auto_refresh_toggled] Resolved auto_refresh_enabled = {auto_enabled}")
         try:
@@ -196,6 +203,7 @@ class MainWindow(QtWidgets.QWidget):
 
     def __init__(self, tray):
         super().__init__()
+        logging.debug("[GUI][__init__(self, tray)]")
         # --- Connect to session DBus for metrics ---
         try:
             bus = dbus.SessionBus()
@@ -318,6 +326,7 @@ class MainWindow(QtWidgets.QWidget):
         self.high_line.sigPositionChangeFinished.connect(self.update_thresholds)
 
     def update_graph(self):
+        #logging.debug("[GUI][update_graph(self)]")
         self.ptr += 1
         max_visible = max(self.data)
         y_max = max(7, max_visible + 1)
@@ -328,6 +337,7 @@ class MainWindow(QtWidgets.QWidget):
         self.plot.setData(self.data)
 
     def update_ui_state(self):
+        #logging.debug("[GUI][update_ui_state(self)]")
         # Always update power source + override + tray icon, even if UI is hidden
         try:
             if hasattr(self, '_dbus_iface') and self._dbus_iface is not None:
@@ -436,13 +446,16 @@ class MainWindow(QtWidgets.QWidget):
             logging.info(f"[GUI][update_ui_state] Failed to read daemon state from DBus: {e}")
 
     def set_profile(self, mode):
+        logging.debug("[GUI][set_profile(self, mode)]")
         if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
             try:
                 self._dbus_iface.SetUserOverride(mode)
+                logging.debug(f"[GUI][set_profile(self, mode)]:Set user override:{mode}")
             except Exception as e:
                 logging.info(f"[GUI][set_profile] Failed to set override: {e}")
 
     def load_config(self):
+        logging.debug("[GUI][load_config(self)]")
         if not CONFIG_PATH.exists():
             os.makedirs(CONFIG_PATH.parent, exist_ok=True)
             template_path = (
@@ -469,9 +482,11 @@ class MainWindow(QtWidgets.QWidget):
             self.proc_layout.addWidget(btn)
 
     def add_process(self):
+        logging.debug("[GUI][add_process(self)]")
         self.edit_process({"process_name": "", "active_profile": "Dynamic", "priority": 0})
 
     def edit_process(self, proc):
+        logging.debug("[GUI][edit_process(self, proc)]")
         dlg = QtWidgets.QDialog(self)
         dlg.setWindowTitle("Edit Process")
         dlg_layout = QtWidgets.QFormLayout()
@@ -529,6 +544,7 @@ class MainWindow(QtWidgets.QWidget):
         dlg.exec()
 
     def save_process(self, proc):
+        logging.debug("[GUI][save_process(self, proc)]")
         overrides = self.config.setdefault("process_overrides", [])
         found = False
         for i, p in enumerate(overrides):
@@ -544,6 +560,7 @@ class MainWindow(QtWidgets.QWidget):
         self.load_config()
 
     def update_thresholds(self):
+        logging.debug("[GUI][update_thresholds(self)]")
         new_low = float(self.low_line.value())
         new_high = float(self.high_line.value())
         self.config.setdefault("power", {})
@@ -554,6 +571,7 @@ class MainWindow(QtWidgets.QWidget):
             yaml.dump(self.config, f)
 
     def update_process_matches(self):
+        #logging.debug("[GUI][update_process_matches(self)]")
         try:
             bus = dbus.SessionBus()
             helper = bus.get_object('org.dynamic_power.UserBus', '/')
@@ -601,11 +619,12 @@ class MainWindow(QtWidgets.QWidget):
         logging.debug(f"[GUI][on_low_drag_finished] Low threshold drag finished at: {self.low_line.value()}")
         self.update_thresholds()
     def on_high_drag_finished(self):
-        logging.debug(f"[debug][on_high_drag_finished] High threshold drag finished at: {self.high_line.value()}")
+        logging.debug(f"[GUI][on_high_drag_finished] High threshold drag finished at: {self.high_line.value()}")
         self.update_thresholds()
 
     # --- populate the refresh-rate label ---------------------------------
     def update_refresh_rates(self):
+        logging.debug("[GUI][update_refresh_rates(self)]")
         try:
             # returns dict or None
             rates = sensors.get_refresh_info() or {}
@@ -626,6 +645,7 @@ class MainWindow(QtWidgets.QWidget):
         self.refresh_rates_label.setText(text)
 
 async def main():
+    logging.debug("[GUI][async def main()]")
     # Wait for X display to be ready before starting the app
     import os, time
     from PyQt6.QtGui import QGuiApplication
@@ -649,6 +669,7 @@ async def main():
 
     # Ensure child process is terminated
     def cleanup():
+        logging.debug("[GUI][cleanup()]")
         if hasattr(tray.window, "user_proc"):
             tray.window.user_proc.terminate()
             try:
