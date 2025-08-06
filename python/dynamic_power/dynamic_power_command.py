@@ -426,10 +426,6 @@ class MainWindow(QtWidgets.QWidget):
 
             # Check for manual override
             try:
-                requested = "Unknown"
-                if hasattr(self, "_dbus_iface") and self._dbus_iface is not None:
-                    requested = (await self.client.get_user_override()).strip().title()
-
                 actual = state.get("active_profile", "unknown").replace("-", " ").title()
                 self.profile_button.setText(f"Mode: {requested} – {actual}")
 
