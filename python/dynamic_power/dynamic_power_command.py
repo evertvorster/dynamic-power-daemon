@@ -351,7 +351,8 @@ class MainWindow(QtWidgets.QWidget):
         # Always update power source label, even if not visible
         try:
             metrics = await self.client.get_metrics()
-            power_src = metrics.get('power_source', 'Unknown')
+            power_src = metrics.get('power_source', 'Unknown')            
+            self.current_state['power_source'] = power_src
             batt = metrics.get('battery_percent', None)
         except Exception as e:
             logging.info(f"[GUI][update_ui_state] Failed to get metrics: {e}")
