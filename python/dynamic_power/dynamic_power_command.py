@@ -369,11 +369,6 @@ class MainWindow(QtWidgets.QWidget):
         try:
             if self.client is not None:
                 # Load config (only if not already loaded)
-                if not hasattr(self, "config"):
-                    self.load_config()
-
-                # Respect feature toggle
-                metrics = await self.client.get_metrics()
                 auto_enabled = self.config.get("features", {}).get("auto_panel_overdrive", False)
                 if not auto_enabled:
                     self.auto_panel_overdrive_status_label.setText("Disabled")
