@@ -47,7 +47,7 @@ async def connect_userbus() -> Tuple[MessageBus, object]:
         await bus.introspect("org.dynamic_power.UserBus", "/")
     )
     iface = proxy.get_interface("org.dynamic_power.UserBus")
-    logging.debug("Connected to org.dynamic_power.UserBus")
+    logging.debug("[GUI][dbus] Connected to org.dynamic_power.UserBus")
     return bus, iface
 
 # ─────────────────────── GUI window ────────────────────────────────────────
@@ -100,7 +100,7 @@ class MainWindow(QtWidgets.QWidget):
             self.metrics_label.setText(f"Metrics:\n{text}")
         except Exception as e:
             self.metrics_label.setText("Metrics: [error]")
-            logging.debug(f"GetMetrics failed: {e}")
+            logging.debug(f"[GUI][Signals] GetMetrics failed: {e}")
 
         # GetUserOverride
         try:
@@ -108,7 +108,7 @@ class MainWindow(QtWidgets.QWidget):
             self.override_label.setText(f"Override: {override}")
         except Exception as e:
             self.override_label.setText("Override: [error]")
-            logging.debug(f"GetUserOverride failed: {e}")
+            logging.debug(f"[GUI][Signals] GetUserOverride failed: {e}")
 
         # GetProcessMatches
         try:
@@ -120,15 +120,14 @@ class MainWindow(QtWidgets.QWidget):
             self.process_list.setPlainText(plist)
         except Exception as e:
             self.process_list.setPlainText("[error]")
-            logging.debug(f"GetProcessMatches failed: {e}")
+            logging.debug(f"[GUI] GetProcessMatches failed: {e}")
 
         # Force paint
         for w in (self.timestamp_label, self.metrics_label, self.override_label, self.process_list):
             w.repaint()
         self.repaint()
 
-        if DEBUG_ENABLED:
-            logging.debug("[GUI] refresh end")
+        logging.debug("[GUI] refresh end")
 
 # ─────────────────────── App bootstrap ─────────────────────────────────────
 async def _bootstrap():
@@ -140,17 +139,18 @@ async def _bootstrap():
     # signal handler
     try:
         iface.on_power_state_changed(
-            lambda s=None: logging.info(f"PowerStateChanged signal received: {s}")
+            lambda s: logging.info(f"[GUI][Signals] PowerStateChanged signal received: {s}")
         )
-    except TypeError as e:
-        logging.debug(f"Failed to bind PowerStateChanged: {e}")
+    except Exception as e:
+        logging.info(f"[GUI][Signals] Failed to bind PowerStateChanged handler: {e}")
+
     # MetricsUpdated signal (0‑arg)
     try:
         iface.on_metrics_updated(
-            lambda: (logging.debug("[GUI] MetricsUpdated"), asyncio.create_task(win.refresh()))
+            lambda: (logging.debug("[GUI][Signals] MetricsUpdated"), asyncio.create_task(win.refresh()))
         )
     except TypeError as e:
-        logging.debug(f"Failed to bind MetricsUpdated: {e}")
+        logging.debug(f"[GUI][Signals] Failed to bind MetricsUpdated: {e}")
 
     QtWidgets.QApplication.instance().aboutToQuit.connect(bus.disconnect)  # type: ignore[arg-type]
     win.show()
