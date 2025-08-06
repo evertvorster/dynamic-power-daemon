@@ -6,8 +6,8 @@ import logging
 import os
 import sys
 
-# Detect debug flag
-DEBUG_ENABLED = "--debug" in sys.argv
+# Detect debug flag from environment
+DEBUG_ENABLED = os.getenv("DYNAMIC_POWER_DEBUG") == "1"
 
 # Set process name for debugging and tree tracing
 try:
