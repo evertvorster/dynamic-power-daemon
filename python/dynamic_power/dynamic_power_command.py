@@ -407,7 +407,6 @@ class MainWindow(QtWidgets.QWidget):
                         logging.debug("[GUI][update_ui_state] Refresh info unchanged")
         except Exception as e:
             logging.info(f"DBus GetMetrics or refresh info failed: {e}")
-            self.power_status_label.setText("Power status: Unknown")
 
         try:
             bus = dbus.SystemBus()
