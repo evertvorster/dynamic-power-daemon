@@ -13,14 +13,6 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime
-from typing import Tuple
-
-from PyQt6 import QtCore, QtWidgets
-from qasync import QEventLoop
-
-from dbus_next.aio import MessageBus
-from dbus_next.constants import BusType
 
 try:
     import setproctitle
@@ -32,6 +24,7 @@ except ImportError:
         libc.prctl(15, b"dynamic_power_command", 0, 0, 0)
     except Exception:
         pass
+
 
 DEBUG_ENABLED = os.getenv("DYNAMIC_POWER_DEBUG") == "1"
 logging.basicConfig(
@@ -52,72 +45,11 @@ async def connect_userbus() -> Tuple[MessageBus, object]:
 
 # ─────────────────────── GUI window ────────────────────────────────────────
 class MainWindow(QtWidgets.QWidget):
-    def __init__(self, iface):
-        super().__init__()
-        self._iface = iface
 
-        self.setWindowTitle("Dynamic Power Monitor")
-        self.resize(520, 440)
-
-        # Widgets
-        self.timestamp_label = QtWidgets.QLabel("Last update: —")
-        self.metrics_label   = QtWidgets.QLabel("Metrics:")
-        self.override_label  = QtWidgets.QLabel("Override:")
-        self.process_list    = QtWidgets.QTextEdit(readOnly=True)
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(self.timestamp_label)
-        layout.addWidget(self.metrics_label)
-        layout.addWidget(self.override_label)
-        layout.addWidget(QtWidgets.QLabel("Matched Processes:"))
-        layout.addWidget(self.process_list)
-
-        # Timer → schedules async refresh
-        self._qtimer = QtCore.QTimer(self)
-        self._qtimer.setInterval(10_000)
-        self._qtimer.timeout.connect(self._handle_timer)  # type: ignore[arg-type]
-        self._qtimer.start()
-
-    # plain Qt slot — schedules coroutine so it doesn’t block Qt thread
-    def _handle_timer(self):
-        if DEBUG_ENABLED:
-            logging.debug("[GUI] timer fired")
-        asyncio.create_task(self.refresh())
-
-    # ───────── async refresh ─────────
-    async def refresh(self):
-        if DEBUG_ENABLED:
-            logging.debug("[GUI] refresh start")
-
-        # Timestamp
-        now = datetime.now().strftime("%H:%M:%S")
-        self.timestamp_label.setText(f"Last update: {now}")
-
-        # GetMetrics
-        try:
-            metrics = await self._iface.call_get_metrics()
-            text = "\n".join(f"{k}: {v.value}" for k, v in metrics.items())
-            self.metrics_label.setText(f"Metrics:\n{text}")
-        except Exception as e:
-            self.metrics_label.setText("Metrics: [error]")
-            logging.debug(f"[GUI][Signals] GetMetrics failed: {e}")
-
-        # GetUserOverride
-        try:
-            override = await self._iface.call_get_user_override()
-            self.override_label.setText(f"Override: {override}")
-        except Exception as e:
-            self.override_label.setText("Override: [error]")
-            logging.debug(f"[GUI][Signals] GetUserOverride failed: {e}")
 
         # GetProcessMatches
         try:
-            matches = await self._iface.call_get_process_matches()
-            plist = "\n".join(
-                f"{m['process_name'].value} (prio={m['priority'].value}) "
-                f"→ {'✓' if m['active'].value else '✗'}" for m in matches
-            )
-            self.process_list.setPlainText(plist)
+
         except Exception as e:
             self.process_list.setPlainText("[error]")
             logging.debug(f"[GUI] GetProcessMatches failed: {e}")
@@ -127,11 +59,7 @@ class MainWindow(QtWidgets.QWidget):
             w.repaint()
         self.repaint()
 
-        logging.debug("[GUI] refresh end")
 
-# ─────────────────────── App bootstrap ─────────────────────────────────────
-async def _bootstrap():
-    bus, iface = await connect_userbus()
 
     win = MainWindow(iface)
     await win.refresh()  # initial paint
@@ -144,27 +72,12 @@ async def _bootstrap():
     except Exception as e:
         logging.info(f"[GUI][Signals] Failed to bind PowerStateChanged handler: {e}")
 
-    # MetricsUpdated signal (0‑arg)
-    try:
-        iface.on_metrics_updated(
-            lambda: (logging.debug("[GUI][Signals] MetricsUpdated"), asyncio.create_task(win.refresh()))
-        )
-    except TypeError as e:
-        logging.debug(f"[GUI][Signals] Failed to bind MetricsUpdated: {e}")
 
-    QtWidgets.QApplication.instance().aboutToQuit.connect(bus.disconnect)  # type: ignore[arg-type]
-    win.show()
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, app.quit)
 
     loop.create_task(_bootstrap())
     loop.run_forever()
-
-if __name__ == "__main__":
-    main()
+    
