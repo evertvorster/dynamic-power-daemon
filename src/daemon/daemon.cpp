@@ -132,52 +132,6 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
     }
 }
 
-// This function is called every 5 seconds by the QTimer
-void Daemon::checkLoadAverage() {
-    // Open /proc/loadavg to read the current 1-minute load average
-    QFile file("/proc/loadavg");
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        log_error("Failed to read /proc/loadavg");
-        return;
-    }
-
-    QTextStream in(&file);
-    QString line = in.readLine();  // example: "0.33 0.47 0.59 1/1234 56789"
-    file.close();
-
-    // Split the line into parts and parse the first value as the 1-minute load average
-    QStringList parts = line.split(" ");
-    if (parts.isEmpty()) {
-        log_error("Failed to parse loadavg line");
-        return;
-    }
-
-    bool ok = false;
-    double load = parts[0].toDouble(&ok);  // converts "0.33" to 0.33
-    if (!ok) {
-        log_error("Failed to convert loadavg value to double");
-        return;
-    }
-
-    QString level;
-    if (load < m_thresholds.low) {
-        level = "low";
-    } else if (load > m_thresholds.high) {
-        level = "high";
-    } else {
-        level = "medium";
-    }
-
-    if (DEBUG_MODE) {
-        log_info(QString("Current load: %1 (%2)")
-                 .arg(load, 0, 'f', 2)  // format to 2 decimal places
-                 .arg(level)
-                 .toUtf8().constData());
-    }
-
-    // ⚠️ In future: add logic here to switch power profile or notify other components
-}
-
 bool Daemon::loadAvailableProfiles()
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(
@@ -235,4 +189,98 @@ bool Daemon::loadAvailableProfiles()
     }
 
     return true;
+}
+
+bool Daemon::setProfile(const QString& internalName)
+{
+    if (!m_profileMap.contains(internalName)) {
+        log_warning(QString("setProfile(): Unknown internal profile name '%1'")
+                    .arg(internalName).toUtf8().constData());
+        return false;
+    }
+
+    QString actualProfile = m_profileMap.value(internalName);
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        "net.hadess.PowerProfiles",               // service
+        "/net/hadess/PowerProfiles",              // object path
+        "org.freedesktop.DBus.Properties",        // this is the interface we're calling ON
+        "Set"                                     // this is the method name
+    );
+
+    // Set(interface name, property name, value)
+    msg << "net.hadess.PowerProfiles"            // target interface for the property
+        << "ActiveProfile"                        // property name
+        << QVariant::fromValue(QDBusVariant(actualProfile));  // value
+
+    QDBusMessage reply = QDBusConnection::systemBus().call(msg);
+
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        log_error(QString("setProfile(): Failed to set profile '%1': %2")
+                  .arg(actualProfile, reply.errorMessage()).toUtf8().constData());
+        return false;
+    }
+
+    log_info(QString("Profile set to '%1' via DBus").arg(actualProfile).toUtf8().constData());
+    return true;
+}
+
+
+// ⚠️ This function is called every 5 seconds by the QTimer, and drives the daemon.
+void Daemon::checkLoadAverage() {
+    // Open /proc/loadavg to read the current 1-minute load average
+    QFile file("/proc/loadavg");
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        log_error("Failed to read /proc/loadavg");
+        return;
+    }
+
+    QTextStream in(&file);
+    QString line = in.readLine();  // example: "0.33 0.47 0.59 1/1234 56789"
+    file.close();
+
+    // Split the line into parts and parse the first value as the 1-minute load average
+    QStringList parts = line.split(" ");
+    if (parts.isEmpty()) {
+        log_error("Failed to parse loadavg line");
+        return;
+    }
+
+    bool ok = false;
+    double load = parts[0].toDouble(&ok);  // converts "0.33" to 0.33
+    if (!ok) {
+        log_error("Failed to convert loadavg value to double");
+        return;
+    }
+
+    QString level;
+    if (load < m_thresholds.low) {
+        level = "low";
+    } else if (load > m_thresholds.high) {
+        level = "high";
+    } else {
+        level = "medium";
+    }
+
+    if (DEBUG_MODE) {
+        log_info(QString("Current load: %1 (%2)")
+                 .arg(load, 0, 'f', 2)  // format to 2 decimal places
+                 .arg(level)
+                 .toUtf8().constData());
+    }
+
+    // ⚠️ Logic to switch power profile or notify other components
+    QString targetProfile;
+
+    if (level == "low") {
+        targetProfile = "powersave";
+    } else if (level == "high") {
+        targetProfile = "performance";
+    } else {
+        targetProfile = "balanced";
+    }
+
+    if (!setProfile(targetProfile)) {
+        log_error("Failed to apply profile based on load.");
+    }
 }

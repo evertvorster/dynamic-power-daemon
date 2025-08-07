@@ -15,7 +15,8 @@ public:
     // Constructor now takes thresholds loaded from config
     Daemon(const Thresholds &thresholds, QObject *parent = nullptr);
     bool loadAvailableProfiles();
-
+    bool setProfile(const QString& internalName);
+    
 private Q_SLOTS:
     void handlePropertiesChanged(const QDBusMessage &message);
     void handleUPowerChanged(const QDBusMessage &message);
