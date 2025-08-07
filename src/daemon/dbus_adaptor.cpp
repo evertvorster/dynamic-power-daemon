@@ -5,7 +5,7 @@
 #include "dbus_adaptor.h"
 
 DynamicPowerAdaptor::DynamicPowerAdaptor(Daemon *parent)
-    : QDBusAbstractAdaptor(parent)
+    : QDBusAbstractAdaptor(parent), m_daemon(parent)
 {
     setAutoRelaySignals(true);
     log_info("DBus adaptor constructed");

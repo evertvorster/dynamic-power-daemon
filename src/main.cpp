@@ -3,6 +3,7 @@
 #include "daemon/daemon.h"
 #include "daemon/log.h"
 #include "config/config.h"
+#include "daemon/dbus_adaptor.h"
 
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
@@ -30,5 +31,6 @@ int main(int argc, char *argv[]) {
         fflush(stdout);
     }
     Daemon daemon(settings.thresholds, settings.gracePeriodSeconds);
+    new DynamicPowerAdaptor(&daemon);
     return app.exec();
 }

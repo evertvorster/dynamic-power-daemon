@@ -16,6 +16,9 @@
 Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
     : QObject(parent), m_thresholds(thresholds)
 {
+    m_overrideProfile = "";
+    m_isBossOverride = false;
+    m_powerSource = "unknown";
     // Connection to power profiles daemon
     bool success = QDBusConnection::systemBus().connect(
         "net.hadess.PowerProfiles",
@@ -64,16 +67,16 @@ Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
     // ✅ Register DBus object and name
     QDBusConnection bus = QDBusConnection::systemBus();
     // Export our daemon object at a custom path
-    if (!bus.registerObject("/org/dynamic_power/DaemonCpp", this)) {
+    if (!bus.registerObject("/org/dynamic_power/Daemon", this)) {
         log_error("Failed to register DBus object path");
     }
     // Register service name (non-conflicting with Python daemon)
-    if (!bus.registerService("org.dynamic_power.DaemonCpp")) {
+    if (!bus.registerService("org.dynamic_power.Daemon")) {
         log_error("Failed to register DBus service name");
     }
     // Attach the DBus adaptor to this object
     new DynamicPowerAdaptor(this);
-    log_info("DBus service org.dynamic_power.DaemonCpp is now live");
+    log_info("DBus service org.dynamic_power.Daemon is now live");
     // load available power profiles
     if (!loadAvailableProfiles()) {
         log_warning("Warning: Failed to load available power profiles. Switching may not work.");
