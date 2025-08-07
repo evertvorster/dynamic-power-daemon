@@ -12,6 +12,7 @@
 #include "daemon.h"
 #include "log.h"
 
+// Constructor, initializes everything that needs to run initializd. 
 Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
     : QObject(parent), m_thresholds(thresholds)
 {
@@ -96,6 +97,38 @@ Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
                 .arg(graceSeconds).toUtf8().constData());
     }
 }
+// This is the actual profile override sent from user program.
+void Daemon::setPowerProfile(const std::string& profile, bool boss) {
+    if (profile.empty()) {
+        m_overrideProfile.clear();
+        m_isBossOverride = false;
+        log_info("Cleared profile override. Resuming dynamic control.");
+        return;
+    }
+
+    if (!m_profileMap.contains(QString::fromStdString(profile))) {
+        QString msg = "Invalid profile received over DBus: " + QString::fromStdString(profile);
+        log_info(msg.toUtf8().constData());
+        return;
+    }
+
+    if (m_powerSource == "battery" && profile != "power-saver" && !boss) {
+        QString msg = "On battery. Ignoring profile request for: " + QString::fromStdString(profile);
+        log_debug(msg.toUtf8().constData());
+        return;
+    }
+
+    if (setProfile(QString::fromStdString(profile))) {
+        m_overrideProfile = QString::fromStdString(profile);
+        m_isBossOverride = boss;
+        QString msg = "Override profile set via DBus: " + m_overrideProfile + (boss ? " (boss mode)" : "");
+        log_info(msg.toUtf8().constData());
+    } else {
+        QString msg = "Failed to apply profile: " + QString::fromStdString(profile);
+        log_info(msg.toUtf8().constData());
+    }
+}
+
 
 void Daemon::setThresholdOverride(double low, double high) {
     m_overrideThresholdLow = low;
@@ -379,5 +412,17 @@ void Daemon::checkLoadAverage() {
                     .arg(targetProfile).toUtf8().constData());
         }
         targetProfile = "performance";
+    }
+    // Boss override!
+    if (!m_overrideProfile.isEmpty()) {
+        bool allowOverride =
+            m_powerSource != "battery" ||
+            m_overrideProfile == "power-saver" ||
+            m_isBossOverride;
+
+        if (allowOverride) {
+            targetProfile = m_overrideProfile;
+            log_debug(("Override active. Using profile: " + m_overrideProfile).toStdString().c_str());
+        }
     }    
 }

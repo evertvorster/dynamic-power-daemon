@@ -14,6 +14,7 @@ class Daemon : public QObject {
 public:
     // Constructor now takes thresholds loaded from config
     Daemon(const Thresholds &thresholds,  int graceSeconds, QObject *parent = nullptr);
+    void setPowerProfile(const std::string& profile, bool boss);
     bool loadAvailableProfiles();
     bool setProfile(const QString& internalName);
     void setThresholdOverride(double low, double high);
