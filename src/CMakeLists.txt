@@ -16,11 +16,18 @@ add_executable(dynamic_power_cpp
     daemon/daemon.h
     daemon/log.cpp
     daemon/log.h
+    config/config.cpp
+    config/config.h
 )
 
-target_include_directories(dynamic_power_cpp PRIVATE ${SYSTEMD_INCLUDE_DIRS})
+target_include_directories(dynamic_power_cpp
+    PRIVATE
+    ${SYSTEMD_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 target_link_libraries(dynamic_power_cpp
     Qt6::Core
     Qt6::DBus
+    yaml-cpp
     ${SYSTEMD_LIBRARIES}
 )
