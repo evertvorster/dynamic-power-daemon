@@ -7,6 +7,8 @@
 #include <QFile>
 #include <QTextStream>
 #include <QStringList>
+#include <QDBusError>
+#include "dbus_adaptor.h"
 
 Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
     : QObject(parent), m_thresholds(thresholds)
@@ -54,6 +56,20 @@ Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
     if (DEBUG_MODE) {
         log_info("QTimer started for load average polling every 5s");
     }
+
+    // ✅ Register DBus object and name
+    QDBusConnection bus = QDBusConnection::systemBus();
+    // Export our daemon object at a custom path
+    if (!bus.registerObject("/org/dynamic_power/DaemonCpp", this)) {
+        log_error("Failed to register DBus object path");
+    }
+    // Register service name (non-conflicting with Python daemon)
+    if (!bus.registerService("org.dynamic_power.DaemonCpp")) {
+        log_error("Failed to register DBus service name");
+    }
+    // Attach the DBus adaptor to this object
+    new DynamicPowerAdaptor(this);
+    log_info("DBus service org.dynamic_power.DaemonCpp is now live");
 }
 
 void Daemon::handlePropertiesChanged(const QDBusMessage &message) {

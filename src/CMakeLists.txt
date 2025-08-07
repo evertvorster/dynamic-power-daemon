@@ -16,6 +16,8 @@ add_executable(dynamic_power_cpp
     daemon/daemon.h
     daemon/log.cpp
     daemon/log.h
+    daemon/dbus_adaptor.cpp
+    daemon/dbus_adaptor.h
     config/config.cpp
     config/config.h
 )
