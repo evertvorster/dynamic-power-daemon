@@ -8,6 +8,8 @@ find_package(Qt6 REQUIRED COMPONENTS Core DBus)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SYSTEMD REQUIRED libsystemd)
 
+set(CMAKE_AUTOMOC ON)
+
 add_executable(dynamic_power_cpp
     main.cpp
     daemon/daemon.cpp
