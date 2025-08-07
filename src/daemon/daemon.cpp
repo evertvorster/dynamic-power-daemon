@@ -40,9 +40,10 @@ Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
         this,
         SLOT(handleUPowerChanged(QDBusMessage))
     );
-
+    
     if (upowerConnected) {
         log_info("Connected to org.freedesktop.UPower signal");
+        updatePowerSource();
     } else {
         log_error("Failed to connect to UPower signal");
     }
@@ -128,7 +129,8 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
 
         if (key == "OnBattery") {
             bool onBattery = value.toBool();
-            // TODO: react to power source change here
+            m_powerSource = onBattery ? "battery" : "AC";
+            log_info(QString("Power source changed: now on %1").arg(m_powerSource).toUtf8().constData());
         }
     }
 }
@@ -253,6 +255,31 @@ bool Daemon::setProfile(const QString& internalName)
     return true;
 }
 
+void Daemon::updatePowerSource()
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        "org.freedesktop.UPower",
+        "/org/freedesktop/UPower",
+        "org.freedesktop.DBus.Properties",
+        "Get"
+    );
+
+    msg << "org.freedesktop.UPower" << "OnBattery";
+
+    QDBusMessage reply = QDBusConnection::systemBus().call(msg);
+
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        log_warning("Failed to read OnBattery from UPower – leaving power source unchanged");
+        return;
+    }
+
+    QVariant variant = reply.arguments().at(0).value<QDBusVariant>().variant();
+    bool onBattery = variant.toBool();
+
+    m_powerSource = onBattery ? "battery" : "AC";
+
+    log_debug(QString("Power source detected: %1").arg(m_powerSource).toUtf8().constData());
+}
 
 // ⚠️ This function is called every 5 seconds by the QTimer, and drives the daemon.
 void Daemon::checkLoadAverage() {
@@ -307,7 +334,13 @@ void Daemon::checkLoadAverage() {
     } else {
         targetProfile = "balanced";
     }
-
+    // 🚫 Downgrade if on battery and not already powersave
+    if (m_powerSource == "battery" && targetProfile != "powersave") {
+        if (m_currentProfile != "powersave") {
+            log_debug(QString("On battery: downgrading '%1' → 'powersave'").arg(targetProfile).toUtf8().constData());
+        }
+        targetProfile = "powersave";
+    }
     if (!setProfile(targetProfile)) {
         log_error("Failed to apply profile based on load.");
     }
