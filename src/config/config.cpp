@@ -2,16 +2,33 @@
 #include <yaml-cpp/yaml.h>
 #include <QFile>
 #include <QTextStream>
+#include <QFileInfo>
 #include "../daemon/log.h"
+
+static const QString TEMPLATE_CONFIG_PATH = "/usr/share/dynamic-power/dynamic_power.yaml";
 
 Settings Config::loadSettings(const QString& path) {
     Settings settings;
 
+    // Step 1: Check if config exists
     if (!QFile::exists(path)) {
-        log_error(("Config file not found: " + path).toUtf8().constData());
-        return settings;
+        log_info(("Config file not found: " + path + ", attempting to install default").toUtf8().constData());
+
+        // Step 2: Try to copy from template
+        if (QFile::exists(TEMPLATE_CONFIG_PATH)) {
+            if (!QFile::copy(TEMPLATE_CONFIG_PATH, path)) {
+                log_error(("Failed to copy default config from " + TEMPLATE_CONFIG_PATH + " to " + path).toUtf8().constData());
+                return settings;
+            } else {
+                log_info(("Default config installed to " + path).toUtf8().constData());
+            }
+        } else {
+            log_error(("Template config missing at " + TEMPLATE_CONFIG_PATH).toUtf8().constData());
+            return settings;
+        }
     }
 
+    // Step 3: Load the config
     try {
         YAML::Node root = YAML::LoadFile(path.toStdString());
 
