@@ -10,6 +10,7 @@
 
 class Daemon : public QObject {
     Q_OBJECT
+    QString m_currentProfile;
 
 public:
     // Constructor now takes thresholds loaded from config

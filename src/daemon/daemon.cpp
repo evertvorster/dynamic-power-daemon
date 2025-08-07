@@ -101,7 +101,8 @@ void Daemon::handlePropertiesChanged(const QDBusMessage &message) {
         // ✅ you can still act on the key/value here regardless of mode
         if (key == "ActiveProfile") {
             QString newProfile = value.toString();
-            // TODO: take action based on newProfile
+            m_currentProfile = newProfile;
+            log_info(QString("Confirmed active profile: %1").arg(newProfile).toUtf8().constData());
         }
     }
 }
@@ -198,8 +199,33 @@ bool Daemon::setProfile(const QString& internalName)
                     .arg(internalName).toUtf8().constData());
         return false;
     }
+    // 🆕 Fallback: if we don't know the current profile yet, ask DBus
+    if (m_currentProfile.isEmpty()) {
+        QDBusMessage getMsg = QDBusMessage::createMethodCall(
+            "net.hadess.PowerProfiles",
+            "/net/hadess/PowerProfiles",
+            "org.freedesktop.DBus.Properties",
+            "Get"
+        );
+        getMsg << "net.hadess.PowerProfiles" << "ActiveProfile";
 
+        QDBusMessage reply = QDBusConnection::systemBus().call(getMsg);
+        if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() == 1) {
+            QVariant variant = reply.arguments().at(0).value<QDBusVariant>().variant();
+            m_currentProfile = variant.toString();
+            log_debug(QString("Queried current profile: %1").arg(m_currentProfile).toUtf8().constData());
+        } else {
+            log_warning("Could not query current profile from DBus");
+        }
+    }
     QString actualProfile = m_profileMap.value(internalName);
+    // If the current profile is already set, skip it. 
+    if (actualProfile == m_currentProfile) {
+        if (DEBUG_MODE) {
+            log_debug(QString("setProfile(): '%1' already active – skipping").arg(actualProfile).toUtf8().constData());
+        }
+        return true;
+    }
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
         "net.hadess.PowerProfiles",               // service
@@ -220,6 +246,8 @@ bool Daemon::setProfile(const QString& internalName)
                   .arg(actualProfile, reply.errorMessage()).toUtf8().constData());
         return false;
     }
+
+    log_debug(QString("Requested profile switch to '%1'").arg(actualProfile).toUtf8().constData());
 
     log_info(QString("Profile set to '%1' via DBus").arg(actualProfile).toUtf8().constData());
     return true;
