@@ -16,7 +16,10 @@ public:
 public slots:
     QString Ping();
     QVariantMap GetDaemonState();
-    bool SetLoadThresholds(double low, double high);
     bool SetPollInterval(uint interval);
     bool SetProfile(const QString &profile, bool is_user);
+    void SetLoadThresholds(double low, double high);
+
+private:
+    Daemon *m_daemon;
 };

@@ -97,6 +97,16 @@ Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
     }
 }
 
+void Daemon::setThresholdOverride(double low, double high) {
+    m_overrideThresholdLow = low;
+    m_overrideThresholdHigh = high;
+
+    log_debug(("Set threshold override: low = " + std::to_string(low) +
+               ", high = " + std::to_string(high)).c_str());
+
+    checkLoadAverage();
+}
+
 void Daemon::handlePropertiesChanged(const QDBusMessage &message) {
     const auto args = message.arguments();
     if (args.size() < 2) return;

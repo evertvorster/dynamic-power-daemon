@@ -16,6 +16,7 @@ public:
     Daemon(const Thresholds &thresholds,  int graceSeconds, QObject *parent = nullptr);
     bool loadAvailableProfiles();
     bool setProfile(const QString& internalName);
+    void setThresholdOverride(double low, double high);
     
 private Q_SLOTS:
     void handlePropertiesChanged(const QDBusMessage &message);
@@ -33,6 +34,10 @@ private:
     bool m_isBossOverride = false;        // Override flag
     bool m_graceActive = false;           // Whether we're currently in the grace period
     int graceSeconds;                     // Number of seconds for grace period
+    std::optional<Thresholds> m_thresholdOverride;  //Stores incoming thresholds
+    std::optional<double> m_overrideThresholdLow;
+    std::optional<double> m_overrideThresholdHigh;
+
 
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
 };
