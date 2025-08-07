@@ -1,5 +1,3 @@
-#include "daemon.h"
-#include "log.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusArgument>
@@ -9,6 +7,10 @@
 #include <QStringList>
 #include <QDBusError>
 #include "dbus_adaptor.h"
+#include <QDBusVariant>
+#include <QMap>
+#include "daemon.h"
+#include "log.h"
 
 Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
     : QObject(parent), m_thresholds(thresholds)
@@ -70,6 +72,10 @@ Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
     // Attach the DBus adaptor to this object
     new DynamicPowerAdaptor(this);
     log_info("DBus service org.dynamic_power.DaemonCpp is now live");
+    // load available power profiles
+    if (!loadAvailableProfiles()) {
+        log_warning("Warning: Failed to load available power profiles. Switching may not work.");
+    }    
 }
 
 void Daemon::handlePropertiesChanged(const QDBusMessage &message) {
@@ -170,4 +176,63 @@ void Daemon::checkLoadAverage() {
     }
 
     // ⚠️ In future: add logic here to switch power profile or notify other components
+}
+
+bool Daemon::loadAvailableProfiles()
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        "net.hadess.PowerProfiles",
+        "/net/hadess/PowerProfiles",
+        "org.freedesktop.DBus.Properties",
+        "Get"
+    );
+
+    msg << "net.hadess.PowerProfiles" << "Profiles";
+
+    QDBusMessage reply = QDBusConnection::systemBus().call(msg);
+
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        log_error(QString("Failed to get Profiles: %1").arg(reply.errorMessage()).toUtf8().constData());
+        return false;
+    }
+
+    QVariant outer = reply.arguments().at(0).value<QDBusVariant>().variant();
+
+    // Unpack the array of {sv} maps from the QDBusArgument
+    const QDBusArgument arg = outer.value<QDBusArgument>();
+
+    m_profileMap.clear();
+
+    arg.beginArray();
+    while (!arg.atEnd()) {
+        QVariantMap profileEntry;
+        arg >> profileEntry;
+
+        QString actualProfile = profileEntry.value("Profile").toString();
+        if (actualProfile.isEmpty())
+            continue;
+
+        log_info(QString("Found profile: %1").arg(actualProfile).toUtf8().constData());
+
+        if (actualProfile == "performance") {
+            m_profileMap["performance"] = actualProfile;
+        } else if (actualProfile == "balanced") {
+            m_profileMap["balanced"] = actualProfile;
+        } else if (actualProfile == "power-saver" || actualProfile == "powersave") {
+            m_profileMap["powersave"] = actualProfile;
+        }
+    }
+    arg.endArray();
+
+    for (const QString& role : { "performance", "balanced", "powersave" }) {
+        if (!m_profileMap.contains(role)) {
+            log_warning(QString("Missing mapping for internal role '%1'").arg(role).toUtf8().constData());
+        } else {
+            log_debug(QString("Mapped internal profile '%1' → DBus profile '%2'")
+                      .arg(role, m_profileMap[role])
+                      .toUtf8().constData());
+        }
+    }
+
+    return true;
 }

@@ -23,3 +23,19 @@ void log_error(const char *msg) {
     }
     sd_journal_print(LOG_ERR, "%s", msg);
 }
+
+void log_warning(const char *msg) {
+    if (DEBUG_MODE) {
+        printf("[WARNING] %s\n", msg);
+        fflush(stdout);
+    }
+    sd_journal_print(LOG_WARNING, "%s", msg);
+}
+
+void log_debug(const char *msg) {
+    if (DEBUG_MODE) {
+        printf("[DEBUG] %s\n", msg);
+        fflush(stdout);
+    }
+    sd_journal_print(LOG_DEBUG, "%s", msg);
+}
