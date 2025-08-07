@@ -12,7 +12,7 @@
 #include "daemon.h"
 #include "log.h"
 
-Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
+Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
     : QObject(parent), m_thresholds(thresholds)
 {
     // Connection to power profiles daemon
@@ -76,7 +76,25 @@ Daemon::Daemon(const Thresholds &thresholds, QObject *parent)
     // load available power profiles
     if (!loadAvailableProfiles()) {
         log_warning("Warning: Failed to load available power profiles. Switching may not work.");
-    }    
+    }
+    // Read Grace period
+    if (graceSeconds > 0) {
+        m_graceActive = true;
+        setProfile("performance");
+
+        m_graceTimer = new QTimer(this);
+        m_graceTimer->setSingleShot(true);
+        m_graceTimer->setInterval(graceSeconds * 1000);  // convert to ms
+
+        connect(m_graceTimer, &QTimer::timeout, this, [this]() {
+            m_graceActive = false;
+            log_debug("Grace period ended – resuming normal switching");
+        });
+
+        m_graceTimer->start();
+        log_debug(QString("Grace period active: forcing 'performance' for %1 seconds")
+                .arg(graceSeconds).toUtf8().constData());
+    }
 }
 
 void Daemon::handlePropertiesChanged(const QDBusMessage &message) {
@@ -344,4 +362,12 @@ void Daemon::checkLoadAverage() {
     if (!setProfile(targetProfile)) {
         log_error("Failed to apply profile based on load.");
     }
+    // 🚫 We want performance mode for a grace period.
+    if (m_graceActive && targetProfile != "performance") {
+        if (m_currentProfile != "performance") {
+            log_debug(QString("Grace active: overriding '%1' → 'performance'")
+                    .arg(targetProfile).toUtf8().constData());
+        }
+        targetProfile = "performance";
+    }    
 }

@@ -63,6 +63,7 @@ install:
 	@echo "# --- YAML templates ------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power-user.yaml "$(DESTDIR)$(SHARE_DIR)/dynamic-power-user.yaml"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic_power.yaml"
 
 	@echo "Install complete."
 

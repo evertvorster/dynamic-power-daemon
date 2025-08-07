@@ -15,7 +15,9 @@ int main(int argc, char *argv[]) {
         log_info("dynamic_power_cpp starting normally");
     }
 
-    Thresholds thresholds = Config::loadThresholds();
+    Settings settings = Config::loadSettings(DEFAULT_CONFIG_PATH);
+    Thresholds thresholds = settings.thresholds;
+    int grace = settings.gracePeriodSeconds;
 
     // Load and optionall display thresholds
     log_info(QString("Loaded thresholds: low=%1 high=%2")
@@ -27,6 +29,6 @@ int main(int argc, char *argv[]) {
         printf("[DEBUG] Loaded thresholds: low=%.2f high=%.2f\n", thresholds.low, thresholds.high);
         fflush(stdout);
     }
-    Daemon daemon(thresholds);
+    Daemon daemon(settings.thresholds, settings.gracePeriodSeconds);
     return app.exec();
 }
