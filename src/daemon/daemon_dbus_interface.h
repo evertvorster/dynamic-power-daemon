@@ -12,7 +12,7 @@ class DaemonDBusInterface : public QDBusAbstractAdaptor {
 
 public:
     explicit DaemonDBusInterface(Daemon *parent);
-
+    
 public slots:
     QString Ping();
     QVariantMap GetDaemonState();

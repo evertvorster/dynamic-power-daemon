@@ -18,6 +18,9 @@ public:
     Daemon(const Thresholds &thresholds,  int graceSeconds, QObject *parent = nullptr);
     bool loadAvailableProfiles();
     bool setProfile(const QString& internalName);
+    QString getActiveProfile() const { return m_activeProfile; }
+    double getLowThreshold() const { return m_thresholds.low; }
+    double getHighThreshold() const { return m_thresholds.high; }
     
 private Q_SLOTS:
     void handlePropertiesChanged(const QDBusMessage &message);
@@ -32,6 +35,7 @@ private:
     QString m_powerSource;                // "AC" or "battery"
     QString m_currentProfile;             // Actual current DBus profile
     QString m_overrideProfile;            // Optional override profile
+    QString m_activeProfile;              // Variable for dbus interface
     bool m_isBossOverride = false;        // Override flag
     bool m_graceActive = false;           // Whether we're currently in the grace period
     int graceSeconds;                     // Number of seconds for grace period

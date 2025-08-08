@@ -1,3 +1,6 @@
+#include "log.h"
+#include "daemon.h"
+#include "daemon_dbus_interface.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusArgument>
@@ -6,12 +9,8 @@
 #include <QTextStream>
 #include <QStringList>
 #include <QDBusError>
-#include "dbus_adaptor.h"
 #include <QDBusVariant>
 #include <QMap>
-#include "daemon.h"
-#include "dbus_adaptor.h"
-#include "log.h"
 
 // Constructor.
 Daemon::Daemon(const Thresholds &thresholds, 
@@ -21,7 +20,7 @@ Daemon::Daemon(const Thresholds &thresholds,
 {
     // Connect to the new dbus interface for user
     m_dbusInterface = new DaemonDBusInterface(this);
-    QDBusConnection::systemBus().registerObject("/org/dynamic_power/Daemon", this);
+    QDBusConnection::systemBus().registerObject("/org/dynamic_power", this, QDBusConnection::ExportAdaptors);
     QDBusConnection::systemBus().registerService("org.dynamic_power.Daemon");
 
     // Connection to power profiles daemon
@@ -231,6 +230,7 @@ bool Daemon::setProfile(const QString& internalName)
                     .arg(internalName).toUtf8().constData());
         return false;
     }
+    
     // 🆕 Fallback: if we don't know the current profile yet, ask DBus
     if (m_currentProfile.isEmpty()) {
         QDBusMessage getMsg = QDBusMessage::createMethodCall(
@@ -250,7 +250,7 @@ bool Daemon::setProfile(const QString& internalName)
             log_warning("Could not query current profile from DBus");
         }
     }
-    QString actualProfile = m_profileMap.value(internalName);
+    QString actualProfile = m_profileMap.value(internalName);   
     // If the current profile is already set, skip it. 
     if (actualProfile == m_currentProfile) {
         if (DEBUG_MODE) {
@@ -258,7 +258,8 @@ bool Daemon::setProfile(const QString& internalName)
         }
         return true;
     }
-
+    // Get the internal name for dbus.
+    // m_activeProfile = internalName;
     QDBusMessage msg = QDBusMessage::createMethodCall(
         "net.hadess.PowerProfiles",               // service
         "/net/hadess/PowerProfiles",              // object path
@@ -272,7 +273,7 @@ bool Daemon::setProfile(const QString& internalName)
         << QVariant::fromValue(QDBusVariant(actualProfile));  // value
 
     QDBusMessage reply = QDBusConnection::systemBus().call(msg);
-
+    
     if (reply.type() == QDBusMessage::ErrorMessage) {
         log_error(QString("setProfile(): Failed to set profile '%1': %2")
                   .arg(actualProfile, reply.errorMessage()).toUtf8().constData());
@@ -280,8 +281,8 @@ bool Daemon::setProfile(const QString& internalName)
     }
 
     log_debug(QString("Requested profile switch to '%1'").arg(actualProfile).toUtf8().constData());
-
-    log_info(QString("Profile set to '%1' via DBus").arg(actualProfile).toUtf8().constData());
+    m_activeProfile = internalName;
+    log_info(QString("Profile set to '%1' via DBus").arg(actualProfile).toUtf8().constData());   
     return true;
 }
 

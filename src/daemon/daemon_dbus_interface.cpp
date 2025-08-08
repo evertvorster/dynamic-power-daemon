@@ -1,6 +1,6 @@
-#include "dbus_adaptor.h"
 #include "log.h"
 #include "daemon.h"
+#include "daemon_dbus_interface.h"
 #include <QDateTime> 
 
 DaemonDBusInterface::DaemonDBusInterface(Daemon *parent)
@@ -12,16 +12,18 @@ DaemonDBusInterface::DaemonDBusInterface(Daemon *parent)
 
 QString DaemonDBusInterface::Ping() {
     log_info("Ping() received");
-    return "Pong from dynamic_power_cpp";
+    return "Pong from dynamic_power";
 }
 
 QVariantMap DaemonDBusInterface::GetDaemonState() {
-    log_info("GetDaemonState() called");
+    log_debug("GetDaemonState() called");
+
+    Daemon* daemon = static_cast<Daemon*>(parent());
 
     QVariantMap state;
-    state.insert("active_profile", "unknown");
-    state.insert("threshold_low", 1.0);
-    state.insert("threshold_high", 2.0);
+    state.insert("active_profile", daemon->getActiveProfile());
+    state.insert("threshold_low", daemon->getLowThreshold());
+    state.insert("threshold_high", daemon->getHighThreshold());
     state.insert("timestamp", QDateTime::currentDateTimeUtc().toSecsSinceEpoch());
     return state;
 }
