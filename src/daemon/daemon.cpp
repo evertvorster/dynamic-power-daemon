@@ -10,11 +10,20 @@
 #include <QDBusVariant>
 #include <QMap>
 #include "daemon.h"
+#include "dbus_adaptor.h"
 #include "log.h"
 
-Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
+// Constructor.
+Daemon::Daemon(const Thresholds &thresholds, 
+                int graceSeconds,  
+                QObject *parent)
     : QObject(parent), m_thresholds(thresholds)
 {
+    // Connect to the new dbus interface for user
+    m_dbusInterface = new DaemonDBusInterface(this);
+    QDBusConnection::systemBus().registerObject("/org/dynamic_power/Daemon", this);
+    QDBusConnection::systemBus().registerService("org.dynamic_power.Daemon");
+
     // Connection to power profiles daemon
     bool success = QDBusConnection::systemBus().connect(
         "net.hadess.PowerProfiles",
@@ -63,16 +72,16 @@ Daemon::Daemon(const Thresholds &thresholds, int graceSeconds, QObject *parent)
     // ✅ Register DBus object and name
     QDBusConnection bus = QDBusConnection::systemBus();
     // Export our daemon object at a custom path
-    if (!bus.registerObject("/org/dynamic_power/DaemonCpp", this)) {
+    if (!bus.registerObject("/org/dynamic_power/Daemon", this)) {
         log_error("Failed to register DBus object path");
     }
-    // Register service name (non-conflicting with Python daemon)
-    if (!bus.registerService("org.dynamic_power.DaemonCpp")) {
+    // Register service name 
+    if (!bus.registerService("org.dynamic_power.Daemon")) {
         log_error("Failed to register DBus service name");
     }
     // Attach the DBus adaptor to this object
-    new DynamicPowerAdaptor(this);
-    log_info("DBus service org.dynamic_power.DaemonCpp is now live");
+    new DaemonDBusInterface(this);
+    log_info("DBus service org.dynamic_power.Daemon is now live");
     // load available power profiles
     if (!loadAvailableProfiles()) {
         log_warning("Warning: Failed to load available power profiles. Switching may not work.");
@@ -136,6 +145,9 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
     if (DEBUG_MODE) {
         log_info(QString("UPower PropertiesChanged from interface: %1").arg(interface).toUtf8().constData());
     }
+    // Send this signal to user space
+    if (m_dbusInterface)
+        Q_EMIT m_dbusInterface->PowerStateChanged();
 
     for (auto it = changedProps.begin(); it != changedProps.end(); ++it) {
         const QString &key = it.key();

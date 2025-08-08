@@ -10,7 +10,7 @@ pkg_check_modules(SYSTEMD REQUIRED libsystemd)
 
 set(CMAKE_AUTOMOC ON)
 
-add_executable(dynamic_power_cpp
+add_executable(dynamic_power
     main.cpp
     daemon/daemon.cpp
     daemon/daemon.h
@@ -22,12 +22,12 @@ add_executable(dynamic_power_cpp
     config/config.h
 )
 
-target_include_directories(dynamic_power_cpp
+target_include_directories(dynamic_power
     PRIVATE
     ${SYSTEMD_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(dynamic_power_cpp
+target_link_libraries(dynamic_power
     Qt6::Core
     Qt6::DBus
     yaml-cpp

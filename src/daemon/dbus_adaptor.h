@@ -6,12 +6,12 @@
 
 class Daemon;
 
-class DynamicPowerAdaptor : public QDBusAbstractAdaptor {
+class DaemonDBusInterface : public QDBusAbstractAdaptor {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.dynamic_power.DaemonCpp")
+    Q_CLASSINFO("D-Bus Interface", "org.dynamic_power.Daemon")
 
 public:
-    explicit DynamicPowerAdaptor(Daemon *parent);
+    explicit DaemonDBusInterface(Daemon *parent);
 
 public slots:
     QString Ping();
@@ -19,4 +19,7 @@ public slots:
     bool SetLoadThresholds(double low, double high);
     bool SetPollInterval(uint interval);
     bool SetProfile(const QString &profile, bool is_user);
+
+Q_SIGNALS:
+    void PowerStateChanged();
 };

@@ -8,6 +8,8 @@
 #include <QMap>
 #include "config/config.h"  // for Thresholds struct
 
+class DaemonDBusInterface;
+
 class Daemon : public QObject {
     Q_OBJECT
 
@@ -35,4 +37,5 @@ private:
     int graceSeconds;                     // Number of seconds for grace period
 
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
+    DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
 };
