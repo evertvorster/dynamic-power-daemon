@@ -51,17 +51,18 @@ void App::start() {
 }
 
 void App::onShowMainRequested() {
-    if (m_mainWindow) {
-        m_mainWindow->showNormal();
-        m_mainWindow->raise();
-        m_mainWindow->activateWindow();
-        // Apply current thresholds from daemon to graph
-        auto state = m_dbus->getDaemonState();
-        double low = state.value("threshold_low").toDouble();
-        double high = state.value("threshold_high").toDouble();
-        m_mainWindow->setThresholds(low, high);
-        m_mainWindow->setActiveProfile(state.value("active_profile").toString());
+    if (!m_mainWindow) return;
+    if (m_mainWindow->isVisible()) {           // new: toggle
+        m_mainWindow->hide();
+        return;
     }
+    m_mainWindow->showNormal();
+    m_mainWindow->raise();
+    m_mainWindow->activateWindow();
+    auto state = m_dbus->getDaemonState();
+    m_mainWindow->setThresholds(state.value("threshold_low").toDouble(),
+                                state.value("threshold_high").toDouble());
+    m_mainWindow->setActiveProfile(state.value("active_profile").toString());
 }
 
 void App::onDaemonStateChanged() {
@@ -75,21 +76,22 @@ void App::onDaemonStateChanged() {
 
 void App::onUserOverrideChanged(const QString& mode, bool boss) {
     if (mode == QStringLiteral("Inhibit Powersave")) {
-        // Set low threshold to 0, keep current high from config, and set boss flag via a balanced profile "anchor"
         auto state = m_dbus->getDaemonState();
         double high = state.value("threshold_high").toDouble();
         m_dbus->setLoadThresholds(0.0, high);
         m_dbus->setProfile(QStringLiteral("balanced"), true);
     } else if (mode == QStringLiteral("Dynamic")) {
-        // Clear boss by setting profile according to daemon policy (no boss)
-        // We just send a balanced request with boss=false to let daemon take over
         m_dbus->setProfile(QStringLiteral("balanced"), false);
-        // Restore thresholds from config
         auto th = m_config->thresholds();
         m_dbus->setLoadThresholds(th.first, th.second);
     } else {
-        // Exact profile
         m_dbus->setProfile(mode.toLower(), boss);
+    }
+
+    // NEW: reflect applied state on the button immediately
+    auto state = m_dbus->getDaemonState();
+    if (m_mainWindow) {
+        m_mainWindow->setActiveProfile(state.value("active_profile").toString());
     }
     updateTrayFromState();
 }

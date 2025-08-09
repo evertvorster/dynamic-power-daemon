@@ -6,29 +6,53 @@
 #include <QMouseEvent>
 #include <QTextStream>
 #include <cmath>
+#include <QCursor> 
 
 LoadGraphWidget::LoadGraphWidget(QWidget* parent) : QWidget(parent) {
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &LoadGraphWidget::sampleLoad);
     m_timer->start(1000);
     m_samples.assign(m_maxSamples, 0.0);
+    setMouseTracking(true);   // NEW: enable hover feedback
 }
 
-void LoadGraphWidget::setThresholds(double low, double high) {
-    m_low = low;
-    m_high = high;
-    update();
-}
-
-void LoadGraphWidget::sampleLoad() {
-    QFile f("/proc/loadavg");
-    double val = 0.0;
-    if (f.open(QIODevice::ReadOnly|QIODevice::Text)) {
-        QTextStream in(&f);
-        in >> val;
+void LoadGraphWidget::mousePressEvent(QMouseEvent* e) {
+    double y = e->position().y();
+    double lowY = valueToY(m_low);
+    double highY = valueToY(m_high);
+    if (std::abs(y - lowY) < m_grabTol) {
+        m_draggingLow = true;
+        setCursor(Qt::SizeVerCursor);
+    } else if (std::abs(y - highY) < m_grabTol) {
+        m_draggingHigh = true;
+        setCursor(Qt::SizeVerCursor);
     }
-    m_samples.pop_front();
-    m_samples.push_back(val);
+}
+
+void LoadGraphWidget::mouseMoveEvent(QMouseEvent* e) {
+    double y = e->position().y();
+
+    // Hover feedback when not dragging
+    if (!m_draggingLow && !m_draggingHigh) {
+        double lowY = valueToY(m_low);
+        double highY = valueToY(m_high);
+        if (std::abs(y - lowY) < m_grabTol || std::abs(y - highY) < m_grabTol)
+            setCursor(Qt::SizeVerCursor);
+        else
+            unsetCursor();
+        return;  // not dragging; nothing else to do
+    }
+
+    // Dragging
+    double v = yToValue(y);
+    if (m_draggingLow) {
+        if (v > m_high) v = m_high;
+        m_low = v;
+    } else {
+        if (v < m_low) v = m_low;
+        m_high = v;
+    }
+    emit thresholdsChanged(m_low, m_high);
     update();
 }
 
@@ -88,28 +112,25 @@ void LoadGraphWidget::paintEvent(QPaintEvent*) {
     p.drawText(8, 16, QString("MaxY=%1  Low=%2  High=%3").arg(currentMaxY()).arg(m_low).arg(m_high));
 }
 
-void LoadGraphWidget::mousePressEvent(QMouseEvent* e) {
-    double y = e->position().y();
-    double lowY = valueToY(m_low);
-    double highY = valueToY(m_high);
-    if (std::abs(y - lowY) < 6) m_draggingLow = true;
-    else if (std::abs(y - highY) < 6) m_draggingHigh = true;
+void LoadGraphWidget::setThresholds(double low, double high) {
+    m_low = low;
+    m_high = high;
+    update();
 }
 
-void LoadGraphWidget::mouseMoveEvent(QMouseEvent* e) {
-    if (!m_draggingLow && !m_draggingHigh) return;
-    double v = yToValue(e->position().y());
-    if (m_draggingLow) {
-        if (v > m_high) v = m_high;
-        m_low = v;
-    } else {
-        if (v < m_low) v = m_low;
-        m_high = v;
+void LoadGraphWidget::sampleLoad() {
+    QFile f("/proc/loadavg");
+    double val = 0.0;
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&f);
+        in >> val; // 1-minute load average
     }
-    emit thresholdsChanged(m_low, m_high);
+    if (!m_samples.empty()) m_samples.pop_front();
+    m_samples.push_back(val);
     update();
 }
 
 void LoadGraphWidget::mouseReleaseEvent(QMouseEvent*) {
     m_draggingLow = m_draggingHigh = false;
+    unsetCursor();
 }

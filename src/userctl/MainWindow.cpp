@@ -48,6 +48,12 @@ void MainWindow::hideEvent(QHideEvent* e) {
     emit visibilityChanged(false);
 }
 
+void MainWindow::closeEvent(QCloseEvent* e) {
+    e->ignore();
+    this->hide();
+    emit visibilityChanged(false);
+}
+
 void MainWindow::onOverrideButtonClicked() {
     QMenu menu(this);
     QStringList modes = {"Dynamic", "Inhibit Powersave", "Performance", "Balanced", "Powersave"};

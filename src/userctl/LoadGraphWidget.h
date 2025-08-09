@@ -34,4 +34,5 @@ private:
     double currentMaxY() const;
     double valueToY(double v) const;
     double yToValue(double y) const;
+    int m_grabTol = 12;  // was ~6; make it easier to grab
 };

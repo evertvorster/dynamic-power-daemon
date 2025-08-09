@@ -4,6 +4,7 @@
 #include <QString>
 #include <QShowEvent>
 #include <QHideEvent>
+#include <QCloseEvent>
 
 class DbusClient;
 class Config;
@@ -27,6 +28,7 @@ signals:
 protected:
     void showEvent(QShowEvent* e) override;
     void hideEvent(QHideEvent* e) override;
+    void closeEvent(QCloseEvent* e) override;
 
 private slots:
     void onOverrideButtonClicked();
