@@ -18,9 +18,15 @@ public:
     Daemon(const Thresholds &thresholds,  int graceSeconds, QObject *parent = nullptr);
     bool loadAvailableProfiles();
     bool setProfile(const QString& internalName);
+    // getters.
     QString getActiveProfile() const { return m_activeProfile; }
-    double getLowThreshold() const { return m_thresholds.low; }
-    double getHighThreshold() const { return m_thresholds.high; }
+    double getLowThreshold() const { return m_actualThresholds.low; }
+    double getHighThreshold() const { return m_actualThresholds.high; }
+    // setters.
+    void setRequestedThresholds(double low, double high) {
+        m_requestedThresholds.low  = low;
+        m_requestedThresholds.high = high;
+    }
     
 private Q_SLOTS:
     void handlePropertiesChanged(const QDBusMessage &message);
@@ -29,6 +35,8 @@ private Q_SLOTS:
 
 private:
     Thresholds m_thresholds;              // Low/high thresholds from config
+    Thresholds m_actualThresholds;        // Low/high thresholds actually used. 
+    Thresholds m_requestedThresholds;     // Low/high thresholds requested from user.
     QMap<QString, QString> m_profileMap;  // Internal → actual DBus profile name
     QTimer* m_timer = nullptr;            // Polling timer for load average
     QTimer* m_graceTimer = nullptr;       // Timer used for the grace period

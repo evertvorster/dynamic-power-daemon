@@ -22,15 +22,16 @@ QVariantMap DaemonDBusInterface::GetDaemonState() {
 
     QVariantMap state;
     state.insert("active_profile", daemon->getActiveProfile());
-    state.insert("threshold_low", daemon->getLowThreshold());
+    state.insert("threshold_low",  daemon->getLowThreshold());
     state.insert("threshold_high", daemon->getHighThreshold());
     state.insert("timestamp", QDateTime::currentDateTimeUtc().toSecsSinceEpoch());
     return state;
 }
 
 bool DaemonDBusInterface::SetLoadThresholds(double low, double high) {
-    log_info(QString("SetLoadThresholds(%1, %2)")
-             .arg(low).arg(high).toUtf8().constData());
+    log_debug(QString("SetLoadThresholds(%1, %2)").arg(low).arg(high).toUtf8().constData());
+    auto *daemon = static_cast<Daemon*>(parent());
+    daemon->setRequestedThresholds(low, high);
     return true;
 }
 

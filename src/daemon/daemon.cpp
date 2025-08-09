@@ -338,8 +338,15 @@ void Daemon::checkLoadAverage() {
         log_error("Failed to convert loadavg value to double");
         return;
     }
-
+    
     QString level;
+    m_actualThresholds.low = 3.0;
+    m_actualThresholds.high = 4.0;
+    log_debug(QString("Requested thresholds: low=%1, high=%2")
+            .arg(m_requestedThresholds.low)
+            .arg(m_requestedThresholds.high)
+            .toUtf8().constData());
+
     if (load < m_thresholds.low) {
         level = "low";
     } else if (load > m_thresholds.high) {
