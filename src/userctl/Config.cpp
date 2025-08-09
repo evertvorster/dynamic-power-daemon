@@ -5,6 +5,8 @@
 #include <QFile>
 #include <QTextStream>
 #include <yaml-cpp/yaml.h>
+#include <QFileDevice>
+#include <fstream>
 
 static const char* FILENAME_PRIMARY = "dynamic-power-user.yaml";
 static const char* FILENAME_FALLBACK = "config.yaml";

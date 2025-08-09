@@ -22,6 +22,10 @@ void DbusClient::connectSignals() {
         this, SLOT(powerStateChanged()));
 }
 
+void DbusClient::onPowerStateChanged() {
+    emit powerStateChanged();
+}
+
 QVariantMap DbusClient::getDaemonState() const {
     QDBusReply<QVariantMap> reply = m_iface->call("GetDaemonState");
     if (reply.isValid()) {

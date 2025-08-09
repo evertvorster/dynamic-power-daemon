@@ -17,6 +17,9 @@ public:
 signals:
     void powerStateChanged();
 
+private slots:
+    void onPowerStateChanged();
+
 private:
     QDBusInterface* m_iface;
     void connectSignals();

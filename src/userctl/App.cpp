@@ -9,6 +9,8 @@
 #include <QDir>
 #include <QDebug>
 
+App::~App() = default; 
+
 App::App(QObject* parent) : QObject(parent) {}
 
 void App::start() {

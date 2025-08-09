@@ -2,6 +2,8 @@
 #pragma once
 #include <QMainWindow>
 #include <QString>
+#include <QShowEvent>
+#include <QHideEvent>
 
 class DbusClient;
 class Config;

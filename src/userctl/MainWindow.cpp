@@ -6,6 +6,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QMenu>
+#include <QCursor>
 
 MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     : QMainWindow(parent), m_dbus(dbus), m_config(config) {
