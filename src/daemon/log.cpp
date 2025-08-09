@@ -36,6 +36,7 @@ void log_debug(const char *msg) {
     if (DEBUG_MODE) {
         printf("[DEBUG] %s\n", msg);
         fflush(stdout);
+        sd_journal_print(LOG_DEBUG, "%s", msg);
     }
-    sd_journal_print(LOG_DEBUG, "%s", msg);
+    
 }

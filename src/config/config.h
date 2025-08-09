@@ -5,8 +5,8 @@
 static const inline QString DEFAULT_CONFIG_PATH = "/etc/dynamic_power.yaml";
 
 struct Thresholds {
-    double low = 1.0;
-    double high = 2.0;
+    double low = 0.0;
+    double high = 0.0;
 };
 
 struct Settings {

@@ -340,16 +340,23 @@ void Daemon::checkLoadAverage() {
     }
     
     QString level;
-    m_actualThresholds.low = 3.0;
-    m_actualThresholds.high = 4.0;
+    // Determine effective thresholds and publish them
+    const bool useConfig = (m_requestedThresholds.low == 0.0 && m_requestedThresholds.high == 0.0);
+    const Thresholds eff = useConfig ? m_thresholds : m_requestedThresholds;
+    m_actualThresholds = eff;  // <- what DBus reports
+
+    // debug
+    log_debug(QString("Effective thresholds: low=%1, high=%2")
+            .arg(m_actualThresholds.low).arg(m_actualThresholds.high)
+            .toUtf8().constData());
     log_debug(QString("Requested thresholds: low=%1, high=%2")
             .arg(m_requestedThresholds.low)
             .arg(m_requestedThresholds.high)
             .toUtf8().constData());
 
-    if (load < m_thresholds.low) {
+    if (load < m_actualThresholds.low) {
         level = "low";
-    } else if (load > m_thresholds.high) {
+    } else if (load > m_actualThresholds.high) {
         level = "high";
     } else {
         level = "medium";
