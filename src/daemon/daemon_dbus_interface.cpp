@@ -40,8 +40,14 @@ bool DaemonDBusInterface::SetPollInterval(uint interval) {
     return true;
 }
 
-bool DaemonDBusInterface::SetProfile(const QString &profile, bool is_user) {
-    log_info(QString("SetProfile('%1', is_user=%2)")
-             .arg(profile).arg(is_user).toUtf8().constData());
+bool DaemonDBusInterface::SetProfile(const QString& name, bool userRequested) {
+    log_debug(QString("SetProfile('%1', user=%2)")
+              .arg(name).arg(userRequested ? "true" : "false")
+              .toUtf8().constData());
+
+    auto *daemon = qobject_cast<Daemon*>(parent());
+    if (!daemon) return false;
+
+    daemon->setRequestedProfile(name, userRequested);  // observational only
     return true;
 }

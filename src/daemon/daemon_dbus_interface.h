@@ -17,8 +17,8 @@ public slots:
     QString Ping();
     QVariantMap GetDaemonState();
     bool SetLoadThresholds(double low, double high);
+    bool SetProfile(const QString& name, bool userRequested);
     bool SetPollInterval(uint interval);
-    bool SetProfile(const QString &profile, bool is_user);
 
 Q_SIGNALS:
     void PowerStateChanged();

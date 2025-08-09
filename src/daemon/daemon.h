@@ -18,6 +18,8 @@ public:
     Daemon(const Thresholds &thresholds,  int graceSeconds, QObject *parent = nullptr);
     bool loadAvailableProfiles();
     bool setProfile(const QString& internalName);
+    QString m_requestedProfile;
+    bool    m_userRequestedProfile = false;
     // getters.
     QString getActiveProfile() const { return m_activeProfile; }
     double getLowThreshold() const { return m_actualThresholds.low; }
@@ -26,6 +28,10 @@ public:
     void setRequestedThresholds(double low, double high) {
         m_requestedThresholds.low  = low;
         m_requestedThresholds.high = high;
+    }
+    void setRequestedProfile(const QString& name, bool userRequested) {
+        m_requestedProfile = name;
+        m_userRequestedProfile = userRequested;
     }
     
 private Q_SLOTS:

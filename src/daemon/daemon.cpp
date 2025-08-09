@@ -333,7 +333,7 @@ void Daemon::checkLoadAverage() {
     }
 
     bool ok = false;
-    double load = parts[0].toDouble(&ok);  // converts "0.33" to 0.33
+    double load = parts[0].toDouble(&ok);
     if (!ok) {
         log_error("Failed to convert loadavg value to double");
         return;
@@ -347,13 +347,17 @@ void Daemon::checkLoadAverage() {
 
     // debug
     log_debug(QString("Effective thresholds: low=%1, high=%2")
-            .arg(m_actualThresholds.low).arg(m_actualThresholds.high)
-            .toUtf8().constData());
+              .arg(m_actualThresholds.low).arg(m_actualThresholds.high)
+              .toUtf8().constData());
     log_debug(QString("Requested thresholds: low=%1, high=%2")
-            .arg(m_requestedThresholds.low)
-            .arg(m_requestedThresholds.high)
-            .toUtf8().constData());
+              .arg(m_requestedThresholds.low).arg(m_requestedThresholds.high)
+              .toUtf8().constData());
+    log_debug(QString("Requested profile: %1 (user flag=%2)")
+              .arg(m_requestedProfile)
+              .arg(m_userRequestedProfile ? "true" : "false")
+              .toUtf8().constData());
 
+    // --- Determine load level from thresholds (for reporting + baseline decision)
     if (load < m_actualThresholds.low) {
         level = "low";
     } else if (load > m_actualThresholds.high) {
@@ -364,14 +368,13 @@ void Daemon::checkLoadAverage() {
 
     if (DEBUG_MODE) {
         log_info(QString("Current load: %1 (%2)")
-                 .arg(load, 0, 'f', 2)  // format to 2 decimal places
+                 .arg(load, 0, 'f', 2)
                  .arg(level)
                  .toUtf8().constData());
     }
 
-    // ⚠️ Logic to switch power profile or notify other components
+    // --- Baseline target from thresholds
     QString targetProfile;
-
     if (level == "low") {
         targetProfile = "powersave";
     } else if (level == "high") {
@@ -379,22 +382,40 @@ void Daemon::checkLoadAverage() {
     } else {
         targetProfile = "balanced";
     }
-    // 🚫 Downgrade if on battery and not already powersave
-    if (m_powerSource == "battery" && targetProfile != "powersave") {
+
+    // --- Optional user/boss override (wins over thresholds)
+    bool hasOverride = false;
+    QString overrideTarget;
+    if (!m_requestedProfile.isEmpty()) {
+        overrideTarget = (m_powerSource == "battery" && !m_userRequestedProfile)
+                         ? "powersave"         // battery rule unless boss
+                         : m_requestedProfile;
+        hasOverride = true;
+    }
+
+    // Start with either override or threshold decision
+    QString finalTarget = hasOverride ? overrideTarget : targetProfile;
+
+    // --- Battery downgrade (only when no explicit override above)
+    if (!hasOverride && m_powerSource == "battery" && finalTarget != "powersave") {
         if (m_currentProfile != "powersave") {
-            log_debug(QString("On battery: downgrading '%1' → 'powersave'").arg(targetProfile).toUtf8().constData());
+            log_debug(QString("On battery: downgrading '%1' → 'powersave'")
+                      .arg(finalTarget).toUtf8().constData());
         }
-        targetProfile = "powersave";
+        finalTarget = "powersave";
     }
-    if (!setProfile(targetProfile)) {
-        log_error("Failed to apply profile based on load.");
-    }
-    // 🚫 We want performance mode for a grace period.
-    if (m_graceActive && targetProfile != "performance") {
+
+    // --- Grace period last (wins over everything unless you decide otherwise)
+    if (m_graceActive && finalTarget != "performance") {
         if (m_currentProfile != "performance") {
             log_debug(QString("Grace active: overriding '%1' → 'performance'")
-                    .arg(targetProfile).toUtf8().constData());
+                      .arg(finalTarget).toUtf8().constData());
         }
-        targetProfile = "performance";
-    }    
+        finalTarget = "performance";
+    }
+
+    // --- Apply once, at the end
+    if (!setProfile(finalTarget)) {
+        log_error("Failed to apply profile based on load.");
+    }
 }
