@@ -11,6 +11,7 @@ class Config;
 class LoadGraphWidget;
 class QPushButton;
 class QWidget;
+class QVBoxLayout;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -19,6 +20,7 @@ public:
     void setThresholds(double low, double high);
     void setActiveProfile(const QString& profile);
     QString currentUserMode() const { return m_userMode; }
+    void refreshProcessButtons();
 
 signals:
     void userOverrideSelected(const QString& mode, bool boss);
@@ -41,6 +43,7 @@ private:
     QPushButton* m_overrideBtn;
     QString m_activeProfile = "balanced";
     QString m_userMode = "Dynamic"; // default
-
     void refreshOverrideButton();
+    QWidget* m_rulesPanel = nullptr;
+    QVBoxLayout* m_rulesLayout = nullptr;
 };

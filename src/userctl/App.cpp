@@ -32,6 +32,7 @@ void App::start() {
     connect(m_mainWindow.get(), &MainWindow::userOverrideSelected, this, &App::onUserOverrideChanged);
     connect(m_mainWindow.get(), &MainWindow::thresholdsAdjusted, this, &App::onThresholdsAdjusted);
     connect(m_mainWindow.get(), &MainWindow::visibilityChanged, this, &App::onWindowVisibilityChanged);
+    m_mainWindow->refreshProcessButtons();
 
     // Process monitor (starts only when window hidden)
     m_procMon = std::make_unique<ProcessMonitor>(this);
