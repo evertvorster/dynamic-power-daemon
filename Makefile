@@ -6,8 +6,9 @@ DESTDIR ?=
 
 SRC_DIR          := python
 MODULE_DIR       := dynamic_power
-RESOURCE_DIR     := $(SRC_DIR)/resources
-TEMPLATE_DIR     := $(SRC_DIR)/share/dynamic-power
+CPP_SRC_DIR		 := src
+BUILD_DIR		 := build
+RESOURCE_DIR     := resources
 
 PURELIB := $(shell $(PYTHON) -c "import sysconfig, sys; print(sysconfig.get_paths()['purelib'])")
 
@@ -31,7 +32,8 @@ install:
 	cp -r $(SRC_DIR)/$(MODULE_DIR) "$(DESTDIR)$(PURELIB)/"
 
 	@echo "# --- Executables ----------------------------------------------------"
-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_launcher.py    "$(DESTDIR)$(BINDIR)/dynamic_power"
+	install -Dm755 $(CPP_SRC_DIR)/$(BUILD_DIR)/dynamic_power 		 "$(DESTDIR)$(BINDIR)/dynamic_power"
+#	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_launcher.py    "$(DESTDIR)$(BINDIR)/dynamic_power"
 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_user.py        "$(DESTDIR)$(BINDIR)/dynamic_power_user"
 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_command.py     "$(DESTDIR)$(BINDIR)/dynamic_power_command"
 	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_session_helper.py \
@@ -43,6 +45,8 @@ install:
 	@echo "# --- DBus policy ---------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf \
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
+	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.DaemonCpp.conf \
+		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.DaemonCpp.conf"
 
 	@echo "# --- Desktop entry --------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power.desktop \
@@ -57,8 +61,9 @@ install:
 	install -Dm644 $(RESOURCE_DIR)/dynamic_power.override_battery.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.override_battery.svg"
 
 	@echo "# --- YAML templates ------------------------------------------------"
-	install -Dm644 $(TEMPLATE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
-	install -Dm644 $(TEMPLATE_DIR)/dynamic-power-user.yaml "$(DESTDIR)$(SHARE_DIR)/dynamic-power-user.yaml"
+	install -Dm644 $(RESOURCE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
+	install -Dm644 $(RESOURCE_DIR)/dynamic-power-user.yaml "$(DESTDIR)$(SHARE_DIR)/dynamic-power-user.yaml"
+	install -Dm644 $(RESOURCE_DIR)/dynamic_power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic_power.yaml"
 
 	@echo "Install complete."
 
