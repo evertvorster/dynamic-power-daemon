@@ -1,0 +1,42 @@
+
+#pragma once
+#include <QMainWindow>
+#include <QString>
+
+class DbusClient;
+class Config;
+class LoadGraphWidget;
+class QPushButton;
+class QWidget;
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+public:
+    MainWindow(DbusClient* dbus, Config* config, QWidget* parent = nullptr);
+    void setThresholds(double low, double high);
+    void setActiveProfile(const QString& profile);
+    QString currentUserMode() const { return m_userMode; }
+
+signals:
+    void userOverrideSelected(const QString& mode, bool boss);
+    void thresholdsAdjusted(double low, double high);
+    void visibilityChanged(bool visible);
+
+protected:
+    void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
+
+private slots:
+    void onOverrideButtonClicked();
+    void onGraphThresholdChanged(double low, double high);
+
+private:
+    DbusClient* m_dbus;
+    Config* m_config;
+    LoadGraphWidget* m_graph;
+    QPushButton* m_overrideBtn;
+    QString m_activeProfile = "balanced";
+    QString m_userMode = "Dynamic"; // default
+
+    void refreshOverrideButton();
+};
