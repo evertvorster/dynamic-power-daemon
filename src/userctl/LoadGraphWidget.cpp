@@ -13,7 +13,9 @@ LoadGraphWidget::LoadGraphWidget(QWidget* parent) : QWidget(parent) {
     connect(m_timer, &QTimer::timeout, this, &LoadGraphWidget::sampleLoad);
     m_timer->start(1000);
     m_samples.assign(m_maxSamples, 0.0);
-    setMouseTracking(true);   // NEW: enable hover feedback
+    setMouseTracking(true); 
+    setMinimumHeight(240);                    // keep some vertical space
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);  
 }
 
 void LoadGraphWidget::mousePressEvent(QMouseEvent* e) {

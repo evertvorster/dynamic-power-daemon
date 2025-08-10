@@ -38,11 +38,15 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     scroll->setWidget(m_rulesPanel);
     layout->addWidget(scroll);
 
+    // layout order: [0]=graph, [1]=overrideBtn, [2]=scroll(process list)
+    layout->setStretch(0, 3);   // graph gets the stretch
+    layout->setStretch(2, 1);   // list can grow, but less    
+
     // Initial population
     refreshProcessButtons();
 
     setCentralWidget(central);
-    setWindowTitle("dynamic_power");
+    setWindowTitle("Dynamic Power Control");
     resize(800, 480);
     refreshOverrideButton();
 }

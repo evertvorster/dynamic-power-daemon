@@ -3,6 +3,8 @@
 #include <QString>
 #include <QVector>
 #include <utility>
+#include <QObject>
+#include <QFileSystemWatcher>
 
 struct ProcessRule {
     QString name;
@@ -11,7 +13,8 @@ struct ProcessRule {
     int priority = 0;
 };
 
-class Config {
+class Config : public QObject {         // derive from QObject
+    Q_OBJECT
 public:
     Config();
     void ensureExists();
@@ -26,8 +29,15 @@ public:
 
     QString configPath() const { return m_path; }
 
+signals:
+    void reloaded();                    // fired after external change + reload
+
 private:
     QString m_path;
     std::pair<double,double> m_thresholds {1.0, 2.0};
     QVector<ProcessRule> m_rules;
+
+    mutable bool m_saving = false;      // ignore watcher once after save
+    mutable QFileSystemWatcher m_watch;
+    void startWatching();
 };

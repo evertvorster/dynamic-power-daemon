@@ -7,6 +7,7 @@
 #include <yaml-cpp/yaml.h>
 #include <QFileDevice>
 #include <fstream>
+#include <QTimer>
 
 static const char* FILENAME_PRIMARY = "dynamic-power-user.yaml";
 static const char* FILENAME_FALLBACK = "config.yaml";
@@ -19,6 +20,7 @@ Config::Config() {
     if (QFile::exists(primary)) m_path = primary;
     else if (QFile::exists(fallback)) m_path = fallback;
     else m_path = primary;
+    startWatching();
 }
 
 void Config::ensureExists() {
@@ -71,6 +73,25 @@ bool Config::load() {
     }
 }
 
+void Config::startWatching() {
+    m_watch.addPath(m_path);
+    connect(&m_watch, &QFileSystemWatcher::fileChanged, [this](const QString&) {
+        if (m_saving) {                 // we triggered it — ignore once
+            m_saving = false;
+            // Re-add the path (some editors do replace)
+            if (!m_watch.files().contains(m_path)) m_watch.addPath(m_path);
+            return;
+        }
+        // Debounce: some editors write multiple times
+        QTimer::singleShot(50, [this]() {
+            this->load();
+            emit reloaded();
+            // Ensure watcher stays attached if file was replaced
+            if (!m_watch.files().contains(m_path)) m_watch.addPath(m_path);
+        });
+    });
+}
+
 bool Config::save() const {
     YAML::Node root;
     root["features"]["kde_autohide_on_battery"] = false;
@@ -89,10 +110,17 @@ bool Config::save() const {
     }
     root["process_overrides"] = arr;
     try {
+        m_saving = true;  // tell watcher to ignore the next change
         std::ofstream fout(m_path.toStdString());
         fout << root;
+        fout.flush();
+        // some editors replace the file; make sure watcher still tracks it
+        if (!m_watch.files().contains(m_path))
+            m_watch.addPath(m_path);
+        m_saving = false;
         return true;
     } catch (...) {
+        m_saving = false;
         return false;
     }
 }

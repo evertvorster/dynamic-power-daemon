@@ -14,10 +14,18 @@ App::~App() = default;
 App::App(QObject* parent) : QObject(parent) {}
 
 void App::start() {
-    // Load config (ensure exists)
     m_config = std::make_unique<Config>();
     m_config->ensureExists();
     m_config->load();
+    connect(m_config.get(), &Config::reloaded, this, [this]() {
+        // Update UI lists + process monitor rules
+        if (m_mainWindow) m_mainWindow->refreshProcessButtons();
+        if (m_procMon)    m_procMon->setRules(m_config->processRules());
+        // Thresholds: UI shows what daemon applied; if thresholds changed externally,
+        // you can optionally push them to daemon here:
+        auto th = m_config->thresholds();
+        m_dbus->setLoadThresholds(th.first, th.second);
+    });
 
     // DBus client
     m_dbus = std::make_unique<DbusClient>(this);
