@@ -33,11 +33,7 @@ install:
 
 	@echo "# --- Executables ----------------------------------------------------"
 	install -Dm755 $(CPP_SRC_DIR)/$(BUILD_DIR)/dynamic_power 		 "$(DESTDIR)$(BINDIR)/dynamic_power"
-#	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_launcher.py    "$(DESTDIR)$(BINDIR)/dynamic_power"
-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_user.py        "$(DESTDIR)$(BINDIR)/dynamic_power_user"
-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_command.py     "$(DESTDIR)$(BINDIR)/dynamic_power_command"
-	install -Dm755 $(SRC_DIR)/$(MODULE_DIR)/dynamic_power_session_helper.py \
-		"$(DESTDIR)$(BINDIR)/dynamic_power_session_helper"
+	install -Dm755 $(CPP_SRC_DIR)/$(BUILD_DIR)/dynamic_power_user         "$(DESTDIR)$(BINDIR)/dynamic_power_user"
 
 	@echo "# --- System daemon unit -------------------------------------------"
 	install -Dm644 dynamic-power.service                                 "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
@@ -45,8 +41,6 @@ install:
 	@echo "# --- DBus policy ---------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf \
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
-	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.DaemonCpp.conf \
-		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.DaemonCpp.conf"
 
 	@echo "# --- Desktop entry --------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power.desktop \
@@ -61,7 +55,6 @@ install:
 	install -Dm644 $(RESOURCE_DIR)/dynamic_power.override_battery.svg "$(DESTDIR)$(PIXMAPS_DIR)/dynamic_power.override_battery.svg"
 
 	@echo "# --- YAML templates ------------------------------------------------"
-	install -Dm644 $(RESOURCE_DIR)/dynamic-power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic-power.yaml"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power-user.yaml "$(DESTDIR)$(SHARE_DIR)/dynamic-power-user.yaml"
 	install -Dm644 $(RESOURCE_DIR)/dynamic_power.yaml      "$(DESTDIR)$(SHARE_DIR)/dynamic_power.yaml"
 
