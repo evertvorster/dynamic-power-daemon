@@ -3,6 +3,7 @@
 #include "DbusClient.h"
 #include "Config.h"
 #include "LoadGraphWidget.h"
+#include "ProcessRuleEditor.h"
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QMenu>
@@ -132,14 +133,36 @@ void MainWindow::refreshProcessButtons() {
 
     // One button per config rule (display the match string = process_name)
     const auto& rules = m_config->processRules();
-    for (const auto& r : rules) {
+    for (int i = 0; i < rules.size(); ++i) {
+        const auto& r = rules[i];
+
         auto* btn = new QPushButton(r.process_name, m_rulesPanel);
         btn->setToolTip(QString("Priority %1 · Mode %2").arg(r.priority).arg(r.active_profile));
-        // For now: stub handler (editor comes later)
-        connect(btn, &QPushButton::clicked, this, [name=r.name]() {
-            // placeholder – will open editor next step
-            qInfo("Clicked rule: %s", name.toUtf8().constData());
+
+        // Open editor for this rule
+        connect(btn, &QPushButton::clicked, this, [this, i]() {
+            auto current = m_config->processRules();
+            if (i < 0 || i >= current.size()) return;
+
+            ProcessRuleEditor dlg(this);
+            dlg.setRule(current[i]);
+
+            bool didDelete = false;
+            connect(&dlg, &ProcessRuleEditor::deleteRequested, this, [&]{ didDelete = true; });
+
+            if (dlg.exec() == QDialog::Accepted) {
+                if (didDelete) {
+                    current.removeAt(i);
+                } else {
+                    current[i] = dlg.rule();
+                }
+                m_config->setProcessRules(current);
+                m_config->save();
+                refreshProcessButtons();
+            }
         });
+
+        // existing highlighting
         const QString lname = r.process_name.toLower();
         if (m_userMode == QStringLiteral("Dynamic") && !m_winnerProc.isEmpty() && lname == m_winnerProc) {
             btn->setStyleSheet("background: palette(highlight); color: palette(highlighted-text);");
@@ -148,15 +171,33 @@ void MainWindow::refreshProcessButtons() {
             btn->setStyleSheet(QString("border-left: 5px solid rgb(%1,%2,%3); background: rgba(%1,%2,%3,0.16);")
                             .arg(c.red()).arg(c.green()).arg(c.blue()));
         }
+
         m_rulesLayout->addWidget(btn);
     }
 
+
     // "Add process to match" button at bottom
     auto* addBtn = new QPushButton("Add process to match", m_rulesPanel);
-    connect(addBtn, &QPushButton::clicked, this, []() {
-        // placeholder – will open editor next step
-        qInfo("Add process clicked");
+    connect(addBtn, &QPushButton::clicked, this, [this]() {
+        ProcessRuleEditor dlg(this);
+        ProcessRule empty;                    // blank fields by default
+        dlg.setRule(empty);
+
+        bool didDelete = false;
+        connect(&dlg, &ProcessRuleEditor::deleteRequested, this, [&]{ didDelete = true; });
+
+        if (dlg.exec() == QDialog::Accepted && !didDelete) {
+            auto rules = m_config->processRules();
+            auto r = dlg.rule();
+            if (!r.process_name.trimmed().isEmpty()) {
+                rules.push_back(r);
+                m_config->setProcessRules(rules);
+                m_config->save();
+                refreshProcessButtons();
+            }
+        }
     });
+
     m_rulesLayout->addWidget(addBtn);
 
     // Spacer to push buttons to top
