@@ -45,15 +45,43 @@ void App::start() {
 
     // Process monitor (starts only when window hidden)
     m_procMon = std::make_unique<ProcessMonitor>(this);
-    connect(m_procMon.get(), &ProcessMonitor::matchedProfile, this, [this](const QString& profile) {
-        // Send non-boss override to daemon
-        if (m_mainWindow) {
-            // Only if user is in Dynamic mode
-            if (m_mainWindow->currentUserMode() == QStringLiteral("Dynamic")) {
-                m_dbus->setProfile(profile, false);
-                updateTrayFromState();
-            }
+    connect(m_procMon.get(), &ProcessMonitor::matchedProfile, this, [this](const QString& mode) {
+        if (!m_mainWindow || m_mainWindow->currentUserMode() != QStringLiteral("Dynamic"))
+            return;
+
+        // thresholds first
+        auto th = m_config->thresholds();
+        double low = th.first, high = th.second;
+
+        if (mode.compare("Inhibit Powersave", Qt::CaseInsensitive) == 0) {
+            m_dbus->setLoadThresholds(0.0, high);
+            m_dbus->setProfile(QString(), false); // boss = false for process
+        } else if (mode.compare("Dynamic", Qt::CaseInsensitive) == 0) {
+            m_dbus->setLoadThresholds(low, high);
+            m_dbus->setProfile(QString(), false);
+        } else {
+            // performance/balanced/powersave
+            m_dbus->setLoadThresholds(low, high);
+            m_dbus->setProfile(mode.toLower(), false); // boss = false
         }
+
+        // optional: immediate readback to keep UI aligned
+        auto st = m_dbus->getDaemonState();
+        if (m_mainWindow) {
+            m_mainWindow->setActiveProfile(st.value("active_profile").toString());
+            m_mainWindow->setThresholds(st.value("threshold_low").toDouble(),
+                                        st.value("threshold_high").toDouble());
+        }
+        QTimer::singleShot(5000, this, [this]() {
+            auto st2 = m_dbus->getDaemonState();
+            if (m_mainWindow) {
+                m_mainWindow->setActiveProfile(st2.value("active_profile").toString());
+                m_mainWindow->setThresholds(st2.value("threshold_low").toDouble(),
+                                            st2.value("threshold_high").toDouble());
+            }
+        });
+
+        updateTrayFromState();
     });
 
     // Initial state
@@ -84,27 +112,48 @@ void App::onDaemonStateChanged() {
     updateTrayFromState();
 }
 
-void App::onUserOverrideChanged(const QString& mode, bool boss) {
+void App::onUserOverrideChanged(const QString& mode, bool /*bossParamIgnored*/) {
+    // 1) thresholds first
+    auto th = m_config->thresholds();
+    double low = th.first, high = th.second;
+
     if (mode == QStringLiteral("Inhibit Powersave")) {
-        auto state = m_dbus->getDaemonState();
-        double high = state.value("threshold_high").toDouble();
+        // Send 0..high but do NOT save to config
         m_dbus->setLoadThresholds(0.0, high);
-        m_dbus->setProfile(QStringLiteral("balanced"), true);
+        // Profile: empty + boss=true
+        m_dbus->setProfile(QString(), true);
     } else if (mode == QStringLiteral("Dynamic")) {
-        m_dbus->setProfile(QStringLiteral("balanced"), false);
-        auto th = m_config->thresholds();
-        m_dbus->setLoadThresholds(th.first, th.second);
+        // Configured thresholds
+        m_dbus->setLoadThresholds(low, high);
+        // Profile: empty + boss=false
+        m_dbus->setProfile(QString(), false);
     } else {
-        m_dbus->setProfile(mode.toLower(), boss);
+        // Performance/Balanced/Powersave → configured thresholds + boss=true
+        m_dbus->setLoadThresholds(low, high);
+        m_dbus->setProfile(mode.toLower(), true);
     }
 
-    // NEW: reflect applied state on the button immediately
+    // Immediate readback
     auto state = m_dbus->getDaemonState();
     if (m_mainWindow) {
         m_mainWindow->setActiveProfile(state.value("active_profile").toString());
+        m_mainWindow->setThresholds(state.value("threshold_low").toDouble(),
+                                    state.value("threshold_high").toDouble());
     }
+
+    // Delayed 5s readback
+    QTimer::singleShot(5000, this, [this]() {
+        auto st = m_dbus->getDaemonState();
+        if (m_mainWindow) {
+            m_mainWindow->setActiveProfile(st.value("active_profile").toString());
+            m_mainWindow->setThresholds(st.value("threshold_low").toDouble(),
+                                        st.value("threshold_high").toDouble());
+        }
+    });
+
     updateTrayFromState();
 }
+
 
 void App::onThresholdsAdjusted(double low, double high) {
     // Sanity-check & normalize thresholds
