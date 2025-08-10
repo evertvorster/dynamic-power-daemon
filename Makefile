@@ -27,10 +27,6 @@ all:
 	@echo "Nothing to build. Use 'make install'."
 
 install:
-	@echo "# --- Python package -------------------------------------------------"
-	install -d "$(DESTDIR)$(PURELIB)"
-	cp -r $(SRC_DIR)/$(MODULE_DIR) "$(DESTDIR)$(PURELIB)/"
-
 	@echo "# --- Executables ----------------------------------------------------"
 	install -Dm755 $(CPP_SRC_DIR)/$(BUILD_DIR)/dynamic_power 		 "$(DESTDIR)$(BINDIR)/dynamic_power"
 	install -Dm755 $(CPP_SRC_DIR)/$(BUILD_DIR)/dynamic_power_user         "$(DESTDIR)$(BINDIR)/dynamic_power_user"
@@ -63,7 +59,6 @@ install:
 uninstall:
 	@echo "Removing installation (PREFIX=$(PREFIX))"
 	@rm -vf "$(DESTDIR)$(BINDIR)"/dynamic_power*
-	@rm -vrf "$(DESTDIR)$(PURELIB)/$(MODULE_DIR)"
 	@rm -vf "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
