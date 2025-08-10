@@ -68,17 +68,17 @@ double LoadGraphWidget::currentMaxY() const {
 
 double LoadGraphWidget::valueToY(double v) const {
     double maxY = currentMaxY();
-    double h = height() - 20.0;
-    double ratio = v / maxY;
-    return 10.0 + (1.0 - ratio) * h;
+    double h = height() - (m_padTop + m_padBottom);
+    double ratio = (maxY > 0.0) ? (v / maxY) : 0.0;
+    if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+    return m_padTop + (1.0 - ratio) * h;
 }
 
 double LoadGraphWidget::yToValue(double y) const {
     double maxY = currentMaxY();
-    double h = height() - 20.0;
-    double ratio = 1.0 - ((y - 10.0) / h);
-    if (ratio < 0) ratio = 0;
-    if (ratio > 1) ratio = 1;
+    double h = height() - (m_padTop + m_padBottom);
+    double ratio = 1.0 - ((y - m_padTop) / h);
+    if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
     return ratio * maxY;
 }
 
@@ -87,31 +87,49 @@ void LoadGraphWidget::paintEvent(QPaintEvent*) {
     p.fillRect(rect(), Qt::black);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    // Axes
+    // Frame
     p.setPen(QPen(Qt::gray, 1));
     p.drawRect(rect().adjusted(0,0,-1,-1));
 
+    const double maxY = currentMaxY();
+    const int x0 = m_padLeft;
+    const int x1 = width() - 1;
+
+    // Y grid + integer labels
+    p.setPen(QPen(QColor(70,70,70), 1, Qt::DotLine));
+    QFontMetrics fm(p.font());
+    for (int i = 0; i <= int(std::ceil(maxY)); ++i) {
+        const double yy = valueToY(i);
+        p.drawLine(x0, yy, x1, yy);                        // grid
+        const QString lab = QString::number(i);
+        const int tw = fm.horizontalAdvance(lab);
+        p.setPen(Qt::lightGray);
+        p.drawText(x0 - 6 - tw, int(yy + fm.ascent()/2) - 2, lab); // left labels
+        p.setPen(QPen(QColor(70,70,70), 1, Qt::DotLine));  // restore for next grid
+    }
+
     // Threshold lines
     p.setPen(QPen(Qt::red, 2, Qt::DashLine));
-    p.drawLine(0, valueToY(m_low), width(), valueToY(m_low));
+    p.drawLine(x0, valueToY(m_low), x1, valueToY(m_low));
     p.setPen(QPen(Qt::yellow, 2, Qt::DashLine));
-    p.drawLine(0, valueToY(m_high), width(), valueToY(m_high));
+    p.drawLine(x0, valueToY(m_high), x1, valueToY(m_high));
 
     // Samples
     p.setPen(QPen(Qt::green, 2));
-    double step = width() / double(m_maxSamples - 1);
-    QPointF prev(0, valueToY(m_samples.front()));
+    const double step = (x1 - x0) / double(std::max(1, m_maxSamples - 1));
+    QPointF prev(x0, valueToY(m_samples.front()));
     int i = 0;
     for (double v : m_samples) {
-        QPointF pt(i * step, valueToY(v));
+        const QPointF pt(x0 + i * step, valueToY(v));
         if (i) p.drawLine(prev, pt);
         prev = pt;
         ++i;
     }
 
-    // Labels
+    // (Optional) small status text
     p.setPen(Qt::white);
-    p.drawText(8, 16, QString("MaxY=%1  Low=%2  High=%3").arg(currentMaxY()).arg(m_low).arg(m_high));
+    p.drawText(x0 + 8, m_padTop + fm.ascent(),
+               QString("MaxY=%1  Low=%2  High=%3").arg(maxY).arg(m_low).arg(m_high));
 }
 
 void LoadGraphWidget::setThresholds(double low, double high) {
