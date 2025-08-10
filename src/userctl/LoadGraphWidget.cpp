@@ -54,7 +54,7 @@ void LoadGraphWidget::mouseMoveEvent(QMouseEvent* e) {
         if (v < m_low) v = m_low;
         m_high = v;
     }
-    emit thresholdsChanged(m_low, m_high);
+    emit thresholdsPreview(m_low, m_high);
     update();
 }
 
@@ -153,4 +153,5 @@ void LoadGraphWidget::sampleLoad() {
 void LoadGraphWidget::mouseReleaseEvent(QMouseEvent*) {
     m_draggingLow = m_draggingHigh = false;
     unsetCursor();
+    emit thresholdsCommitted(m_low, m_high);
 }

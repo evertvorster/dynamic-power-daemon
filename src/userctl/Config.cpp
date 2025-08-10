@@ -124,3 +124,11 @@ bool Config::save() const {
         return false;
     }
 }
+
+void Config::normalizeThresholds(double& low, double& high, double minGap) {
+    if (low > high)
+        std::swap(low, high);
+    if ((high - low) < minGap)
+        high = low + minGap;
+}
+

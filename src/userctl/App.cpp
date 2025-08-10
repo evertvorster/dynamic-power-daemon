@@ -8,6 +8,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QDebug>
+#include <QTimer>
 
 App::~App() = default; 
 
@@ -106,13 +107,31 @@ void App::onUserOverrideChanged(const QString& mode, bool boss) {
 }
 
 void App::onThresholdsAdjusted(double low, double high) {
-    // Persist to config, send to daemon, then fetch applied back
+    // Sanity-check & normalize thresholds
+    Config::normalizeThresholds(low, high);
+    
+    // Persist to config
     m_config->setThresholds(low, high);
     m_config->save();
+
+    // Send to daemon as a pair
     m_dbus->setLoadThresholds(low, high);
-    auto state = m_dbus->getDaemonState();
-    m_mainWindow->setThresholds(state.value("threshold_low").toDouble(),
-                                state.value("threshold_high").toDouble());
+
+    // Fetch applied now
+    auto stateNow = m_dbus->getDaemonState();
+    if (m_mainWindow) {
+        m_mainWindow->setThresholds(stateNow.value("threshold_low").toDouble(),
+                                    stateNow.value("threshold_high").toDouble());
+    }
+
+    // Fetch again after daemon’s 5s cycle
+    QTimer::singleShot(5000, this, [this]() {
+        auto stateLater = m_dbus->getDaemonState();
+        if (m_mainWindow) {
+            m_mainWindow->setThresholds(stateLater.value("threshold_low").toDouble(),
+                                        stateLater.value("threshold_high").toDouble());
+        }
+    });
 }
 
 void App::onWindowVisibilityChanged(bool visible) {

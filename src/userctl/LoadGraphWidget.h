@@ -13,6 +13,8 @@ public:
 
 signals:
     void thresholdsChanged(double low, double high);
+    void thresholdsPreview(double low, double high);   // while dragging
+    void thresholdsCommitted(double low, double high); // on mouse release
 
 protected:
     void paintEvent(QPaintEvent* e) override;

@@ -17,6 +17,7 @@ class Config : public QObject {         // derive from QObject
     Q_OBJECT
 public:
     Config();
+    static void normalizeThresholds(double& low, double& high, double minGap = 0.5);
     void ensureExists();
     bool load();
     bool save() const;

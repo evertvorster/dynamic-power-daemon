@@ -19,7 +19,11 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
 
     m_graph = new LoadGraphWidget(this);
     layout->addWidget(m_graph);
-    connect(m_graph, &LoadGraphWidget::thresholdsChanged, this, &MainWindow::onGraphThresholdChanged);
+    connect(m_graph, &LoadGraphWidget::thresholdsPreview, this, [this](double low, double high){
+        // UI already reflects it; no I/O here.
+        Q_UNUSED(low); Q_UNUSED(high);
+    });
+    connect(m_graph, &LoadGraphWidget::thresholdsCommitted, this, &MainWindow::onGraphThresholdChanged);
 
     m_overrideBtn = new QPushButton(this);
     layout->addWidget(m_overrideBtn);
