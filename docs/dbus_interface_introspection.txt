@@ -1,0 +1,19 @@
+[evert@Evert ~]$ busctl introspect org.dynamic_power.Daemon /org/dynamic_power/Daemon
+NAME                                TYPE      SIGNATURE RESULT/VALUE FLAGS
+org.dynamic_power.Daemon            interface -         -            -
+.GetDaemonState                     method    -         a{sv}        -
+.Ping                               method    -         s            -
+.SetLoadThresholds                  method    dd        b            -
+.SetPollInterval                    method    u         b            -
+.SetProfile                         method    sb        b            -
+.PowerStateChanged                  signal    -         -            -
+org.freedesktop.DBus.Introspectable interface -         -            -
+.Introspect                         method    -         s            -
+org.freedesktop.DBus.Peer           interface -         -            -
+.GetMachineId                       method    -         s            -
+.Ping                               method    -         -            -
+org.freedesktop.DBus.Properties     interface -         -            -
+.Get                                method    ss        v            -
+.GetAll                             method    s         a{sv}        -
+.Set                                method    ssv       -            -
+.PropertiesChanged                  signal    sa{sv}as  -            -
