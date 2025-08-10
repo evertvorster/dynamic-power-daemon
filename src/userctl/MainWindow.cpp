@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QScrollArea>
 #include <QSpacerItem>
+#include <QLabel>
 
 MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     : QMainWindow(parent), m_dbus(dbus), m_config(config) {
@@ -28,6 +29,12 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     m_overrideBtn = new QPushButton(this);
     layout->addWidget(m_overrideBtn);
     connect(m_overrideBtn, &QPushButton::clicked, this, &MainWindow::onOverrideButtonClicked);
+
+    // Power info label
+    m_powerLabel = new QLabel(this);
+    m_powerLabel->setText("Power: …");
+    m_powerLabel->setStyleSheet("color: black;");
+    layout->addWidget(m_powerLabel);
 
     // --- Process matches section ---
     auto* sectionLabel = new QLabel("Process Matches", this);
@@ -138,3 +145,6 @@ void MainWindow::refreshProcessButtons() {
     m_rulesLayout->addItem(new QSpacerItem(0,0, QSizePolicy::Minimum, QSizePolicy::Expanding));
 }
 
+void MainWindow::setPowerInfo(const QString& text) {
+    if (m_powerLabel) m_powerLabel->setText("Power: " + text);
+}

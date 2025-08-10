@@ -7,6 +7,7 @@ class Config;
 class TrayController;
 class MainWindow;
 class ProcessMonitor;
+class UPowerClient;
 
 class App : public QObject {
     Q_OBJECT
@@ -21,6 +22,7 @@ private:
     std::unique_ptr<TrayController> m_tray;
     std::unique_ptr<MainWindow> m_mainWindow;
     std::unique_ptr<ProcessMonitor> m_procMon;
+    std::unique_ptr<UPowerClient> m_power;
 
     void onShowMainRequested();
     void onDaemonStateChanged();

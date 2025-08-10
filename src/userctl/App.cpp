@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QTimer>
+#include "UPowerClient.h"
 
 App::~App() = default; 
 
@@ -26,11 +27,21 @@ void App::start() {
         // you can optionally push them to daemon here:
         auto th = m_config->thresholds();
         m_dbus->setLoadThresholds(th.first, th.second);
+        if (m_procMon) {
+            m_procMon->setRules(m_config->processRules());
+        }
     });
 
     // DBus client
     m_dbus = std::make_unique<DbusClient>(this);
     connect(m_dbus.get(), &DbusClient::powerStateChanged, this, &App::onDaemonStateChanged);
+
+    // UPower client
+    m_power = std::make_unique<UPowerClient>(this);
+    connect(m_power.get(), &UPowerClient::powerInfoChanged, this, [this]() {
+        updateTrayFromState();
+        if (m_mainWindow) m_mainWindow->setPowerInfo(m_power->summaryText());
+    });
 
     // Tray
     m_tray = std::make_unique<TrayController>();
@@ -43,8 +54,10 @@ void App::start() {
     connect(m_mainWindow.get(), &MainWindow::visibilityChanged, this, &App::onWindowVisibilityChanged);
     m_mainWindow->refreshProcessButtons();
 
-    // Process monitor (starts only when window hidden)
+    // Process monitor (runs continuously)
     m_procMon = std::make_unique<ProcessMonitor>(this);
+    m_procMon->setRules(m_config->processRules());
+    m_procMon->start(5000);
     connect(m_procMon.get(), &ProcessMonitor::matchedProfile, this, [this](const QString& mode) {
         if (!m_mainWindow || m_mainWindow->currentUserMode() != QStringLiteral("Dynamic"))
             return;
@@ -83,8 +96,39 @@ void App::start() {
 
         updateTrayFromState();
     });
+    
+    connect(m_procMon.get(), &ProcessMonitor::noMatch, this, [this]() {
+        // Only act if the user override is Dynamic
+        if (!m_mainWindow || m_mainWindow->currentUserMode() != QStringLiteral("Dynamic"))
+            return;
+
+        // Send configured thresholds, then clear profile (boss=false)
+        auto th = m_config->thresholds();
+        m_dbus->setLoadThresholds(th.first, th.second);
+        m_dbus->setProfile(QString(), false);
+
+        // Read back now and after 5s
+        auto st = m_dbus->getDaemonState();
+        if (m_mainWindow) {
+            m_mainWindow->setActiveProfile(st.value("active_profile").toString());
+            m_mainWindow->setThresholds(st.value("threshold_low").toDouble(),
+                                        st.value("threshold_high").toDouble());
+        }
+        QTimer::singleShot(5000, this, [this]() {
+            auto st2 = m_dbus->getDaemonState();
+            if (m_mainWindow) {
+                m_mainWindow->setActiveProfile(st2.value("active_profile").toString());
+                m_mainWindow->setThresholds(st2.value("threshold_low").toDouble(),
+                                            st2.value("threshold_high").toDouble());
+            }
+        });
+
+        updateTrayFromState();
+    });
+
 
     // Initial state
+    if (m_mainWindow) m_mainWindow->setPowerInfo(m_power->summaryText());
     updateTrayFromState();
 }
 
@@ -184,22 +228,15 @@ void App::onThresholdsAdjusted(double low, double high) {
 }
 
 void App::onWindowVisibilityChanged(bool visible) {
-    if (visible) {
-        m_procMon->stop();
-    } else {
-        // Provide rules to monitor
-        m_procMon->setRules(m_config->processRules());
-        m_procMon->start();
-    }
+       // No-op for ProcessMonitor; it runs continuously.
 }
 
 void App::updateTrayFromState() {
     auto state = m_dbus->getDaemonState();
-    bool onBattery = state.value("on_battery").toBool(); // may be absent; default false
-    QString active = state.value("active_profile").toString();
+    const bool onBattery = m_power ? m_power->onBattery() : state.value("on_battery").toBool();
+    const QString active = state.value("active_profile").toString();
+    const QString userMode = m_mainWindow ? m_mainWindow->currentUserMode() : QStringLiteral("Dynamic");
 
-    // Determine icon state
-    QString userMode = m_mainWindow ? m_mainWindow->currentUserMode() : QStringLiteral("Dynamic");
     QString iconKey;
     if (userMode != QStringLiteral("Dynamic")) {
         iconKey = onBattery ? "override_battery" : "override_ac";
@@ -210,6 +247,7 @@ void App::updateTrayFromState() {
     }
     if (m_tray) {
         m_tray->setIconByKey(iconKey);
-        m_tray->setTooltip(QStringLiteral("dynamic_power: %1").arg(active));
+        const QString tip = m_power ? m_power->summaryText() : QString();
+        m_tray->setTooltip(QString("dynamic_power: %1\n%2").arg(active, tip));
     }
 }

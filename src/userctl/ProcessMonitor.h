@@ -1,10 +1,9 @@
-
 #pragma once
 #include <QObject>
 #include <QVector>
+#include <QSet>
 
 struct ProcessRule;
-
 class QTimer;
 
 class ProcessMonitor : public QObject {
@@ -18,6 +17,7 @@ public:
 
 signals:
     void matchedProfile(const QString& profile);
+    void noMatch();
 
 private slots:
     void tick();
@@ -26,5 +26,6 @@ private:
     QVector<ProcessRule> m_rules;
     QTimer* m_timer;
     bool m_hasMatch = false;
-    QStringList currentProcesses() const;
+
+    QSet<QString> currentProcesses() const;  // lowercased basenames for this UID
 };

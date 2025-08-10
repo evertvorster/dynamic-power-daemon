@@ -1,65 +1,93 @@
-
 #include "ProcessMonitor.h"
 #include "Config.h"
 #include <QTimer>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTextStream>
-#include <QSet>
+#include <QRegularExpression>
+#include <QLoggingCategory>
+#include <sys/types.h>
 #include <unistd.h>
+
+Q_LOGGING_CATEGORY(dpProc, "dynamic_power.userctl.process")
 
 ProcessMonitor::ProcessMonitor(QObject* parent) : QObject(parent) {
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &ProcessMonitor::tick);
 }
 
-void ProcessMonitor::setRules(const QVector<ProcessRule>& rules) {
-    m_rules = rules;
-}
+void ProcessMonitor::setRules(const QVector<ProcessRule>& rules) { m_rules = rules; }
+void ProcessMonitor::start(int intervalMs) { m_timer->start(intervalMs); }
+void ProcessMonitor::stop() { m_timer->stop(); }
 
-void ProcessMonitor::start(int intervalMs) {
-    m_timer->start(intervalMs);
-}
+QSet<QString> ProcessMonitor::currentProcesses() const {
+    QSet<QString> names;
+    const uid_t myuid = getuid();
 
-void ProcessMonitor::stop() {
-    m_timer->stop();
-}
-
-QStringList ProcessMonitor::currentProcesses() const {
-    QStringList names;
     QDir proc("/proc");
     for (const auto& entry : proc.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        bool ok=false;
-        int pid = entry.toInt(&ok);
+        bool ok = false;
+        const int pid = entry.toInt(&ok);
         if (!ok) continue;
-        QString commPath = QString("/proc/%1/comm").arg(pid);
-        QFile f(commPath);
-        if (f.open(QIODevice::ReadOnly|QIODevice::Text)) {
-            QTextStream in(&f);
-            QString name = in.readLine().trimmed();
-            if (!name.isEmpty()) names << name;
+
+        // Filter by UID using /proc/<pid> ownership (robust)
+        QFileInfo pinfo(QString("/proc/%1").arg(pid));
+        if (!pinfo.exists() || pinfo.ownerId() != myuid) continue;
+
+        // Prefer basename of /proc/<pid>/exe
+        QString name;
+        QFileInfo exe(QString("/proc/%1/exe").arg(pid));
+        if (exe.exists()) {
+            const QString target = exe.symLinkTarget();
+            if (!target.isEmpty()) name = QFileInfo(target).fileName();
+        }
+        // Fallback to /proc/<pid>/comm
+        if (name.isEmpty()) {
+            QFile com(QString("/proc/%1/comm").arg(pid));
+            if (com.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                name = QString::fromUtf8(com.readLine()).trimmed();
+            }
+        }
+
+        if (!name.isEmpty()) {
+            const QString lname = name.toLower();
+            names.insert(lname);
+            qCDebug(dpProc) << "pid" << pid << "name" << lname;
         }
     }
-    names.removeDuplicates();
+
+    qCDebug(dpProc) << "user-procs total:" << names.size();
     return names;
 }
 
+
 void ProcessMonitor::tick() {
-    auto procs = currentProcesses();
+    const auto procs = currentProcesses();
     int bestPrio = -1;
     QString bestProfile;
+
     for (const auto& r : m_rules) {
-        if (procs.contains(r.process_name)) {
+        const QString match = r.process_name.toLower();
+        if (procs.contains(match)) {
             if (r.priority > bestPrio) {
                 bestPrio = r.priority;
                 bestProfile = r.active_profile;
             }
         }
     }
+
     if (bestPrio >= 0) {
+        if (!m_hasMatch) qCDebug(dpProc) << "matched →" << bestProfile << "prio" << bestPrio;
         m_hasMatch = true;
         emit matchedProfile(bestProfile);
     } else {
-        m_hasMatch = false;
+        if (m_hasMatch) {
+            qCDebug(dpProc) << "no match";
+            m_hasMatch = false;
+            emit noMatch();                     // <— notify clear
+        } else {
+            m_hasMatch = false;                 // still none; nothing to do
+        }
     }
 }

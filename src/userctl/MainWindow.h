@@ -12,6 +12,7 @@ class LoadGraphWidget;
 class QPushButton;
 class QWidget;
 class QVBoxLayout;
+class QLabel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -21,6 +22,7 @@ public:
     void setActiveProfile(const QString& profile);
     QString currentUserMode() const { return m_userMode; }
     void refreshProcessButtons();
+    void setPowerInfo(const QString& text);
 
 signals:
     void userOverrideSelected(const QString& mode, bool boss);
@@ -46,4 +48,5 @@ private:
     void refreshOverrideButton();
     QWidget* m_rulesPanel = nullptr;
     QVBoxLayout* m_rulesLayout = nullptr;
+    QLabel* m_powerLabel = nullptr;
 };
