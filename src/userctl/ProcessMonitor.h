@@ -18,7 +18,7 @@ public:
 signals:
     void matchedProfile(const QString& profile);
     void noMatch();
-
+    void matchesUpdated(const QSet<QString>& matches, const QString& winnerProcessLower);
 private slots:
     void tick();
 

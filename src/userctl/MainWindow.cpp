@@ -11,6 +11,7 @@
 #include <QScrollArea>
 #include <QSpacerItem>
 #include <QLabel>
+#include <QSet>
 
 MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     : QMainWindow(parent), m_dbus(dbus), m_config(config) {
@@ -72,6 +73,12 @@ void MainWindow::setActiveProfile(const QString& profile) {
     refreshOverrideButton();
 }
 
+void MainWindow::setProcessMatchState(const QSet<QString>& matches, const QString& winnerLower) {
+    m_matchedProcs = matches;
+    m_winnerProc = winnerLower;
+    refreshProcessButtons();
+}
+
 void MainWindow::showEvent(QShowEvent* e) {
     QMainWindow::showEvent(e);
     emit visibilityChanged(true);
@@ -109,6 +116,9 @@ void MainWindow::onGraphThresholdChanged(double low, double high) {
 
 void MainWindow::refreshOverrideButton() {
     m_overrideBtn->setText(QString("%1 – %2").arg(m_userMode, m_activeProfile));
+    m_overrideBtn->setStyleSheet(m_userMode != QStringLiteral("Dynamic")
+        ? "background: palette(highlight); color: palette(highlighted-text);"
+        : "");
 }
 
 void MainWindow::refreshProcessButtons() {
@@ -130,6 +140,12 @@ void MainWindow::refreshProcessButtons() {
             // placeholder – will open editor next step
             qInfo("Clicked rule: %s", name.toUtf8().constData());
         });
+        const QString lname = r.process_name.toLower();
+        if (m_userMode == QStringLiteral("Dynamic") && !m_winnerProc.isEmpty() && lname == m_winnerProc) {
+            btn->setStyleSheet("background: palette(highlight); color: palette(highlighted-text);");
+        } else if (m_matchedProcs.contains(lname)) {
+            btn->setStyleSheet("background: palette(alternate-base);");
+        }
         m_rulesLayout->addWidget(btn);
     }
 

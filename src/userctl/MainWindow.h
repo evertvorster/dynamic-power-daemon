@@ -5,6 +5,7 @@
 #include <QShowEvent>
 #include <QHideEvent>
 #include <QCloseEvent>
+#include <QSet>
 
 class DbusClient;
 class Config;
@@ -23,6 +24,7 @@ public:
     QString currentUserMode() const { return m_userMode; }
     void refreshProcessButtons();
     void setPowerInfo(const QString& text);
+    void setProcessMatchState(const QSet<QString>& matches, const QString& winnerLower);
 
 signals:
     void userOverrideSelected(const QString& mode, bool boss);
@@ -49,4 +51,6 @@ private:
     QWidget* m_rulesPanel = nullptr;
     QVBoxLayout* m_rulesLayout = nullptr;
     QLabel* m_powerLabel = nullptr;
+    QSet<QString> m_matchedProcs;
+    QString m_winnerProc; // lowercased
 };

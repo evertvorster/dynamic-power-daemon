@@ -66,17 +66,21 @@ void ProcessMonitor::tick() {
     const auto procs = currentProcesses();
     int bestPrio = -1;
     QString bestProfile;
+    QString bestProc;                 // lowercased name of winning rule
+    QSet<QString> matches;            // all matched lowercased names
 
     for (const auto& r : m_rules) {
         const QString match = r.process_name.toLower();
         if (procs.contains(match)) {
+            matches.insert(match);
             if (r.priority > bestPrio) {
                 bestPrio = r.priority;
                 bestProfile = r.active_profile;
+                bestProc = match;
             }
         }
     }
-
+    emit matchesUpdated(matches, (bestPrio >= 0 ? bestProc : QString()));
     if (bestPrio >= 0) {
         if (!m_hasMatch) qCDebug(dpProc) << "matched →" << bestProfile << "prio" << bestPrio;
         m_hasMatch = true;

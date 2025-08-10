@@ -10,6 +10,7 @@
 #include <QDebug>
 #include <QTimer>
 #include "UPowerClient.h"
+#include <QSet>
 
 App::~App() = default; 
 
@@ -58,6 +59,11 @@ void App::start() {
     m_procMon = std::make_unique<ProcessMonitor>(this);
     m_procMon->setRules(m_config->processRules());
     m_procMon->start(5000);
+    connect(m_procMon.get(), &ProcessMonitor::matchesUpdated, this,
+            [this](const QSet<QString>& matches, const QString& winner){
+                if (m_mainWindow) m_mainWindow->setProcessMatchState(matches, winner);
+            });
+
     connect(m_procMon.get(), &ProcessMonitor::matchedProfile, this, [this](const QString& mode) {
         if (!m_mainWindow || m_mainWindow->currentUserMode() != QStringLiteral("Dynamic"))
             return;
