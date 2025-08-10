@@ -144,7 +144,9 @@ void MainWindow::refreshProcessButtons() {
         if (m_userMode == QStringLiteral("Dynamic") && !m_winnerProc.isEmpty() && lname == m_winnerProc) {
             btn->setStyleSheet("background: palette(highlight); color: palette(highlighted-text);");
         } else if (m_matchedProcs.contains(lname)) {
-            btn->setStyleSheet("background: palette(alternate-base);");
+            const QColor c = qApp->palette().color(QPalette::Active, QPalette::Highlight);
+            btn->setStyleSheet(QString("border-left: 5px solid rgb(%1,%2,%3); background: rgba(%1,%2,%3,0.16);")
+                            .arg(c.red()).arg(c.green()).arg(c.blue()));
         }
         m_rulesLayout->addWidget(btn);
     }

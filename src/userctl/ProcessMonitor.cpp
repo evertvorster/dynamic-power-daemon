@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-Q_LOGGING_CATEGORY(dpProc, "dynamic_power.userctl.process")
+Q_LOGGING_CATEGORY(dpProc, "dynamic_power.userctl.process", QtInfoMsg)
 
 ProcessMonitor::ProcessMonitor(QObject* parent) : QObject(parent) {
     m_timer = new QTimer(this);
@@ -57,7 +57,7 @@ QSet<QString> ProcessMonitor::currentProcesses() const {
         }
     }
 
-    qCDebug(dpProc) << "user-procs total:" << names.size();
+    // qCDebug(dpProc) << "user-procs total:" << names.size();  // Prints all processes, to noisy
     return names;
 }
 
@@ -80,6 +80,7 @@ void ProcessMonitor::tick() {
             }
         }
     }
+    qCDebug(dpProc) << "process matches:" << matches.values();
     emit matchesUpdated(matches, (bestPrio >= 0 ? bestProc : QString()));
     if (bestPrio >= 0) {
         if (!m_hasMatch) qCDebug(dpProc) << "matched →" << bestProfile << "prio" << bestPrio;
