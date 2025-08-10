@@ -26,8 +26,13 @@ void TrayController::onActivated(QSystemTrayIcon::ActivationReason reason) {
 }
 
 QIcon TrayController::iconForKey(const QString& key) {
-    // Placeholder mapping; will wire to actual SVGs later
+    const QString name = QStringLiteral("dynamic_power.%1").arg(key); // e.g. default_ac
+    QIcon themed = QIcon::fromTheme(name);
+    if (!themed.isNull())
+        return themed;
+
+    // Fallbacks (keep existing placeholders)
     if (key.contains("override")) return QApplication::style()->standardIcon(QStyle::SP_DialogYesButton);
-    if (key.contains("match")) return QApplication::style()->standardIcon(QStyle::SP_BrowserReload);
+    if (key.contains("match"))    return QApplication::style()->standardIcon(QStyle::SP_BrowserReload);
     return QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
 }
