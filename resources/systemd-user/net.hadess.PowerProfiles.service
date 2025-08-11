@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=net.hadess.PowerProfiles
+SystemdService=dynamic_power.service

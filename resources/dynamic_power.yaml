@@ -3,3 +3,28 @@ thresholds:
   high: 2
 
 grace_period: 15
+
+hardware:
+  cpu_governor:
+    path: /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+    modes: [powersave, performance]
+  acpi_platform_profile:
+    path: /sys/firmware/acpi/platform_profile
+    modes: [low-power, balanced, performance]
+  aspm:
+    path: /sys/module/pcie_aspm/parameters/policy
+    modes: [powersave, default, performance]
+
+profiles:
+  powersave:
+    cpu_governor: powersave
+    acpi_platform_profile: low-power
+    aspm: powersave
+  balanced:
+    cpu_governor: performance
+    acpi_platform_profile: balanced
+    aspm: default
+  performance:
+    cpu_governor: performance
+    acpi_platform_profile: performance
+    aspm: performance

@@ -21,6 +21,7 @@ add_executable(dynamic_power
     daemon/daemon_dbus_interface.h
     config/config.cpp
     config/config.h
+    daemon/ppd_compat.cpp
 )
 
 target_include_directories(dynamic_power

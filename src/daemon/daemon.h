@@ -9,6 +9,7 @@
 #include "config/config.h"  // for Thresholds struct
 
 class DaemonDBusInterface;
+class PpdCompatAdaptor;
 
 class Daemon : public QObject {
     Q_OBJECT
@@ -21,6 +22,7 @@ public:
     QString m_requestedProfile;
     bool    m_userRequestedProfile = false;
     // getters.
+    void ProfileChanged(const QString& internalName);
     QString getActiveProfile() const { return m_activeProfile; }
     double getLowThreshold() const { return m_actualThresholds.low; }
     double getHighThreshold() const { return m_actualThresholds.high; }
@@ -47,7 +49,7 @@ private:
     QTimer* m_timer = nullptr;            // Polling timer for load average
     QTimer* m_graceTimer = nullptr;       // Timer used for the grace period
     QString m_powerSource;                // "AC" or "battery"
-    QString m_currentProfile;             // Actual current DBus profile
+    QString m_currentProfile;             // Actual current active profile
     QString m_overrideProfile;            // Optional override profile
     QString m_activeProfile;              // Variable for dbus interface
     bool m_isBossOverride = false;        // Override flag
@@ -56,4 +58,6 @@ private:
 
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
+    PpdCompatAdaptor* m_ppdAdaptor = nullptr; // PPD compatibility shim
 };
+

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QString>
+#include <string>
+#include <vector>
+#include <map>
 
 static const inline QString DEFAULT_CONFIG_PATH = "/etc/dynamic_power.yaml";
 
@@ -13,6 +16,26 @@ struct Settings {
     Thresholds thresholds;
     int gracePeriodSeconds = 0;
 };
+
+struct HardwareSetting {
+    std::string path;
+    std::vector<std::string> modes;
+};
+
+struct ProfileSetting {
+    std::string cpu_governor;
+    std::string acpi_platform_profile;
+    std::string aspm;
+};
+
+struct HardwareConfig {
+    HardwareSetting cpu_governor;
+    HardwareSetting acpi_platform_profile;
+    HardwareSetting aspm;
+};
+
+extern HardwareConfig hardware;
+extern std::map<std::string, ProfileSetting> profiles;
 
 class Config {
 public:
