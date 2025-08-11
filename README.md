@@ -1,6 +1,6 @@
 # dynamic-power-daemon
 
-**Dynamic system performance tuning for Linux laptops and desktops** — responsive power profile switching, user overrides, panel overdrive, and display refresh control.
+**Dynamic system performance tuning for Linux laptops and desktops** — responsive power profile switching, and configurable user overrides. Keeps your laptop in a low power state when you are not using it, and turns on the power when you are. 
 
 ---
 
@@ -9,20 +9,21 @@
 `dynamic-power-daemon` is a lightweight power management suite for Linux systems that dynamically adjusts:
 
 - **CPU power profiles (performance, balanced, powersave)**
-- **Panel overdrive (Asus laptops)**
-- **Display refresh rates**
+- **Panel overdrive (Asus laptops)** <- Removed with a rewrite, will re-implement it
+- **Display refresh rates** <- Removed with a rewrite, will re-implement it
 - **Desktop panel auto-hide (KDE)** <- Coming soon!
 
-It monitors system load, power source, and running applications to deliver the optimal performance or power saving profile — automatically, or with user control.
+It monitors system load, power source, and running applications to deliver the optimal performance or power saving profile — automatically, or with user control. 
 
 ---
 
 ## ⚙️ Architecture
 
 - **System Daemon** (`dynamic_power`) — runs as root via systemd, monitors load and power source, applies profiles.
-- **User Helper** (`dynamic_power_user`) — monitors user processes, sends override requests via DBus.
-- **GUI Controller** (`dynamic_power_command`) — Qt-based tray app for real-time monitoring, manual control, and config editing.
-- **Session Helper** (`dynamic_power_session_helper`) — launches user components and reacts to power state changes.
+- **User Program** (`dynamic_power_user`) — monitors user processes, sends override requests via DBus. Provides a gui and the controls to your system. You can watch system 
+load in real time, and make adjustments to fine tune your experience. Set it once, and the app remembers it until you feel like adjusting it again. 
+- **Low power usage** - Optimized to only use power when needed, and stays out of the way if you don't need it.
+
 
 ---
 
@@ -33,17 +34,15 @@ It monitors system load, power source, and running applications to deliver the o
 - Power source (AC or battery)
 - Per-process overrides (e.g. set Steam to "performance")
 
-✅ Power source triggers:
-- Enable/disable **panel overdrive** (Asus only)
-- Set **display refresh rates** (e.g. 144 Hz → 60 Hz on battery)
-- Auto-hide desktop panel in KDE (optional) - coming soon!
+✅ Configurable Daemon power interface:
+- CPU Governors, ACPI and ASPM configuration on the fly
 
 ✅ Manual override via tray icon:
 - One-click switch to Performance / Balanced / Powersave
 - Live graph of system load with adjustable thresholds
 
 ✅ Configurable with YAML:
-- System-wide config: `/etc/dynamic-power.yaml`
+- System-wide config: `/etc/dynamic_power.yaml`
 - User overrides: `~/.config/dynamic_power/config.yaml`
 
 ✅ Clean DBus integration:
@@ -57,13 +56,16 @@ It monitors system load, power source, and running applications to deliver the o
 ### Arch Linux (via AUR)
 
 ```bash
-yay -S dynamic-power-monitor
+yay -S dynamic-power-daemon
 ```
 
 This will install:
 - `dynamic_power` systemd daemon
-- All user tools (`dynamic_power_user`, `dynamic_power_command`, etc.)
+- All user tools (`dynamic_power_user`)
 - Example config templates
+- When started for the first time, the daemon and user will copy in a template
+    config file. For now the daemon config is manual, config utility coming soon.
+- User config has been populated with some examples. Add and remove as you feel like.
 
 ### Manual Install
 
@@ -72,7 +74,14 @@ Clone the repo:
 ```bash
 git clone https://github.com/evertvorster/dynamic-power-daemon.git
 cd dynamic-power-daemon
+cd src
+mdkdir -p build
+cd build
+make clean && cmake .. && make
+cd ../..
 sudo make install
+
+<Yeah, this is stupid, we will fix this soon.>
 ```
 
 Enable the root daemon:
@@ -84,40 +93,92 @@ sudo systemctl enable --now dynamic_power.service
 Start the GUI controller from your user session:
 
 ```bash
-dynamic_power_session_helper &
+dynamic_power_user &
 ```
+Recommended to add this to your autolaunching scripts. 
 
 ---
 
 ## 📁 Config Structure
 
-### `/etc/dynamic-power.yaml`
+### `/etc/dynamic_power.yaml`
 
 ```yaml
-power:
-  low_threshold: 1.0
-  high_threshold: 2.0
-  power_source:
-    ac_id: ADP0
-    battery_id: BAT0
+thresholds:
+  low: 1
+  high: 2
 
-features:
-  auto_panel_overdrive: true
-  screen_refresh: true
-  kde_autohide_on_battery: false
+grace_period: 15
+
+hardware:
+  cpu_governor:
+    path: /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+    modes: [powersave, performance]
+  acpi_platform_profile:
+    path: /sys/firmware/acpi/platform_profile
+    modes: [low-power, balanced, performance]
+  aspm:
+    path: /sys/module/pcie_aspm/parameters/policy
+    modes: [powersave, default, performance]
+
+profiles:
+  powersave:
+    cpu_governor: powersave
+    acpi_platform_profile: low-power
+    aspm: powersave
+  balanced:
+    cpu_governor: performance
+    acpi_platform_profile: balanced
+    aspm: default
+  performance:
+    cpu_governor: performance
+    acpi_platform_profile: performance
+    aspm: performance
 ```
 
 ### `~/.config/dynamic_power/config.yaml`
 
 ```yaml
+features:
+  kde_autohide_on_battery: false
+  auto_panel_overdrive: true
+  screen_refresh: false
+
+power:
+  load_thresholds:
+    low: 1
+    high: 2
+
 process_overrides:
-  - process_name: steam
+  - name: recording
+    process_name: obs
+    active_profile: powersave
+    priority: 100
+
+  - name: video_editing
+    process_name: kdenlive
+    active_profile: inhibit powersave
+    priority: 90
+
+  - name: gaming
+    process_name: steam
     active_profile: performance
     priority: 80
 
-features:
-  auto_panel_overdrive: true
-  screen_refresh: true
+  - name: audio_editing
+    process_name: audacity
+    active_profile: inhibit powersave
+    priority: 70
+
+  - name: arcade_emulation
+    process_name: qmc2-sdlmame
+    active_profile: performance
+    priority: 60
+
+  - name: wine_runtime
+    process_name: wineserver
+    active_profile: inhibit powersave
+    priority: 50
 ```
 
 ---
@@ -130,7 +191,7 @@ Coming soon — tray UI, graph view, and live refresh rate monitor.
 
 ## 📦 AUR Package
 
-📦 [`dynamic-power-monitor`](https://aur.archlinux.org/packages/dynamic-power-monitor)
+📦 [`dynamic-power-daemon`](https://aur.archlinux.org/packages/dynamic-power-daemon)
 
 Maintained and released by the author. Updates match GitHub releases.
 
@@ -147,49 +208,29 @@ The project includes detailed markdown docs in `/docs/`:
 
 ---
 
-## 🛠 Development
-
-To build from source:
-
-```bash
-make
-sudo make install
-```
-
-To uninstall:
-
-```bash
-sudo make uninstall
-```
-
-To run in debug mode:
-
-```bash
-dynamic_power_session_helper --debug
-```
-
 ---
 
 ## 🧷 Dependencies
 
 The following system packages are required:
--  'python'
--  'python-dbus'
--  'python-psutil'
--  'python-pyqt6'
--  'python-pyqtgraph'
--  'python-pyyaml'
--  'python-inotify-simple'
--  'python-setproctitle'
--  'python-dbus-next'
--  'python-systemd'
--  'qt6-base'
 -  'qt6-tools'
--  'power-profiles-daemon'
 -  'kscreen'
+-  'cmake'
+-  'pkgconf'
+-  'qt6-base'
+-  'yaml-cpp'
+-  'systemd'
+
 
 optionally:
 'asusctl: panel overdrive toggle on Asus laptops'
+
+conflicts:
+Anything that wants to set the system power management features. 
+Includes but is not limited to power-profiles-control, TLP, Laptop mode tools
+    The list goes on. The intention here is to be a modern replacement for these tools.
+    DBus interface is available if you want to plug into the profiles, and control them even. 
+
 
 ---
 
