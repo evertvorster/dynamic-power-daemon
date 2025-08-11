@@ -55,6 +55,8 @@ add_executable(dynamic_power_user
     userctl/ProcessRuleEditor.h
     userctl/UPowerClient.cpp
     userctl/UPowerClient.h
+    userctl/ProfileConfigDialog.cpp
+    userctl/ProfileConfigDialog.h
 )
 
 target_include_directories(dynamic_power_user
