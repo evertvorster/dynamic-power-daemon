@@ -242,4 +242,4 @@ Contributions, bug reports, and feature suggestions are welcome!
 
 ## 📄 License
 
-GPL-3.0 License. See `LICENSE` for details.
+	GPL-3.0-or-later
