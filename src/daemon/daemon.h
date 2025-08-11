@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QMap>
 #include "config/config.h"  // for Thresholds struct
+#include <QFileSystemWatcher>
 
 class DaemonDBusInterface;
 
@@ -39,6 +40,7 @@ private Q_SLOTS:
     void handlePropertiesChanged(const QDBusMessage &message);
     void handleUPowerChanged(const QDBusMessage &message);
     void checkLoadAverage();              // New slot: called every 5 seconds to check system load
+    void onConfigFileChanged(const QString &path);
 
 private:
     Thresholds m_thresholds;              // Low/high thresholds from config
@@ -57,5 +59,6 @@ private:
 
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
+    QFileSystemWatcher* m_configWatcher = nullptr;  // watches DEFAULT_CONFIG_PATH
 };
 

@@ -89,8 +89,33 @@ Daemon::Daemon(const Thresholds &thresholds,
         m_graceTimer->start();
         log_debug(QString("Grace period active: forcing 'performance' for %1 seconds")
                 .arg(graceSeconds).toUtf8().constData());
+
+    // Watch the config for changes and hot-reload thresholds/profiles
+    m_configWatcher = new QFileSystemWatcher(this);
+    m_configWatcher->addPath(DEFAULT_CONFIG_PATH);
+    connect(m_configWatcher, &QFileSystemWatcher::fileChanged,
+            this, &Daemon::onConfigFileChanged);
+
     }
 }
+
+void Daemon::onConfigFileChanged(const QString &path)
+{
+    log_info(QString("Config changed on disk: %1 — reloading").arg(path).toUtf8().constData());
+
+    // Reload settings (also repopulates global 'hardware' and 'profiles')
+    Settings s = Config::loadSettings(DEFAULT_CONFIG_PATH);
+
+    // Apply new thresholds immediately (requested overrides still win)
+    m_thresholds = s.thresholds;
+    log_info(QString("New thresholds: low=%1 high=%2")
+             .arg(m_thresholds.low).arg(m_thresholds.high).toUtf8().constData());
+
+    // Re-arm the watcher (accounts for editors that replace the file)
+    if (QFile::exists(DEFAULT_CONFIG_PATH))
+        m_configWatcher->addPath(DEFAULT_CONFIG_PATH);
+}
+
 
 void Daemon::handlePropertiesChanged(const QDBusMessage &message) {
     const auto args = message.arguments();
@@ -227,6 +252,8 @@ bool Daemon::setProfile(const QString& internalName)
     m_currentProfile = internalName;       // actual active (for our daemon)
     m_activeProfile  = internalName;       // reflected to our DBus iface
     log_info(QString("Profile switched to '%1'").arg(internalName).toUtf8().constData());
+    if (m_dbusInterface)
+        Q_EMIT m_dbusInterface->PowerStateChanged();
     return true;
 }
 
