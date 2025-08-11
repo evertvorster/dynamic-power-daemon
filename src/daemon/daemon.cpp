@@ -11,6 +11,9 @@
 #include <QDBusError>
 #include <QDBusVariant>
 #include <QMap>
+#include <algorithm>
+#include <fstream>
+#include <string>
 
 // Constructor.
 Daemon::Daemon(const Thresholds &thresholds, 
@@ -166,125 +169,83 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
 
 bool Daemon::loadAvailableProfiles()
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        "net.hadess.PowerProfiles",
-        "/net/hadess/PowerProfiles",
-        "org.freedesktop.DBus.Properties",
-        "Get"
-    );
-
-    msg << "net.hadess.PowerProfiles" << "Profiles";
-
-    QDBusMessage reply = QDBusConnection::systemBus().call(msg);
-
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        log_error(QString("Failed to get Profiles: %1").arg(reply.errorMessage()).toUtf8().constData());
-        return false;
-    }
-
-    QVariant outer = reply.arguments().at(0).value<QDBusVariant>().variant();
-
-    // Unpack the array of {sv} maps from the QDBusArgument
-    const QDBusArgument arg = outer.value<QDBusArgument>();
-
     m_profileMap.clear();
 
-    arg.beginArray();
-    while (!arg.atEnd()) {
-        QVariantMap profileEntry;
-        arg >> profileEntry;
-
-        QString actualProfile = profileEntry.value("Profile").toString();
-        if (actualProfile.isEmpty())
-            continue;
-
-        log_info(QString("Found profile: %1").arg(actualProfile).toUtf8().constData());
-
-        if (actualProfile == "performance") {
-            m_profileMap["performance"] = actualProfile;
-        } else if (actualProfile == "balanced") {
-            m_profileMap["balanced"] = actualProfile;
-        } else if (actualProfile == "power-saver" || actualProfile == "powersave") {
-            m_profileMap["powersave"] = actualProfile;
-        }
+    // Populate from YAML-defined profiles (config.h globals)
+    for (const auto &kv : profiles) {
+        const QString name = QString::fromStdString(kv.first);
+        m_profileMap[name] = name; // internal → same name
     }
-    arg.endArray();
 
-    for (const QString& role : { "performance", "balanced", "powersave" }) {
+    // Sanity: warn if our canonical trio are missing
+    for (const QString &role : { "performance", "balanced", "powersave" }) {
         if (!m_profileMap.contains(role)) {
             log_warning(QString("Missing mapping for internal role '%1'").arg(role).toUtf8().constData());
         } else {
-            log_debug(QString("Mapped internal profile '%1' → DBus profile '%2'")
-                      .arg(role, m_profileMap[role])
-                      .toUtf8().constData());
+            log_debug(QString("Mapped internal profile '%1'").arg(role).toUtf8().constData());
         }
     }
-
     return true;
 }
 
 bool Daemon::setProfile(const QString& internalName)
 {
-    if (!m_profileMap.contains(internalName)) {
+    // Skip redundant apply if the requested profile is already active.
+    if (internalName == m_currentProfile) {
+        log_debug("setProfile(): requested profile equals current; skipping.");
+        return true;
+    }
+    const std::string key = internalName.toStdString();
+    
+    // Look up the desired profile in YAML
+    auto it = profiles.find(key);
+    if (it == profiles.end()) {
         log_warning(QString("setProfile(): Unknown internal profile name '%1'")
                     .arg(internalName).toUtf8().constData());
         return false;
     }
-    
-    // 🆕 Fallback: if we don't know the current profile yet, ask DBus
-    if (m_currentProfile.isEmpty()) {
-        QDBusMessage getMsg = QDBusMessage::createMethodCall(
-            "net.hadess.PowerProfiles",
-            "/net/hadess/PowerProfiles",
-            "org.freedesktop.DBus.Properties",
-            "Get"
-        );
-        getMsg << "net.hadess.PowerProfiles" << "ActiveProfile";
+    const ProfileSetting &ps = it->second;
 
-        QDBusMessage reply = QDBusConnection::systemBus().call(getMsg);
-        if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() == 1) {
-            QVariant variant = reply.arguments().at(0).value<QDBusVariant>().variant();
-            m_currentProfile = variant.toString();
-            log_debug(QString("Queried current profile: %1").arg(m_currentProfile).toUtf8().constData());
-        } else {
-            log_warning("Could not query current profile from DBus");
+    // Helper to write a single value to a sysfs path
+    auto write_value = [&](const std::string &path, const std::string &value, const char *label) -> bool {
+        if (path.empty() || value.empty()) {
+            // Nothing to do for this knob
+            return true;
         }
-    }
-    QString actualProfile = m_profileMap.value(internalName);   
-    // If the current profile is already set, skip it. 
-    if (actualProfile == m_currentProfile) {
-        if (DEBUG_MODE) {
-            log_debug(QString("setProfile(): '%1' already active – skipping").arg(actualProfile).toUtf8().constData());
+        std::ofstream ofs(path);
+        if (!ofs) {
+            log_error(QString("setProfile(): cannot open %1 path '%2'")
+                      .arg(label, QString::fromStdString(path)).toUtf8().constData());
+            return false;
         }
+        ofs << value << std::endl;
+        if (!ofs.good()) {
+            log_error(QString("setProfile(): failed writing '%1' to %2")
+                      .arg(QString::fromStdString(value), QString::fromStdString(path)).toUtf8().constData());
+            return false;
+        }
+        log_info(QString("Applied %1 = %2").arg(label, QString::fromStdString(value)).toUtf8().constData());
         return true;
-    }
-    // Get the internal name for dbus.
-    // m_activeProfile = internalName;
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        "net.hadess.PowerProfiles",               // service
-        "/net/hadess/PowerProfiles",              // object path
-        "org.freedesktop.DBus.Properties",        // this is the interface we're calling ON
-        "Set"                                     // this is the method name
-    );
+    };
 
-    // Set(interface name, property name, value)
-    msg << "net.hadess.PowerProfiles"            // target interface for the property
-        << "ActiveProfile"                        // property name
-        << QVariant::fromValue(QDBusVariant(actualProfile));  // value
+    bool ok = true;
+    ok &= write_value(hardware.cpu_governor.path,          ps.cpu_governor,          "cpu_governor");
+    ok &= write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile");
+    ok &= write_value(hardware.aspm.path,                  ps.aspm,                  "aspm");
 
-    QDBusMessage reply = QDBusConnection::systemBus().call(msg);
-    
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        log_error(QString("setProfile(): Failed to set profile '%1': %2")
-                  .arg(actualProfile, reply.errorMessage()).toUtf8().constData());
+    if (!ok) {
+        log_error(QString("setProfile(): one or more hardware writes failed for '%1'")
+                  .arg(internalName).toUtf8().constData());
         return false;
     }
 
-    log_debug(QString("Requested profile switch to '%1'").arg(actualProfile).toUtf8().constData());
-    m_activeProfile = internalName;
-    log_info(QString("Profile set to '%1' via DBus").arg(actualProfile).toUtf8().constData());   
+    // Track what we just applied
+    m_currentProfile = internalName;       // actual active (for our daemon)
+    m_activeProfile  = internalName;       // reflected to our DBus iface
+    log_info(QString("Profile switched to '%1'").arg(internalName).toUtf8().constData());
     return true;
 }
+
 
 void Daemon::updatePowerSource()
 {
