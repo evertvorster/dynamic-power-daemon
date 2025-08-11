@@ -10,9 +10,9 @@ int main(int argc, char *argv[]) {
 
     if (args.contains("--debug")) {
         enable_debug_logging();  // enable first
-        log_info("dynamic_power_cpp starting in DEBUG mode");
+        log_info("dynamic_power starting in DEBUG mode");
     } else {
-        log_info("dynamic_power_cpp starting normally");
+        log_info("dynamic_power starting normally");
     }
 
     Settings settings = Config::loadSettings(DEFAULT_CONFIG_PATH);
