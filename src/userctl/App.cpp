@@ -37,6 +37,10 @@ void App::start() {
     m_dbus = std::make_unique<DbusClient>(this);
     connect(m_dbus.get(), &DbusClient::powerStateChanged, this, &App::onDaemonStateChanged);
 
+    // Startup: push configured thresholds to the daemon so it doesn’t keep defaults
+    auto th = m_config->thresholds();
+    m_dbus->setLoadThresholds(th.first, th.second);
+
     // UPower client
     m_power = std::make_unique<UPowerClient>(this);
     connect(m_power.get(), &UPowerClient::powerInfoChanged, this, [this]() {

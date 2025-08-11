@@ -9,24 +9,20 @@
 #include <fstream>
 #include <QTimer>
 
-static const char* FILENAME_PRIMARY = "dynamic-power-user.yaml";
-static const char* FILENAME_FALLBACK = "config.yaml";
+static const char* FILENAME_PRIMARY = "config.yaml";
 
 Config::Config() {
     QString cfgDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/dynamic_power";
     QDir().mkpath(cfgDir);
     QString primary = cfgDir + "/" + FILENAME_PRIMARY;
-    QString fallback = cfgDir + "/" + FILENAME_FALLBACK;
-    if (QFile::exists(primary)) m_path = primary;
-    else if (QFile::exists(fallback)) m_path = fallback;
-    else m_path = primary;
+    m_path = primary;  // Always use ~/.config/dynamic_power/config.yaml
     startWatching();
 }
 
 void Config::ensureExists() {
     if (QFile::exists(m_path)) return;
-    // Try to copy from template: /usr/share/dynamic_power/dynamic-power-user.yaml
-    QString tmpl = "/usr/share/dynamic_power/dynamic-power-user.yaml";
+    // Try to copy from template: /usr/share/dynamic-power/dynamic-power-user.yaml
+    QString tmpl = "/usr/share/dynamic-power/dynamic-power-user.yaml";
     if (QFile::exists(tmpl)) {
         QFile::copy(tmpl, m_path);
         QFile::setPermissions(m_path, QFileDevice::ReadOwner|QFileDevice::WriteOwner);
