@@ -9,6 +9,7 @@
 #include "config/config.h"  // for Thresholds struct
 
 class DaemonDBusInterface;
+class PpdCompatAdaptor;
 
 class Daemon : public QObject {
     Q_OBJECT
@@ -21,6 +22,7 @@ public:
     QString m_requestedProfile;
     bool    m_userRequestedProfile = false;
     // getters.
+    void ProfileChanged(const QString& internalName);
     QString getActiveProfile() const { return m_activeProfile; }
     double getLowThreshold() const { return m_actualThresholds.low; }
     double getHighThreshold() const { return m_actualThresholds.high; }
@@ -56,4 +58,6 @@ private:
 
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
+    PpdCompatAdaptor* m_ppdAdaptor = nullptr; // PPD compatibility shim
 };
+

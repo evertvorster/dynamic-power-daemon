@@ -17,6 +17,7 @@ SYSTEMD_SYSTEM_DIR     := $(PREFIX)/lib/systemd/system
 SYSTEMD_USER_DIR       := $(PREFIX)/lib/systemd/user
 SYSTEMD_USER_PRESET    := $(PREFIX)/lib/systemd/user-preset
 DBUS_SYSTEM_POLICY_DIR := /etc/dbus-1/system.d
+DBUS_SYSTEM_SERVICE_DIR := $(PREFIX)/share/dbus-1/system-services
 SHARE_DIR              := /usr/share/dynamic-power
 DESKTOP_DIR            := $(PREFIX)/share/applications
 PIXMAPS_DIR 	       := $(PREFIX)/share/icons/hicolor/scalable/apps/
@@ -32,11 +33,16 @@ install:
 	install -Dm755 $(CPP_SRC_DIR)/$(BUILD_DIR)/dynamic_power_user         "$(DESTDIR)$(BINDIR)/dynamic_power_user"
 
 	@echo "# --- System daemon unit -------------------------------------------"
-	install -Dm644 dynamic-power.service                                 "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
+	install -Dm644 $(RESOURCE_DIR)/systemd/dynamic_power.service \
+	"$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
 
 	@echo "# --- DBus policy ---------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf \
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
+
+	@echo "# --- DBus auto-activation -----------------------------------------"
+	install -Dm644 $(RESOURCE_DIR)/systemd/net.hadess.PowerProfiles.service \
+		"$(DESTDIR)$(DBUS_SYSTEM_SERVICE_DIR)/net.hadess.PowerProfiles.service"
 
 	@echo "# --- Desktop entry --------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power.desktop \
@@ -60,6 +66,7 @@ uninstall:
 	@echo "Removing installation (PREFIX=$(PREFIX))"
 	@rm -vf "$(DESTDIR)$(BINDIR)"/dynamic_power*
 	@rm -vf "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
+	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_SERVICE_DIR)/net.hadess.PowerProfiles.service"
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
