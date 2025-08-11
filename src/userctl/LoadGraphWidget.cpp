@@ -11,7 +11,7 @@
 LoadGraphWidget::LoadGraphWidget(QWidget* parent) : QWidget(parent) {
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &LoadGraphWidget::sampleLoad);
-    m_timer->start(1000);
+    m_timer->start(5000);
     m_samples.assign(m_maxSamples, 0.0);
     setMouseTracking(true); 
     setMinimumHeight(240);                    // keep some vertical space

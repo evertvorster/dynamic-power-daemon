@@ -7,6 +7,15 @@
 TrayController::TrayController(QObject* parent) : QObject(parent) {
     m_tray.setIcon(QApplication::style()->standardIcon(QStyle::SP_ComputerIcon));
     m_tray.setToolTip("dynamic_power");
+    // Context menu with Quit
+    auto *menu = new QMenu;                       // unparented is fine for tray menus
+    auto *openAct = menu->addAction("Open Dynamic Power");
+    connect(openAct, &QAction::triggered, this, [this]{ emit showMainRequested(); });
+
+    auto *quitAct = menu->addAction("Quit");
+    connect(quitAct, &QAction::triggered, qApp, &QCoreApplication::quit);
+
+    m_tray.setContextMenu(menu);    
     connect(&m_tray, &QSystemTrayIcon::activated, this, &TrayController::onActivated);
     m_tray.show();
 }
