@@ -69,3 +69,53 @@ target_link_libraries(dynamic_power_user
     Qt6::Widgets
     yaml-cpp
 )
+
+# ---- Install rules (match Makefile destinations) --------------------------
+include(GNUInstallDirs)
+
+# Mirrors Makefile defaults (Makefile: L15–23)
+set(SYSTEMD_SYSTEM_DIR        "${CMAKE_INSTALL_PREFIX}/lib/systemd/system" CACHE PATH "systemd system unit dir")
+set(DBUS_SYSTEM_POLICY_DIR    "/etc/dbus-1/system.d"                       CACHE PATH "D-Bus system policy dir")
+set(DESKTOP_DIR               "${CMAKE_INSTALL_DATADIR}/applications"      CACHE PATH "XDG desktop files dir")
+set(PIXMAPS_DIR               "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps" CACHE PATH "Icons dir")
+set(SHARE_DIR                 "/usr/share/dynamic-power"                   CACHE PATH "Project shared data dir")
+
+# Binaries (Makefile: L32–33)
+install(TARGETS dynamic_power RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(TARGETS dynamic_power_user RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
+# systemd unit (Makefile: L36–37)
+install(FILES
+    resources/systemd/dynamic_power.service
+    DESTINATION "${SYSTEMD_SYSTEM_DIR}"
+)
+
+# D-Bus policy (Makefile: L40–41)
+install(FILES
+    resources/dbus/org.dynamic_power.Daemon.conf
+    DESTINATION "${DBUS_SYSTEM_POLICY_DIR}"
+)
+
+# Desktop entry (Makefile: L44–45)
+install(FILES
+    resources/dynamic-power.desktop
+    DESTINATION "${DESKTOP_DIR}"
+)
+
+# Icons (Makefile: L48–53)
+install(FILES
+    resources/dynamic_power.default_ac.svg
+    resources/dynamic_power.default_battery.svg
+    resources/dynamic_power.match_ac.svg
+    resources/dynamic_power.match_battery.svg
+    resources/dynamic_power.override_ac.svg
+    resources/dynamic_power.override_battery.svg
+    DESTINATION "${PIXMAPS_DIR}"
+)
+
+# YAML templates (Makefile: L56–57)
+install(FILES
+    resources/dynamic-power-user.yaml
+    resources/dynamic_power.yaml
+    DESTINATION "${SHARE_DIR}"
+)

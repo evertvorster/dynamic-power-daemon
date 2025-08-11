@@ -75,11 +75,9 @@ Clone the repo:
 git clone https://github.com/evertvorster/dynamic-power-daemon.git
 cd dynamic-power-daemon
 cd src
-mdkdir -p build
-cd build
-make clean && cmake .. && make
-cd ../..
-sudo make install
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build --parallel
+sudo cmake --install build
 
 <Yeah, this is stupid, we will fix this soon.>
 ```
