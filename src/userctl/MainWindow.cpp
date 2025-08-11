@@ -13,6 +13,7 @@
 #include <QSpacerItem>
 #include <QLabel>
 #include <QSet>
+#include "ProfileConfigDialog.h"
 
 MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     : QMainWindow(parent), m_dbus(dbus), m_config(config) {
@@ -32,10 +33,21 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     layout->addWidget(m_overrideBtn);
     connect(m_overrideBtn, &QPushButton::clicked, this, &MainWindow::onOverrideButtonClicked);
 
+    // Profile Configuration button
+    auto* profileBtn = new QPushButton("Profile Configuration", this);
+    layout->addWidget(profileBtn);
+    connect(profileBtn, &QPushButton::clicked, this, [this]{
+        ProfileConfigDialog dlg(this, "/etc/dynamic_power.yaml");
+        dlg.exec();
+    });
+
     // Power info label
     m_powerLabel = new QLabel(this);
     m_powerLabel->setText("Power: …");
-    m_powerLabel->setStyleSheet("color: black;");
+    // Use theme default color; just make it bold
+    QFont f = m_powerLabel->font();
+    f.setBold(true);
+    m_powerLabel->setFont(f);
     layout->addWidget(m_powerLabel);
 
     // --- Process matches section ---
