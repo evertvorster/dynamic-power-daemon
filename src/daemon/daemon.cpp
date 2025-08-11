@@ -26,22 +26,6 @@ Daemon::Daemon(const Thresholds &thresholds,
     QDBusConnection::systemBus().registerObject("/org/dynamic_power", this, QDBusConnection::ExportAdaptors);
     QDBusConnection::systemBus().registerService("org.dynamic_power.Daemon");
 
-    // Connection to power profiles daemon
-    bool success = QDBusConnection::systemBus().connect(
-        "net.hadess.PowerProfiles",
-        "/net/hadess/PowerProfiles",
-        "org.freedesktop.DBus.Properties",
-        "PropertiesChanged",
-        this,
-        SLOT(handlePropertiesChanged(QDBusMessage))
-    );
-
-    if (success) {
-        log_info("Connected to org.freedesktop.PowerProfiles signal");
-    } else {
-        log_error("Failed to connect to PowerProfiles signal");
-    }
-
     // Connection to Upower
     bool upowerConnected = QDBusConnection::systemBus().connect(
         "org.freedesktop.UPower",

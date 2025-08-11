@@ -47,7 +47,7 @@ private:
     QTimer* m_timer = nullptr;            // Polling timer for load average
     QTimer* m_graceTimer = nullptr;       // Timer used for the grace period
     QString m_powerSource;                // "AC" or "battery"
-    QString m_currentProfile;             // Actual current DBus profile
+    QString m_currentProfile;             // Actual current active profile
     QString m_overrideProfile;            // Optional override profile
     QString m_activeProfile;              // Variable for dbus interface
     bool m_isBossOverride = false;        // Override flag
