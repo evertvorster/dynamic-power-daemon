@@ -34,7 +34,13 @@ private:
     YAML::Node* m_root = nullptr;    // allocated on load, freed on dtor
     QMap<QString, CapabilityInfo> m_caps;  // key -> info
     QStringList m_profiles = {"powersave","balanced","performance"};
-
+    // NEW: per-capability path editor and status
+    QMap<QString, class QLineEdit*> m_pathEdits;       // capKey -> QLineEdit*
+    QMap<QString, class QLabel*>    m_statusLabels;    // capKey -> QLabel*
+    void validateAndReload(const QString& capKey);     // check path exists, read modes, refresh menus
+    QStringList readModesFromFile(const QString& path) const;
+    void refreshMenusForCap(const QString& capKey);    // rebuild menus for all profiles for this cap
+    
     // UI state
     QVBoxLayout* m_outer = nullptr;
     QGridLayout* m_profilesGrid = nullptr;
