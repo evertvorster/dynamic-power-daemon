@@ -1,14 +1,11 @@
 [Unit]
-Description=Dynamic CPU Power Profile Adjuster (DBus-activated PPD shim)
-After=multi-user.target dbus.service
+Description=Dynamic CPU Power Profile Adjuster
+After=multi-user.target
 ConditionPathExists=/usr/bin/dynamic_power
 
 [Service]
-Type=dbus
-BusName=net.hadess.PowerProfiles
 ExecStart=/usr/bin/dynamic_power
 Restart=always
-# User=root  # (not needed for system units; root is default)
 
 [Install]
 WantedBy=multi-user.target

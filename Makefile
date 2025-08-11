@@ -40,10 +40,6 @@ install:
 	install -Dm644 $(RESOURCE_DIR)/dbus/org.dynamic_power.Daemon.conf \
 		"$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 
-	@echo "# --- DBus auto-activation -----------------------------------------"
-	install -Dm644 $(RESOURCE_DIR)/systemd/net.hadess.PowerProfiles.service \
-		"$(DESTDIR)$(DBUS_SYSTEM_SERVICE_DIR)/net.hadess.PowerProfiles.service"
-
 	@echo "# --- Desktop entry --------------------------------------------------"
 	install -Dm644 $(RESOURCE_DIR)/dynamic-power.desktop \
 		"$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"
@@ -66,7 +62,6 @@ uninstall:
 	@echo "Removing installation (PREFIX=$(PREFIX))"
 	@rm -vf "$(DESTDIR)$(BINDIR)"/dynamic_power*
 	@rm -vf "$(DESTDIR)$(SYSTEMD_SYSTEM_DIR)/dynamic_power.service"
-	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_SERVICE_DIR)/net.hadess.PowerProfiles.service"
 	@rm -vf "$(DESTDIR)$(DBUS_SYSTEM_POLICY_DIR)/org.dynamic_power.Daemon.conf"
 	@rm -vf "$(DESTDIR)$(SHARE_DIR)"/dynamic-power*.yaml
 	@rm -vf "$(DESTDIR)$(DESKTOP_DIR)/dynamic-power.desktop"

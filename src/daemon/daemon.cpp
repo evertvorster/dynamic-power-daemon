@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
-#include "ppd_compat.h"
 
 // Constructor.
 Daemon::Daemon(const Thresholds &thresholds, 
@@ -26,12 +25,6 @@ Daemon::Daemon(const Thresholds &thresholds,
     m_dbusInterface = new DaemonDBusInterface(this);
     QDBusConnection::systemBus().registerObject("/org/dynamic_power", this, QDBusConnection::ExportAdaptors);
     QDBusConnection::systemBus().registerService("org.dynamic_power.Daemon");
-
-    // PPD compatibility shim (net.hadess.PowerProfiles)
-    m_ppdAdaptor = new PpdCompatAdaptor(this);
-    QDBusConnection::systemBus().registerObject("/net/hadess/PowerProfiles", this, QDBusConnection::ExportAdaptors);
-    QDBusConnection::systemBus().registerService("net.hadess.PowerProfiles");
-
 
     // Connection to Upower
     bool upowerConnected = QDBusConnection::systemBus().connect(

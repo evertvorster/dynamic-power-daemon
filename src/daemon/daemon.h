@@ -9,7 +9,6 @@
 #include "config/config.h"  // for Thresholds struct
 
 class DaemonDBusInterface;
-class PpdCompatAdaptor;
 
 class Daemon : public QObject {
     Q_OBJECT
@@ -58,6 +57,5 @@ private:
 
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
-    PpdCompatAdaptor* m_ppdAdaptor = nullptr; // PPD compatibility shim
 };
 
