@@ -67,18 +67,13 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
 
     QWidget* area = new QWidget(this);
     auto* grid = new QGridLayout(area);
+    grid->setHorizontalSpacing(8);
+    grid->setVerticalSpacing(4);
+    grid->setColumnStretch(1, 1); // make path edits expand
+
     int row = 0;
-
-    // Header
-    grid->addWidget(new QLabel("Capability"), row, 0);
-    grid->addWidget(new QLabel("Set Path"),    row, 1);
-    grid->addWidget(new QLabel(""),            row, 2); // Check btn
-    grid->addWidget(new QLabel("Status"),      row, 3);
-    grid->addWidget(new QLabel("Options Path"),row, 4);
-    grid->addWidget(new QLabel(""),            row, 5); // Load btn
-    grid->addWidget(new QLabel("Modes"),       row, 6);
-
     YAML::Node hw = (*m_root)["hardware"];
+
     for (const auto& key : capKeys()) {
         CapabilityInfo ci; ci.key = key;
         const std::string ks = key.toStdString();
@@ -92,23 +87,26 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
                 }
             }
         }
-        ci.exists = !ci.path.isEmpty() && QFileInfo::exists(ci.path);
-        m_caps.insert(key, ci);
-
-        // NEW: prefer options from options_path file if provided
-        if (hw[ks]["options_path"]) {
-            const QString optPath =
-                QString::fromStdString(hw[ks]["options_path"].as<std::string>());
+        // If options_path present and readable, prefer modes from there
+        if (hw && hw[ks] && hw[ks]["options_path"]) {
+            const QString optPath = QString::fromStdString(hw[ks]["options_path"].as<std::string>());
             if (!optPath.isEmpty() && QFileInfo::exists(optPath)) {
                 ci.modes = readModesFromFile(optPath);
             }
         }
+        ci.exists = !ci.path.isEmpty() && QFileInfo::exists(ci.path);
+        m_caps.insert(key, ci);
 
-        // UI row
-        grid->addWidget(new QLabel(QString("• %1").arg(key), area), row, 0);
+        // Section header
+        auto* sect = new QLabel(QString("• %1").arg(key), area);
+        sect->setStyleSheet("font-weight: 600;");
+        grid->addWidget(sect, row++, 0, 1, 4);
 
+        // Set Path row
+        grid->addWidget(new QLabel("Set Path:", area), row, 0);
         auto* edit = new QLineEdit(ci.path, area);
-        edit->setPlaceholderText("/sys/.../file");
+        edit->setPlaceholderText("/sys/.../set_file");
+        edit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         grid->addWidget(edit, row, 1);
         m_pathEdits.insert(key, edit);
 
@@ -118,36 +116,42 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
         auto* status = new QLabel(ci.exists ? "✓ path ok" : "✗ not found", area);
         grid->addWidget(status, row, 3);
         m_statusLabels.insert(key, status);
+        row++;
 
-        // Options path editor (for reading available modes)
-        auto* optEdit = new QLineEdit(QString(), area);
+        // Options Path row
+        grid->addWidget(new QLabel("Options Path:", area), row, 0);
+        auto* optEdit = new QLineEdit(area);
         if (hw && hw[ks] && hw[ks]["options_path"]) {
             optEdit->setText(QString::fromStdString(hw[ks]["options_path"].as<std::string>()));
         }
         optEdit->setPlaceholderText("/sys/.../options_file");
         optEdit->setObjectName(QString("opt_%1").arg(key));
-        grid->addWidget(optEdit, row, 4);
+        optEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        grid->addWidget(optEdit, row, 1);
 
-        // Load options
-        auto* loadBtn = new QPushButton("Load", area);
-        grid->addWidget(loadBtn, row, 5);
+        auto* optCheck = new QPushButton("Check", area); // checks file and loads options
+        grid->addWidget(optCheck, row, 2);
+        row++;
 
-        // Modes label (now in col 6)
+        // Options (discovered) row
+        grid->addWidget(new QLabel("Options:", area), row, 0);
         auto* modesLbl = new QLabel(QString("[%1]").arg(ci.modes.join(", ")), area);
         modesLbl->setObjectName(QString("modes_%1").arg(key));
-        grid->addWidget(modesLbl, row, 6);
+        modesLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        grid->addWidget(modesLbl, row, 1, 1, 3);
+        row++;
 
-        // Wire: when user finishes typing or clicks Check, validate & reload modes
+        // Wiring
         connect(edit, &QLineEdit::editingFinished, this, [this, key, modesLbl]() {
-            validateAndReload(key);
+            validateAndReload(key); // only validates Set Path
             modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
         });
         connect(checkBtn, &QPushButton::clicked, this, [this, key, modesLbl]() {
             validateAndReload(key);
             modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
         });
-        // Load options from Options Path (on edit or button click)
-        auto loadOptions = [this, key, optEdit, modesLbl]() {
+
+        auto checkOptions = [this, key, optEdit, modesLbl]() {
             const QString op = optEdit->text().trimmed();
             if (!op.isEmpty() && QFileInfo::exists(op)) {
                 const QStringList modes = readModesFromFile(op);
@@ -158,40 +162,37 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
                 }
             }
         };
-        connect(optEdit, &QLineEdit::editingFinished, this, loadOptions);
-        connect(loadBtn,  &QPushButton::clicked,       this, loadOptions);
-
-
-        row++;
+        connect(optEdit,  &QLineEdit::editingFinished, this, checkOptions);
+        connect(optCheck, &QPushButton::clicked,       this, checkOptions);
     }
 
     m_outer->addWidget(area);
 
-    // Initial validation after UI is built (populate modes from filesystem)
-        for (const auto& key : capKeys()) {
+    // Initial validation + options load
+    for (const auto& key : capKeys()) {
         if (m_pathEdits.contains(key)) {
-            // Only validate Set Path existence
-            validateAndReload(key);
+            validateAndReload(key); // Set Path exists?
         }
-        // Initial read from Options Path if present
-        auto optEditInit = area->findChild<QLineEdit*>(QString("opt_%1").arg(key));
-        if (optEditInit && QFileInfo::exists(optEditInit->text().trimmed())) {
-            const QStringList modes = readModesFromFile(optEditInit->text().trimmed());
+        auto modesLbl = area->findChild<QLabel*>(QString("modes_%1").arg(key));
+        auto optEdit  = area->findChild<QLineEdit*>(QString("opt_%1").arg(key));
+        if (optEdit && QFileInfo::exists(optEdit->text().trimmed())) {
+            const QStringList modes = readModesFromFile(optEdit->text().trimmed());
             if (!modes.isEmpty()) {
                 m_caps[key].modes = modes;
+                if (modesLbl) modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
                 refreshMenusForCap(key);
             }
+        } else if (modesLbl) {
+            modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
         }
-        auto modesLblInit = area->findChild<QLabel*>(QString("modes_%1").arg(key));
-        if (modesLblInit) modesLblInit->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
     }
 }
+
 
 
 void ProfileConfigDialog::buildProfilesUI() {
     auto* label = new QLabel("Profiles", this);
     label->setStyleSheet("font-weight: 600; margin-top: 12px;");
-    m_outer->addWidget(label);
 
     QWidget* area = new QWidget(this);
     m_profilesGrid = new QGridLayout(area);
@@ -232,8 +233,19 @@ void ProfileConfigDialog::buildProfilesUI() {
         row++;
     }
 
-    m_outer->addWidget(area);
+    // Center the profiles block horizontally
+    auto* rowHBox = new QHBoxLayout();
+    rowHBox->addStretch(1);
+    auto* container = new QWidget(this);
+    auto* v = new QVBoxLayout(container);
+    v->addWidget(label);
+    v->addWidget(area);
+    rowHBox->addWidget(container);
+    rowHBox->addStretch(1);
+
+    m_outer->addLayout(rowHBox);
 }
+
 
 void ProfileConfigDialog::updateButtonMenu(const QString& profile, const QString& capKey, QToolButton* btn) {
     auto* menu = new QMenu(btn);
@@ -367,9 +379,7 @@ void ProfileConfigDialog::validateAndReload(const QString& capKey) {
 
     status->setText(ok ? "✓ path ok" : "✗ not found");
 
-    // Only validate hardware Set Path existence; options are loaded via Options Path
-
-    // Rebuild dropdown menus for this capability across all profiles
+    // Do NOT read options here; Options Path has its own Check and loader
     refreshMenusForCap(capKey);
 }
 

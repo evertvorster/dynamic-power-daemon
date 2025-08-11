@@ -44,7 +44,10 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     // Power info label
     m_powerLabel = new QLabel(this);
     m_powerLabel->setText("Power: …");
-    m_powerLabel->setStyleSheet("color: black;");
+    // Use theme default color; just make it bold
+    QFont f = m_powerLabel->font();
+    f.setBold(true);
+    m_powerLabel->setFont(f);
     layout->addWidget(m_powerLabel);
 
     // --- Process matches section ---
