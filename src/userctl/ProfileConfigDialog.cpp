@@ -95,6 +95,8 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
             }
         }
         ci.exists = !ci.path.isEmpty() && QFileInfo::exists(ci.path);
+        if (!ci.modes.contains("disabled"))     // Insert the string "disabled" to prevent a write
+            ci.modes << "disabled";        
         m_caps.insert(key, ci);
 
         // Section header
@@ -401,6 +403,8 @@ QStringList ProfileConfigDialog::readModesFromFile(const QString& path) const {
         if (!s.isEmpty()) cleaned << s;
     }
     cleaned.removeDuplicates();
+    if (!cleaned.contains("disabled")) // Add in disabled variable that prevents a write
+        cleaned << "disabled";
     return cleaned;
 }
 

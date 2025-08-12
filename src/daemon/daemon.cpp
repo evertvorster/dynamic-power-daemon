@@ -238,7 +238,12 @@ bool Daemon::setProfile(const QString& internalName)
         log_info(QString("Applied %1 = %2").arg(label, QString::fromStdString(value)).toUtf8().constData());
         return true;
     };
-    
+
+    // Treat "Disabled" (case-insensitive) as a no-op for this knob
+    auto is_disabled = [](const std::string& v) -> bool {
+        return QString::fromStdString(v).compare("disabled", Qt::CaseInsensitive) == 0;
+    };
+
     // Write the governor to all CPU policy/cpu nodes based on the single path in config
     auto write_governor_all = [&](const std::string &path, const std::string &value) -> bool {
         if (path.empty() || value.empty()) return true;
@@ -299,10 +304,20 @@ bool Daemon::setProfile(const QString& internalName)
 
 
     bool ok = true;
-    ok &= write_governor_all(hardware.cpu_governor.path,   ps.cpu_governor);
-    ok &= write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile");
-    ok &= write_value(hardware.aspm.path,                  ps.aspm,                  "aspm");
+    if (!is_disabled(ps.cpu_governor))
+        ok &= write_value(hardware.cpu_governor.path,          ps.cpu_governor,          "cpu_governor");
+    else
+        log_info("cpu_governor disabled in profile; skipping write");
 
+    if (!is_disabled(ps.acpi_platform_profile))
+        ok &= write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile");
+    else
+        log_info("acpi_platform_profile disabled in profile; skipping write");
+
+    if (!is_disabled(ps.aspm))
+        ok &= write_value(hardware.aspm.path,                  ps.aspm,                  "aspm");
+    else
+        log_info("aspm disabled in profile; skipping write");
     if (!ok) {
         log_error(QString("setProfile(): one or more hardware writes failed for '%1'")
                   .arg(internalName).toUtf8().constData());
