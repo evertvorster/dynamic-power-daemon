@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <filesystem>
 
 // Constructor.
 Daemon::Daemon(const Thresholds &thresholds, 
@@ -236,9 +237,54 @@ bool Daemon::setProfile(const QString& internalName)
         log_info(QString("Applied %1 = %2").arg(label, QString::fromStdString(value)).toUtf8().constData());
         return true;
     };
+    
+    // Write the governor to all CPU policy/cpu nodes based on the single path in config
+    auto write_governor_all = [&](const std::string &path, const std::string &value) -> bool {
+        if (path.empty() || value.empty()) return true;
+
+        namespace fs = std::filesystem;
+        fs::path p(path);
+        bool all_ok = true;
+        std::error_code ec;
+
+        if (p.filename() == "scaling_governor") {
+            fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
+            const std::string parent_name = parent.filename().string();
+
+            // Case A: /sys/.../cpufreq/policyX/scaling_governor  → write to all policy*/scaling_governor
+            if (parent_name.rfind("policy", 0) == 0) {
+                fs::path root = parent.parent_path(); // .../cpufreq
+                for (const auto &e : fs::directory_iterator(root, ec)) {
+                    if (!e.is_directory(ec)) continue;
+                    const std::string name = e.path().filename().string();
+                    if (name.rfind("policy", 0) != 0) continue;
+                    fs::path target = e.path() / "scaling_governor";
+                    all_ok &= write_value(target.string(), value, "cpu_governor");
+                }
+                return all_ok;
+            }
+
+            // Case B: /sys/.../cpu/cpuX/cpufreq/scaling_governor  → write to all cpu*/cpufreq/scaling_governor
+            if (parent_name == "cpufreq") {
+                fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
+                for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
+                    if (!e.is_directory(ec)) continue;
+                    const std::string name = e.path().filename().string();
+                    if (name.rfind("cpu", 0) != 0) continue;
+                    fs::path target = e.path() / "cpufreq" / "scaling_governor";
+                    all_ok &= write_value(target.string(), value, "cpu_governor");
+                }
+                return all_ok;
+            }
+        }
+
+        // Fallback: single write (if the configured path isn’t a known pattern)
+        return write_value(path, value, "cpu_governor");
+    };
+
 
     bool ok = true;
-    ok &= write_value(hardware.cpu_governor.path,          ps.cpu_governor,          "cpu_governor");
+    ok &= write_governor_all(hardware.cpu_governor.path,   ps.cpu_governor);
     ok &= write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile");
     ok &= write_value(hardware.aspm.path,                  ps.aspm,                  "aspm");
 
