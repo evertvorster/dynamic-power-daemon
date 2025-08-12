@@ -15,6 +15,7 @@
 #include <fstream>
 #include <string>
 #include <filesystem>
+#include <cctype>
 
 // Constructor.
 Daemon::Daemon(const Thresholds &thresholds, 
@@ -251,31 +252,45 @@ bool Daemon::setProfile(const QString& internalName)
             fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
             const std::string parent_name = parent.filename().string();
 
-            // Case A: /sys/.../cpufreq/policyX/scaling_governor  → write to all policy*/scaling_governor
-            if (parent_name.rfind("policy", 0) == 0) {
-                fs::path root = parent.parent_path(); // .../cpufreq
-                for (const auto &e : fs::directory_iterator(root, ec)) {
-                    if (!e.is_directory(ec)) continue;
-                    const std::string name = e.path().filename().string();
-                    if (name.rfind("policy", 0) != 0) continue;
-                    fs::path target = e.path() / "scaling_governor";
-                    all_ok &= write_value(target.string(), value, "cpu_governor");
-                }
-                return all_ok;
+            // Case A: /sys/.../cpufreq/policyX/scaling_governor  → write to all policyN/scaling_governor
+            fs::path root = parent.parent_path(); // .../cpufreq
+            for (const auto &e : fs::directory_iterator(root, ec)) {
+                if (!e.is_directory(ec)) continue;
+                const std::string name = e.path().filename().string();
+                // only policyN dirs (skip anything else)
+                bool is_policyN = name.rfind("policy", 0) == 0 &&
+                                std::all_of(name.begin() + 6, name.end(),
+                                            [](unsigned char ch){ return std::isdigit(ch); });
+                if (!is_policyN) continue;
+                fs::path target = e.path() / "scaling_governor";
+                all_ok &= write_value(target.string(), value, "cpu_governor");
+            }
+            return all_ok;
+
+
+            // Case B: /sys/.../cpu/cpuX/cpufreq/scaling_governor  → write to all cpuN/cpufreq/scaling_governor
+            fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
+
+            // Probe just cpu0 as a sanity check (your requested behavior)
+            fs::path probe = cpu_root / "cpu0" / "cpufreq" / "scaling_governor";
+            if (!fs::exists(probe, ec)) {
+                // If cpu0 path isn't present, fall back to the single configured node
+                return write_value(path, value, "cpu_governor");
             }
 
-            // Case B: /sys/.../cpu/cpuX/cpufreq/scaling_governor  → write to all cpu*/cpufreq/scaling_governor
-            if (parent_name == "cpufreq") {
-                fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
-                for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
-                    if (!e.is_directory(ec)) continue;
-                    const std::string name = e.path().filename().string();
-                    if (name.rfind("cpu", 0) != 0) continue;
-                    fs::path target = e.path() / "cpufreq" / "scaling_governor";
-                    all_ok &= write_value(target.string(), value, "cpu_governor");
-                }
-                return all_ok;
+            for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
+                if (!e.is_directory(ec)) continue;
+                const std::string name = e.path().filename().string();
+                // only cpuN dirs (skip 'cpufreq' and anything else)
+                bool is_cpuN = name.rfind("cpu", 0) == 0 &&
+                            std::all_of(name.begin() + 3, name.end(),
+                                        [](unsigned char ch){ return std::isdigit(ch); });
+                if (!is_cpuN) continue;
+                fs::path target = e.path() / "cpufreq" / "scaling_governor";
+                all_ok &= write_value(target.string(), value, "cpu_governor");
             }
+            return all_ok;
+
         }
 
         // Fallback: single write (if the configured path isn’t a known pattern)
