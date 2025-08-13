@@ -26,6 +26,8 @@ public:
     QString getActiveProfile() const { return m_activeProfile; }
     double getLowThreshold() const { return m_actualThresholds.low; }
     double getHighThreshold() const { return m_actualThresholds.high; }
+    QString getPowerSource() const { return m_powerSource; }
+    QString getBatteryState() const { return m_batteryState; }    
     // setters.
     void setRequestedThresholds(double low, double high) {
         m_requestedThresholds.low  = low;
@@ -41,6 +43,7 @@ private Q_SLOTS:
     void handleUPowerChanged(const QDBusMessage &message);
     void checkLoadAverage();              // New slot: called every 5 seconds to check system load
     void onConfigFileChanged(const QString &path);
+    void handleUPowerDeviceChanged(const QDBusMessage &message);
 
 private:
     Thresholds m_thresholds;              // Low/high thresholds from config
@@ -53,11 +56,12 @@ private:
     QString m_currentProfile;             // Actual current active profile
     QString m_overrideProfile;            // Optional override profile
     QString m_activeProfile;              // Variable for dbus interface
+    QString m_batteryState;             // "charging", "discharging", "charged", etc.
     bool m_isBossOverride = false;        // Override flag
     bool m_graceActive = false;           // Whether we're currently in the grace period
     int graceSeconds;                     // Number of seconds for grace period
     void applyRootPowerTweaks();             // Apply root-level power tweaks based on power source
-
+    void updateBatteryState();          // Reads UPower Device.State → m_batteryState
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
     QFileSystemWatcher* m_configWatcher = nullptr;  // watches DEFAULT_CONFIG_PATH

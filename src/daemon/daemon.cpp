@@ -17,6 +17,20 @@
 #include <filesystem>
 #include <cctype>
 
+// Helpers
+
+static QString toBatteryStateString(int s) {
+    switch (s) {
+    case 1: return "charging";
+    case 2: return "discharging";
+    case 3: return "empty";
+    case 4: return "charged";
+    case 5: return "pending-charge";
+    case 6: return "pending-discharge";
+    default: return "unknown";
+    }
+}
+
 // Constructor.
 Daemon::Daemon(const Thresholds &thresholds, 
                 int graceSeconds,  
@@ -44,6 +58,23 @@ Daemon::Daemon(const Thresholds &thresholds,
     } else {
         log_error("Failed to connect to UPower signal");
     }
+
+    // Listen for battery DisplayDevice state changes
+    bool deviceConnected = QDBusConnection::systemBus().connect(
+        "org.freedesktop.UPower",
+        "/org/freedesktop/UPower/devices/DisplayDevice",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        this,
+        SLOT(handleUPowerDeviceChanged(QDBusMessage))
+    );
+    if (deviceConnected) {
+        log_info("Connected to UPower DisplayDevice signal");
+        updateBatteryState(); // prime cached state
+    } else {
+        log_error("Failed to connect to UPower DisplayDevice signal");
+    }
+
 
     // Create a timer that fires every 5 seconds (5000 ms)
     m_timer = new QTimer(this);
@@ -100,6 +131,21 @@ Daemon::Daemon(const Thresholds &thresholds,
 
     }
 }
+
+void Daemon::handleUPowerDeviceChanged(const QDBusMessage &message) {
+    const auto args = message.arguments();
+    if (args.size() < 2) return;
+
+    QVariantMap changedProps = qdbus_cast<QVariantMap>(args.at(1));
+    if (changedProps.contains("State")) {
+        int st = changedProps.value("State").toInt();
+        m_batteryState = toBatteryStateString(st);
+        log_debug(QString("Battery state changed: %1").arg(m_batteryState).toUtf8().constData());
+        if (m_dbusInterface)
+            Q_EMIT m_dbusInterface->PowerStateChanged();
+    }
+}
+
 
 void Daemon::onConfigFileChanged(const QString &path)
 {
@@ -159,6 +205,7 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
         log_info(QString("UPower PropertiesChanged from interface: %1").arg(interface).toUtf8().constData());
     }
     // Send this signal to user space
+    updatePowerSource();
     if (m_dbusInterface)
         Q_EMIT m_dbusInterface->PowerStateChanged();
 
@@ -361,6 +408,28 @@ void Daemon::updatePowerSource()
 
     log_debug(QString("Power source detected: %1").arg(m_powerSource).toUtf8().constData());
     applyRootPowerTweaks();
+}
+
+void Daemon::updateBatteryState()
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        "org.freedesktop.UPower",
+        "/org/freedesktop/UPower/devices/DisplayDevice",
+        "org.freedesktop.DBus.Properties",
+        "Get"
+    );
+    msg << "org.freedesktop.UPower.Device" << "State";
+
+    QDBusMessage reply = QDBusConnection::systemBus().call(msg);
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        log_warning("Failed to read battery State from UPower");
+        return;
+    }
+
+    QVariant variant = reply.arguments().at(0).value<QDBusVariant>().variant();
+    int st = variant.toInt();
+    m_batteryState = toBatteryStateString(st);
+    log_debug(QString("Battery state detected: %1").arg(m_batteryState).toUtf8().constData());
 }
 
 void Daemon::applyRootPowerTweaks()
