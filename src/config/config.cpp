@@ -9,6 +9,7 @@
 // Single definitions for globals declared in config.h
 HardwareConfig hardware{};
 std::map<std::string, ProfileSetting> profiles{};
+RootFeaturesConfig rootFeatures{};
 
 static const QString TEMPLATE_CONFIG_PATH = "/usr/share/dynamic-power/dynamic_power.yaml";
 
@@ -92,7 +93,26 @@ Settings Config::loadSettings(const QString& path) {
                 profiles[it.first.as<std::string>()] = ps;
             }
         }
-        
+        // Parse root features toggles
+        if (root["features"] && root["features"]["root"]) {
+            YAML::Node rootFeaturesNode = root["features"]["root"];
+            // Disclaimer acceptance
+            if (rootFeaturesNode["disclaimer"] && rootFeaturesNode["disclaimer"]["accepted"]) {
+                rootFeatures.disclaimerAccepted = rootFeaturesNode["disclaimer"]["accepted"].as<bool>(false);
+            }
+            // Feature list
+            if (rootFeaturesNode["features"] && rootFeaturesNode["features"].IsSequence()) {
+                rootFeatures.items.clear();
+                for (const auto &item : rootFeaturesNode["features"]) {
+                    RootFeature rf;
+                    if (item["enabled"])       rf.enabled = item["enabled"].as<bool>(false);
+                    if (item["path"])          rf.path = item["path"].as<std::string>("");
+                    if (item["ac_value"])      rf.ac_value = item["ac_value"].as<std::string>("");
+                    if (item["battery_value"]) rf.battery_value = item["battery_value"].as<std::string>("");
+                    rootFeatures.items.push_back(std::move(rf));
+                }
+            }
+        }        
     } catch (const std::exception &e) {
         log_error(("Failed to parse config: " + QString(e.what())).toUtf8().constData());
     }

@@ -21,7 +21,8 @@ QVariantMap DaemonDBusInterface::GetDaemonState() {
     Daemon* daemon = static_cast<Daemon*>(parent());
 
     QVariantMap state;
-    state.insert("active_profile", daemon->getActiveProfile());
+    QString ap = daemon->getActiveProfile();
+    state.insert("active_profile", ap.isEmpty() ? QString("Error") : ap);
     state.insert("threshold_low",  daemon->getLowThreshold());
     state.insert("threshold_high", daemon->getHighThreshold());
     state.insert("timestamp", QDateTime::currentDateTimeUtc().toSecsSinceEpoch());
