@@ -72,18 +72,50 @@ public:
 
         m_rowsContainer = new QWidget(group);
         m_rowsLayout = new QVBoxLayout(m_rowsContainer);
-        m_rowsLayout->setSpacing(6);
+        m_rowsLayout->setSpacing(2);
+        m_rowsLayout->setContentsMargins(0,0,0,0);
+        m_rowsLayout->setAlignment(Qt::AlignTop);
 
-        // Header row
+        // Header row        
         auto* header = new QWidget(m_rowsContainer);
+        header->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         auto* hgrid = new QGridLayout(header);
+        hgrid->setContentsMargins(0,0,0,0);
+        hgrid->setHorizontalSpacing(8);
+        hgrid->setVerticalSpacing(0);
+        // Make header columns match data-row columns
+        hgrid->setColumnStretch(0, 0); // [✓] checkbox
+        hgrid->setColumnStretch(1, 0); // [✓] root button
+        hgrid->setColumnStretch(2, 3); // [→] Path (wide)
+        hgrid->setColumnStretch(3, 2); // [→] AC value
+        hgrid->setColumnStretch(4, 2); // [→] Battery value
+        hgrid->setColumnStretch(5, 0); // [✓] delete button
+        // Ensure header's first two columns match the row widgets
+        QCheckBox chkProbe;                           // checkbox width probe
+        QPushButton rootProbe("/proc");               // button width probe ("/proc" is widest)
+        hgrid->setColumnMinimumWidth(0, chkProbe.sizeHint().width());
+        hgrid->setColumnMinimumWidth(1, rootProbe.sizeHint().width());
+        QPushButton delProbe("Delete");
+        hgrid->setColumnMinimumWidth(5, delProbe.sizeHint().width());
         int c = 0;
-        hgrid->addWidget(new QLabel("Enabled", header), 0, c++);
-        hgrid->addWidget(new QLabel("Root", header), 0, c++);
-        hgrid->addWidget(new QLabel("Path", header), 0, c++);
-        hgrid->addWidget(new QLabel("AC value", header), 0, c++);
-        hgrid->addWidget(new QLabel("Battery value", header), 0, c++);
-        hgrid->addWidget(new QLabel(""), 0, c++); // delete
+        hgrid->addWidget(new QLabel("", header), 0, c++); // (checkbox column)
+        hgrid->addWidget(new QLabel("Root", header), 0, c++); // (Root button column; leave header blank)
+        auto* lblPath = new QLabel("Path", header);
+        lblPath->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        lblPath->setIndent(0); lblPath->setMargin(0); lblPath->setContentsMargins(0,0,0,0);
+        lblPath->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        hgrid->addWidget(lblPath, 0, c++);
+        auto* lblAc = new QLabel("AC value", header);
+        lblAc->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        lblAc->setIndent(0); lblAc->setMargin(0); lblAc->setContentsMargins(0,0,0,0);
+        lblAc->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        hgrid->addWidget(lblAc, 0, c++);
+        auto* lblBat = new QLabel("Battery value", header);
+        lblBat->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        lblBat->setIndent(0); lblBat->setMargin(0); lblBat->setContentsMargins(0,0,0,0);
+        lblBat->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        hgrid->addWidget(lblBat, 0, c++);
+        hgrid->addWidget(new QLabel("", header), 0, c++); // (delete button column)
         m_rowsLayout->addWidget(header);
 
         // Scroll area
@@ -160,7 +192,18 @@ private:
 
     void addRow(bool enabled=false, const QString& absPath="/sys/", const QString& ac="", const QString& bat="") {
         auto* row = new QWidget(m_rowsContainer);
+        row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         auto* grid = new QGridLayout(row);
+        grid->setContentsMargins(0,0,0,0);
+        grid->setHorizontalSpacing(8);
+        grid->setVerticalSpacing(0);
+        // Match header column model exactly
+        grid->setColumnStretch(0, 0); // checkbox
+        grid->setColumnStretch(1, 0); // root button
+        grid->setColumnStretch(2, 3); // Path
+        grid->setColumnStretch(3, 2); // AC value
+        grid->setColumnStretch(4, 2); // Battery value
+        grid->setColumnStretch(5, 0); // delete button
         int col = 0;
 
         auto* chk = new QCheckBox(row);
@@ -184,18 +227,19 @@ private:
         else if (absPath.startsWith("/proc")) rel = absPath.mid(5);
         pathEdit->setPlaceholderText("/class/.../file");
         pathEdit->setText(rel);
-        grid->addWidget(pathEdit, 0, col++);
-
-        pathEdit->setText(rel);
+        pathEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         grid->addWidget(pathEdit, 0, col++);
 
         auto* acEdit = new QLineEdit(ac, row);
+        acEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         grid->addWidget(acEdit, 0, col++);
 
         auto* batEdit = new QLineEdit(bat, row);
+        batEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         grid->addWidget(batEdit, 0, col++);
 
         auto* del = new QPushButton("Delete", row);
+        del->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
         grid->addWidget(del, 0, col++);
 
         RootRow rr{row, chk, rootBtn, pathEdit, acEdit, batEdit, del};
