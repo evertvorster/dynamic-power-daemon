@@ -1,6 +1,6 @@
 # dynamic-power-daemon
 
-**Dynamic system performance tuning for Linux laptops and desktops** — responsive power profile switching, and configurable user overrides. Keeps your laptop in a low power state when you are not using it, and turns on the power when you are. 
+**Dynamic system performance tuning and power saving for Linux laptops and desktops** — responsive power profile switching, and configurable user overrides. Keeps your laptop in a low power state when you are not using it, and turns on the power when you are. 
 
 ---
 
@@ -8,7 +8,8 @@
 
 `dynamic-power-daemon` is a lightweight power management suite for Linux systems that dynamically adjusts:
 
-- **CPU power profiles (performance, balanced, powersave)**
+- **Adjustable CPU power profiles (performance, balanced, powersave)**
+- **Adjustable power saving features**
 - **Panel overdrive (Asus laptops)** <- Removed with a rewrite, will re-implement it
 - **Display refresh rates** <- Removed with a rewrite, will re-implement it
 - **Desktop panel auto-hide (KDE)** <- Coming soon!
@@ -36,6 +37,7 @@ load in real time, and make adjustments to fine tune your experience. Set it onc
 
 ✅ Configurable Daemon power interface:
 - CPU Governors, ACPI and ASPM configuration on the fly
+- Power saving features similar to Laptop Mode Tools or TLP and others.
 
 ✅ Manual override via tray icon:
 - One-click switch to Performance / Balanced / Powersave
@@ -44,6 +46,7 @@ load in real time, and make adjustments to fine tune your experience. Set it onc
 ✅ Configurable with YAML:
 - System-wide config: `/etc/dynamic_power.yaml`
 - User overrides: `~/.config/dynamic_power/config.yaml`
+
 
 ✅ Clean DBus integration:
 - Root daemon only accepts authorized commands
@@ -115,10 +118,7 @@ Maintained and released by the author. Updates match GitHub releases.
 
 The project includes detailed markdown docs in `/docs/`:
 
-- `DESIGN_OVERVIEW.md`
-- `DBUS_COMMUNICATION.md`
-- `FEATURE_TOGGLES.md`
-- `WORKFLOW_GUIDE.md`
+Manual coming soon!
 
 ---
 
@@ -142,7 +142,7 @@ optionally:
 conflicts:
 Anything that wants to set the system power management features. 
 Includes but is not limited to power-profiles-control, TLP, Laptop mode tools
-    The list goes on. The intention here is to be a modern replacement for these tools.
+    The list goes on... The intention here is to be a modern replacement for these tools.
     DBus interface is available if you want to plug into the profiles, and control them even. 
 
 
