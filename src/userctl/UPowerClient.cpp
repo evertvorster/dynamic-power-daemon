@@ -14,6 +14,12 @@ UPowerClient::UPowerClient(QObject* parent) : QObject(parent) {
     // subscribe to PropertiesChanged on root and display device (root is enough for OnBattery)
     QDBusConnection::systemBus().connect(SVC, ROOT, IFPR, "PropertiesChanged",
                                          this, SLOT(onUPowerPropsChanged(QString,QVariantMap,QStringList)));
+    // Also watch the display battery device for State/Percentage changes
+    const QString disp = displayDevicePath();
+    if (!disp.isEmpty()) {
+        QDBusConnection::systemBus().connect(SVC, disp, IFPR, "PropertiesChanged",
+                                             this, SLOT(onUPowerPropsChanged(QString,QVariantMap,QStringList)));
+    }
     refresh();
 }
 
@@ -57,8 +63,11 @@ void UPowerClient::refresh() {
 }
 
 void UPowerClient::onUPowerPropsChanged(QString iface, QVariantMap, QStringList) {
-    if (iface == IFUP) refresh(); // OnBattery changed
+    if (iface == IFUP || iface == IFDEV) {
+        refresh(); // root OnBattery or device State/Percentage changed
+    }
 }
+
 
 QString UPowerClient::stateText() const {
     // Minimal mapping of UPower.Device.State
