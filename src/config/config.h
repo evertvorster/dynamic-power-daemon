@@ -34,6 +34,19 @@ struct HardwareConfig {
     HardwareSetting aspm;
 };
 
+struct RootFeature {
+    bool enabled = false;
+    std::string path;
+    std::string ac_value;
+    std::string battery_value;
+};
+
+struct RootFeaturesConfig {
+    bool disclaimerAccepted = false;
+    std::vector<RootFeature> items;
+};
+
+extern RootFeaturesConfig rootFeatures;
 extern HardwareConfig hardware;
 extern std::map<std::string, ProfileSetting> profiles;
 

@@ -174,6 +174,8 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
             bool onBattery = value.toBool();
             m_powerSource = onBattery ? "battery" : "AC";
             log_info(QString("Power source changed: now on %1").arg(m_powerSource).toUtf8().constData());
+            applyRootPowerTweaks();
+
         }
     }
 }
@@ -358,6 +360,41 @@ void Daemon::updatePowerSource()
     m_powerSource = onBattery ? "battery" : "AC";
 
     log_debug(QString("Power source detected: %1").arg(m_powerSource).toUtf8().constData());
+    applyRootPowerTweaks();
+}
+
+void Daemon::applyRootPowerTweaks()
+{
+    // Only proceed if disclaimer has been accepted
+    if (!rootFeatures.disclaimerAccepted) {
+        log_info("Root power tweaks disabled (disclaimer not accepted)");
+        return;
+    }
+    for (const auto &feat : rootFeatures.items) {
+        if (!feat.enabled) continue;
+        const QString p = QString::fromStdString(feat.path);
+        const std::string value = (m_powerSource == "AC")
+                                  ? feat.ac_value
+                                  : feat.battery_value;
+        if (p.isEmpty() || value.empty()) continue;
+
+        if (!QFile::exists(p)) {
+            log_error(QString("Root tweak path missing: %1").arg(p).toUtf8().constData());
+            continue;
+        }
+
+        std::ofstream ofs(p.toStdString());
+        if (!ofs) {
+            log_error(QString("Root tweak not writable: %1").arg(p).toUtf8().constData());
+            continue;
+        }
+        ofs << value << std::endl;
+        if (!ofs.good()) {
+            log_error(QString("Root tweak write failed to %1").arg(p).toUtf8().constData());
+            continue;
+        }
+        log_info(QString("Root tweak applied %1 = %2").arg(p, QString::fromStdString(value)).toUtf8().constData());
+    }
 }
 
 // ⚠️ This function is called every 5 seconds by the QTimer, and drives the daemon.
@@ -464,6 +501,7 @@ void Daemon::checkLoadAverage() {
 
     // --- Apply once, at the end
     if (!setProfile(finalTarget)) {
+        m_activeProfile = "Error";
         log_error("Failed to apply profile based on load.");
     }
 }
