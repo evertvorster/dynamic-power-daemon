@@ -399,10 +399,12 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     QFont f = m_powerLabel->font();
     f.setBold(true);
     m_powerLabel->setFont(f);
+    m_powerLabel->setAlignment(Qt::AlignHCenter);
     layout->addWidget(m_powerLabel);
 
     // --- Process matches section ---
     auto* sectionLabel = new QLabel("Process Matches", this);
+    sectionLabel->setAlignment(Qt::AlignHCenter);
     layout->addWidget(sectionLabel);
 
     // Scrollable panel for buttons
@@ -423,7 +425,7 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
 
     setCentralWidget(central);
     setWindowTitle("Dynamic Power Control");
-    resize(800, 480);
+    resize(600, 600);
     refreshOverrideButton();
 }
 
@@ -479,7 +481,8 @@ void MainWindow::onGraphThresholdChanged(double low, double high) {
 }
 
 void MainWindow::refreshOverrideButton() {
-    m_overrideBtn->setText(QString("%1 – %2").arg(m_userMode, m_activeProfile));
+    m_overrideBtn->setText(QString("User Override: %1 - Current power profile: %2")
+                           .arg(m_userMode, m_activeProfile));
     m_overrideBtn->setStyleSheet(m_userMode != QStringLiteral("Dynamic")
         ? "background: palette(highlight); color: palette(highlighted-text);"
         : "");

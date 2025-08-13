@@ -38,6 +38,6 @@ private:
     double yToValue(double y) const;
     int m_grabTol = 12;  // was ~6; make it easier to grab
     int m_padLeft = 42;
-    int m_padTop = 8;
+    int m_padTop = 24;
     int m_padBottom = 12;
 };

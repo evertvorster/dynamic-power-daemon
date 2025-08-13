@@ -102,16 +102,18 @@ void LoadGraphWidget::paintEvent(QPaintEvent*) {
         const double yy = valueToY(i);
         p.drawLine(x0, yy, x1, yy);                        // grid
         const QString lab = QString::number(i);
-        const int tw = fm.horizontalAdvance(lab);
         p.setPen(Qt::lightGray);
-        p.drawText(x0 - 6 - tw, int(yy + fm.ascent()/2) - 2, lab); // left labels
+        // Center the label horizontally within the left gutter [0 .. x0-6]
+        QRect labRect(0, int(yy - fm.height()/2), x0 - 6, fm.height());
+        p.drawText(labRect, Qt::AlignHCenter | Qt::AlignVCenter, lab);
         p.setPen(QPen(QColor(70,70,70), 1, Qt::DotLine));  // restore for next grid
     }
 
     // Threshold lines
-    p.setPen(QPen(Qt::red, 2, Qt::DashLine));
+    // Subtle threshold lines: thinner + semi-transparent + solid
+    p.setPen(QPen(QColor(255, 0, 0, 140), 1, Qt::SolidLine));        // low
     p.drawLine(x0, valueToY(m_low), x1, valueToY(m_low));
-    p.setPen(QPen(Qt::yellow, 2, Qt::DashLine));
+    p.setPen(QPen(QColor(255, 255, 0, 140), 1, Qt::SolidLine));      // high
     p.drawLine(x0, valueToY(m_high), x1, valueToY(m_high));
 
     // Samples
@@ -125,11 +127,12 @@ void LoadGraphWidget::paintEvent(QPaintEvent*) {
         prev = pt;
         ++i;
     }
+    // Title at top-center above the plot area
+    p.setPen(Qt::lightGray);  // use Qt::white for brighter
+    QFontMetrics fmTitle(p.font());
+    QRect titleRect(x0, 0, x1 - x0, m_padTop);
+    p.drawText(titleRect, Qt::AlignHCenter | Qt::AlignVCenter, tr("Load Average"));
 
-    // (Optional) small status text
-    p.setPen(Qt::white);
-    p.drawText(x0 + 8, m_padTop + fm.ascent(),
-               QString("MaxY=%1  Low=%2  High=%3").arg(maxY).arg(m_low).arg(m_high));
 }
 
 void LoadGraphWidget::setThresholds(double low, double high) {
