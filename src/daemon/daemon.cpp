@@ -141,8 +141,7 @@ void Daemon::handleUPowerDeviceChanged(const QDBusMessage &message) {
         int st = changedProps.value("State").toInt();
         m_batteryState = toBatteryStateString(st);
         log_debug(QString("Battery state changed: %1").arg(m_batteryState).toUtf8().constData());
-        if (m_dbusInterface)
-            Q_EMIT m_dbusInterface->PowerStateChanged();
+        emitPowerStateChanged();
     }
 }
 
@@ -206,8 +205,7 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
     }
     // Send this signal to user space
     updatePowerSource();
-    if (m_dbusInterface)
-        Q_EMIT m_dbusInterface->PowerStateChanged();
+    emitPowerStateChanged();
 
     for (auto it = changedProps.begin(); it != changedProps.end(); ++it) {
         const QString &key = it.key();
@@ -378,8 +376,7 @@ bool Daemon::setProfile(const QString& internalName)
     m_activeProfile  = internalName;       // reflected to our DBus iface
     log_info(QString("Profile switched to '%1'").arg(internalName).toUtf8().constData());
     Q_EMIT ProfileChanged(internalName);
-    if (m_dbusInterface)
-        Q_EMIT m_dbusInterface->PowerStateChanged();
+    emitPowerStateChanged();
     return true;
 }
 
@@ -409,6 +406,20 @@ void Daemon::updatePowerSource()
 
     log_debug(QString("Power source detected: %1").arg(m_powerSource).toUtf8().constData());
     applyRootPowerTweaks();
+}
+
+void Daemon::emitPowerStateChanged()
+{
+    // Emit via the adaptor we hold (registered at /org/dynamic_power)
+    if (m_dbusInterface)
+        Q_EMIT m_dbusInterface->PowerStateChanged();
+
+    // Also emit explicitly on the second exported path (/org/dynamic_power/Daemon)
+    QDBusMessage sig = QDBusMessage::createSignal(
+        "/org/dynamic_power/Daemon",
+        "org.dynamic_power.Daemon",
+        "PowerStateChanged");
+    QDBusConnection::systemBus().send(sig);
 }
 
 void Daemon::updateBatteryState()

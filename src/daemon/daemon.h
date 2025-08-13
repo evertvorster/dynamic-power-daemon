@@ -63,6 +63,7 @@ private:
     bool m_graceActive = false;           // Whether we're currently in the grace period
     int graceSeconds;                     // Number of seconds for grace period
     void applyRootPowerTweaks();             // Apply root-level power tweaks based on power source
+    void emitPowerStateChanged();         // Emit PowerStateChanged on both DBus paths
     void updateBatteryState();          // Reads UPower Device.State → m_batteryState
     void updatePowerSource();             // Reads OnBattery and sets m_powerSource
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
