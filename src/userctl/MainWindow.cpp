@@ -134,7 +134,10 @@ private:
     void showDisclaimer() {
         QMessageBox box(this);
         box.setWindowTitle("Disclaimer");
-        box.setText("Changing low-level power settings can make your system unstable or unbootable.\n\nProceed only if you understand the consequences.");
+        box.setText("The settings here write variables YOU specify into files YOU specify as ROOT, automatically.\n\n"
+                    "With this great power comes great responsibilty. YOUR responsiblity.\n\n"
+                    "The authors accept NO responsiblity for anything bad happening to your system when you set these."
+                );
         box.setInformativeText("Do you agree?");
         auto* agree = box.addButton("Agree", QMessageBox::AcceptRole);
         auto* disagree = box.addButton("Disagree", QMessageBox::RejectRole);

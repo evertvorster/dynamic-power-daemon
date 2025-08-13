@@ -36,4 +36,14 @@ profiles:
     cpu_governor: performance
     acpi_platform_profile: performance
     aspm: performance
+features:
+  root:
+    disclaimer:
+      accepted: false
+      accepted_at: 
+    features:
+      - enabled: false
+        path: /proc/sys/kernel/nmi_watchdog
+        ac_value: 1
+        battery_value: 0
     
