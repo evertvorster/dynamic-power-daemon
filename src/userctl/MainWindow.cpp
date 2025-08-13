@@ -571,5 +571,5 @@ void MainWindow::refreshProcessButtons() {
 }
 
 void MainWindow::setPowerInfo(const QString& text) {
-    if (m_powerLabel) m_powerLabel->setText("Power: " + text);
+    m_powerLabel->setText(text);
 }
