@@ -26,10 +26,8 @@ QVariantMap DaemonDBusInterface::GetDaemonState() {
     state.insert("threshold_low",  daemon->getLowThreshold());
     state.insert("threshold_high", daemon->getHighThreshold());
     state.insert("timestamp", QDateTime::currentDateTimeUtc().toSecsSinceEpoch());
-    state.insert("active_profile", daemon->getActiveProfile());
     state.insert("power_source",   daemon->getPowerSource());
     state.insert("battery_state",  daemon->getBatteryState());
-    state.insert("threshold_low",  daemon->getLowThreshold());
     return state;
 }
 

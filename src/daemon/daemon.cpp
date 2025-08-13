@@ -377,6 +377,7 @@ bool Daemon::setProfile(const QString& internalName)
     m_currentProfile = internalName;       // actual active (for our daemon)
     m_activeProfile  = internalName;       // reflected to our DBus iface
     log_info(QString("Profile switched to '%1'").arg(internalName).toUtf8().constData());
+    Q_EMIT ProfileChanged(internalName);
     if (m_dbusInterface)
         Q_EMIT m_dbusInterface->PowerStateChanged();
     return true;
@@ -571,6 +572,7 @@ void Daemon::checkLoadAverage() {
     // --- Apply once, at the end
     if (!setProfile(finalTarget)) {
         m_activeProfile = "Error";
+        Q_EMIT ProfileChanged(QStringLiteral("Error"));
         log_error("Failed to apply profile based on load.");
     }
 }

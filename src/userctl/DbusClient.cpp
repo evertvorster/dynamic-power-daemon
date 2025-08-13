@@ -19,7 +19,7 @@ void DbusClient::connectSignals() {
     // PowerStateChanged signal (no args)
     QDBusConnection::systemBus().connect(
         SERVICE, PATH, IFACE, "PowerStateChanged",
-        this, SLOT(powerStateChanged()));
+        this, SLOT(onPowerStateChanged())); // ✅ target our slot
 }
 
 void DbusClient::onPowerStateChanged() {

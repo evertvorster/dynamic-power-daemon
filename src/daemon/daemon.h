@@ -22,8 +22,10 @@ public:
     QString m_requestedProfile;
     bool    m_userRequestedProfile = false;
     // getters.
+Q_SIGNALS:
     void ProfileChanged(const QString& internalName);
-    QString getActiveProfile() const { return m_activeProfile; }
+public:
+    QString getActiveProfile() const { return m_activeProfile.isEmpty() ? QStringLiteral("Error") : m_activeProfile; }
     double getLowThreshold() const { return m_actualThresholds.low; }
     double getHighThreshold() const { return m_actualThresholds.high; }
     QString getPowerSource() const { return m_powerSource; }
