@@ -84,7 +84,7 @@ QString UPowerClient::stateText() const {
 
 QString UPowerClient::summaryText() const {
     const QString supply = m_onBattery ? "BAT" : "AC";
-    const QString st     = stateText(m_state);
+    const QString st     = stateText();
     return QString("Power supply: %1 - Battery charge: %2% (%3)")
             .arg(supply)
             .arg(int(m_percentage + 0.5))
