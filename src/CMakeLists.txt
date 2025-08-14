@@ -61,6 +61,21 @@ add_executable(dynamic_power_user
     userctl/UserFeatures.h
 )
 
+# Feature module sources (scaffold + first extractions)
+target_sources(dynamic_power_user PRIVATE
+    userctl/features/Feature.h
+    userctl/features/FeatureBase.cpp
+    userctl/features/FeatureBase.h
+    userctl/features/FeatureRegistry.cpp
+    userctl/features/FeatureRegistry.h
+
+    # First extracted implementations (to add progressively)
+    userctl/features/ScreenRefreshFeature.cpp
+    userctl/features/ScreenRefreshFeature.h
+    userctl/features/RootCompositeFeature.cpp
+    userctl/features/RootCompositeFeature.h
+)
+
 target_include_directories(dynamic_power_user
     PRIVATE
     ${SYSTEMD_INCLUDE_DIRS}
