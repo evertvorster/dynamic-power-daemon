@@ -1,7 +1,17 @@
 features:
-  kde_autohide_on_battery: false
-  auto_panel_overdrive: true
-  screen_refresh: false
+  user:
+    screen_refresh:
+      enabled: false
+      ac: unchanged     # allowed: unchanged | min | max
+      battery: unchanged
+    kde_panel_autohide:
+      enabled: false
+      ac: unchanged     # allowed: unchanged | on | off
+      battery: unchanged
+    panel_overdrive:
+      enabled: false
+      ac: unchanged     # allowed: unchanged | on | off
+      battery: unchanged
 
 power:
   load_thresholds:

@@ -33,6 +33,7 @@
 #include <QSizePolicy>
 #include <QFile>
 #include <yaml-cpp/yaml.h>
+#include "UserFeatures.h"
 
 namespace {
 struct RootRow {
@@ -135,6 +136,46 @@ public:
         groupLay->addLayout(btnRow);
 
         outer->addWidget(group);
+        // ─────────────────────────────────────────────────────────────────────
+        // User Power Saving Features (separate section with its own Save button)
+        // ─────────────────────────────────────────────────────────────────────
+        {
+            auto* userGroup = new QGroupBox("User Power Saving Features  —  Setting on AC  —  Setting on BAT", this);
+            // Enlarge the title for clarity without needing headers
+            userGroup->setStyleSheet(
+                "QGroupBox::title {"
+                "  font-size: 15pt;"
+                "  font-weight: 600;"
+                "  padding: 6px 8px;"
+                "}"
+            );
+
+            auto* userLay = new QVBoxLayout(userGroup);
+
+            m_userWidget = new UserFeaturesWidget(userGroup);
+            userLay->addWidget(m_userWidget);
+
+            // Save (User) button
+            m_userSaveBtn = new QPushButton("Save (User)", userGroup);
+            auto* btnRow2 = new QHBoxLayout();
+            btnRow2->addStretch(1);
+            btnRow2->addWidget(m_userSaveBtn);
+            userLay->addLayout(btnRow2);
+
+            connect(m_userSaveBtn, &QPushButton::clicked, this, [this]{
+                if (m_userWidget->save()) {
+                    QMessageBox::information(this, "Saved", "User features saved.");
+                } else {
+                    QMessageBox::critical(this, "Error", "Unable to write user config file.");
+                }
+            });
+
+            outer->addWidget(userGroup);
+
+            // Populate values and detect current screen refresh per monitor
+            m_userWidget->load();
+            m_userWidget->refreshLiveStatus();
+        }
 
         connect(m_addBtn, &QPushButton::clicked, this, [this]{ addRow(); });
         connect(m_saveBtn, &QPushButton::clicked, this, [this]{ onSave(); });
@@ -157,6 +198,10 @@ private:
     QLabel* m_confirmNote{};
 
     QVector<RootRow> m_rows;
+
+    // User section
+    class UserFeaturesWidget* m_userWidget{};
+    QPushButton* m_userSaveBtn{};
 
     void updateConfirmUI() {
         m_confirmBtn->setText(m_disclaimerAccepted ? "Confirm ✅" : "Confirm ❌");
