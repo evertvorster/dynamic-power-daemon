@@ -14,6 +14,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <algorithm>
+#include <QDebug>   // optional: qInfo logs while we test
 
 #include <yaml-cpp/yaml.h>
 
@@ -134,7 +136,7 @@ bool UserFeaturesWidget::save() {
 }
 
 void UserFeaturesWidget::refreshLiveStatus() {
-    const QStringList list = detectDisplayRates();
+    const auto list = detectDisplayRates();
     if (list.isEmpty()) {
         m_status->setText("Screen Refresh Rate — Current: (unavailable)");
     } else {
@@ -185,4 +187,162 @@ QStringList UserFeaturesWidget::detectDisplayRates() const {
         }
     }
     return outLines;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// Non-UI static applier on UserFeaturesWidget
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+    struct Mode { QString id; int w=0; int h=0; double hz=0.0; };
+    struct Output { QString id, name, currentModeId; int w=0, h=0; QList<Mode> modes; };
+
+    static QList<Output> readOutputs() {
+        QList<Output> outs;
+        QProcess p; p.start("kscreen-doctor", {"-j"});
+        if (!p.waitForStarted(2000) || !p.waitForFinished(3000) ||
+            p.exitStatus()!=QProcess::NormalExit || p.exitCode()!=0) return outs;
+
+        const QJsonDocument doc = QJsonDocument::fromJson(p.readAllStandardOutput());
+        if (!doc.isObject()) return outs;
+
+        const auto arr = doc.object().value("outputs").toArray();
+        for (const auto& v : arr) {
+            const auto o = v.toObject();
+            if (!o.value("connected").toBool() || !o.value("enabled").toBool()) continue;
+
+            Output out;
+
+            // ***** FIX: id can be numeric; coerce to string safely *****
+            const QJsonValue idVal = o.value("id");
+            if (idVal.isDouble()) out.id = QString::number(idVal.toInt());
+            else                   out.id = idVal.toString();
+
+            out.name = o.value("name").toString(out.id);
+            out.currentModeId = o.value("currentModeId").toString();
+
+            // Current resolution (width × height)
+            int curW=0, curH=0;
+            const auto modes = o.value("modes").toArray();
+            if (!out.currentModeId.isEmpty()) {
+                for (const auto& mv : modes) {
+                    const auto m = mv.toObject();
+                    if (m.value("id").toString()==out.currentModeId) {
+                        const auto sz = m.value("size").toObject();
+                        curW = sz.value("width").toInt();
+                        curH = sz.value("height").toInt();
+                        break;
+                    }
+                }
+            }
+            if (!curW || !curH) {
+                const auto cm = o.value("currentMode").toObject();
+                const auto sz = cm.value("size").toObject();
+                curW = sz.value("width").toInt();
+                curH = sz.value("height").toInt();
+                if (out.currentModeId.isEmpty()) out.currentModeId = cm.value("id").toString();
+            }
+            out.w = curW; out.h = curH;
+
+            for (const auto& mv : modes) {
+                const auto m = mv.toObject();
+                Mode md;
+                md.id = m.value("id").toString();
+                const auto sz = m.value("size").toObject();
+                md.w = sz.value("width").toInt();
+                md.h = sz.value("height").toInt();
+                md.hz = m.value("refreshRate").toDouble();
+                out.modes.push_back(md);
+            }
+            outs.push_back(out);
+        }
+        return outs;
+    }
+
+    // Pick min/max ONLY among modes with SAME resolution as current
+    static QString selectSameResModeId(const Output& o, const QString& policyLower) {
+        if (policyLower == "unchanged") return QString();
+        QList<Mode> same;
+        for (const auto& m : o.modes) if (m.w==o.w && m.h==o.h) same.push_back(m);
+        if (same.isEmpty()) return QString();
+        std::sort(same.begin(), same.end(), [](const Mode& a, const Mode& b){ return a.hz < b.hz; });
+        const Mode& target = (policyLower=="min") ? same.front() : same.back();
+        if (!o.currentModeId.isEmpty() && target.id == o.currentModeId) return QString(); // no-op
+        return target.id;
+    }
+
+    static bool applyMode(const QString& outId, const QString& modeId) {
+        if (outId.isEmpty() || modeId.isEmpty()) return false;
+        QProcess p;
+        p.start("kscreen-doctor", { QString("output.%1.mode.%2").arg(outId, modeId) });
+        if (!p.waitForStarted(2000)) return false;
+        if (!p.waitForFinished(5000)) return false;
+        return p.exitStatus()==QProcess::NormalExit && p.exitCode()==0;
+    }
+
+    // Non-UI probe for verification (same semantics as detectDisplayRates())
+    static QStringList probeCurrentRefreshStrings() {
+        QStringList out;
+        QProcess p; p.start("kscreen-doctor", {"-j"});
+        if (!p.waitForStarted(2000) || !p.waitForFinished(3000) ||
+            p.exitStatus()!=QProcess::NormalExit || p.exitCode()!=0) return out;
+
+        const QJsonDocument doc = QJsonDocument::fromJson(p.readAllStandardOutput());
+        if (!doc.isObject()) return out;
+
+        const auto outputs = doc.object().value("outputs").toArray();
+        for (const auto& v : outputs) {
+            const auto o = v.toObject();
+            if (!o.value("connected").toBool() || !o.value("enabled").toBool()) continue;
+
+            const QString name = o.value("name").toString(
+                o.value("id").isDouble() ? QString::number(o.value("id").toInt())
+                                         : o.value("id").toString());
+            double hz = 0.0;
+            const QString curId = o.value("currentModeId").toString();
+            const auto modes = o.value("modes").toArray();
+            if (!curId.isEmpty()) {
+                for (const auto& mv : modes) {
+                    const auto m = mv.toObject();
+                    if (m.value("id").toString()==curId) { hz = m.value("refreshRate").toDouble(); break; }
+                }
+            }
+            if (hz <= 0.0) hz = o.value("currentMode").toObject().value("refreshRate").toDouble();
+            if (hz > 0.0) out << QString("%1 %2 Hz").arg(name).arg(hz, 0, 'f', 1);
+        }
+        return out;
+    }
+} // anon
+
+void UserFeaturesWidget::applyForPowerState(bool onBattery) {
+    // Read config
+    YAML::Node root;
+    try { root = YAML::LoadFile(configPath().toStdString()); }
+    catch (...) { root = YAML::Node(YAML::NodeType::Map); }
+
+    // Screen Refresh Rate
+    bool enabled = false; QString ac = "unchanged", bat = "unchanged";
+    if (root && root["features"] && root["features"]["user"] && root["features"]["user"]["screen_refresh"]) {
+        auto sr = root["features"]["user"]["screen_refresh"];
+        if (sr["enabled"])  enabled = sr["enabled"].as<bool>();
+        if (sr["ac"])       ac  = QString::fromStdString(sr["ac"].as<std::string>());
+        if (sr["battery"])  bat = QString::fromStdString(sr["battery"].as<std::string>());
+    }
+    const QString policy = normalizePolicy(onBattery ? bat : ac); // "min"|"max"|"unchanged"
+    if (enabled && policy != "unchanged") {
+        const auto outs = readOutputs();
+        for (const auto& o : outs) {
+            const QString modeId = selectSameResModeId(o, policy);
+            if (!modeId.isEmpty()) {
+                qInfo() << "[userfeatures] output" << o.id << "policy" << policy
+                        << "switching to mode" << modeId
+                        << "(current w×h:" << o.w << "x" << o.h << ")";
+                applyMode(o.id, modeId);
+            }
+        }
+    } else {
+        qInfo() << "[userfeatures] screen_refresh disabled or policy unchanged (" << policy << ")";
+    }
+}
+
+void UserFeaturesWidget::refreshStatusProbe() {
+    (void)probeCurrentRefreshStrings(); // verifies current; UI updates via refreshLiveStatus()
 }
