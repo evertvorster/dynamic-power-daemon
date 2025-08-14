@@ -11,6 +11,7 @@
 #include <QTimer>
 #include "UPowerClient.h"
 #include <QSet>
+#include "UserFeatures.h"
 
 App::~App() = default; 
 
@@ -163,6 +164,10 @@ void App::onDaemonStateChanged() {
         auto state = m_dbus->getDaemonState();
         m_mainWindow->setActiveProfile(state.value("active_profile").toString());
     }
+    const bool onBattery = m_power ? m_power->onBattery()
+                                : m_dbus->getDaemonState().value("on_battery").toBool();
+    UserFeaturesWidget::applyForPowerState(onBattery);
+    UserFeaturesWidget::refreshStatusProbe();  // optional verify
     updateTrayFromState();
 }
 
