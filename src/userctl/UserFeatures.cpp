@@ -344,6 +344,7 @@ void UserFeaturesWidget::applyForPowerState(bool onBattery) {
         }
     } else {
         qCDebug(dpUser) << "screen_refresh disabled or policy unchanged (" << policy << ")";
+    }
 }
 
 void UserFeaturesWidget::refreshStatusProbe() {
