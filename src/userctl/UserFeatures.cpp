@@ -16,8 +16,11 @@
 #include <QJsonArray>
 #include <algorithm>
 #include <QDebug>   // optional: qInfo logs while we test
+#include <QLoggingCategory>
 
 #include <yaml-cpp/yaml.h>
+
+Q_LOGGING_CATEGORY(dpUser, "dp.userfeatures")
 
 UserFeaturesWidget::UserFeaturesWidget(QWidget* parent)
     : QWidget(parent)
@@ -332,15 +335,15 @@ void UserFeaturesWidget::applyForPowerState(bool onBattery) {
         for (const auto& o : outs) {
             const QString modeId = selectSameResModeId(o, policy);
             if (!modeId.isEmpty()) {
-                qInfo() << "[userfeatures] output" << o.id << "policy" << policy
-                        << "switching to mode" << modeId
-                        << "(current w×h:" << o.w << "x" << o.h << ")";
+                qCDebug(dpUser) << "output" << o.id
+                                << "policy" << policy
+                                << "switching to mode" << modeId
+                                << "(current w×h:" << o.w << "x" << o.h << ")";
                 applyMode(o.id, modeId);
             }
         }
     } else {
-        qInfo() << "[userfeatures] screen_refresh disabled or policy unchanged (" << policy << ")";
-    }
+        qCDebug(dpUser) << "screen_refresh disabled or policy unchanged (" << policy << ")";
 }
 
 void UserFeaturesWidget::refreshStatusProbe() {
