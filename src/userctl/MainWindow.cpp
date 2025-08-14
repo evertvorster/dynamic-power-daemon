@@ -50,10 +50,50 @@ class RootFeaturesDialog : public QDialog {
 public:
     explicit RootFeaturesDialog(QWidget* parent, const QString& etcPath = "/etc/dynamic_power.yaml")
         : QDialog(parent), m_etcPath(etcPath) {
-        setWindowTitle("Power-saving Features (Root)");
+        setWindowTitle("Power Saving Features");
         resize(760, 560);
 
         auto* outer = new QVBoxLayout(this);
+        // ─────────────────────────────────────────────────────────────────────
+        // User Power Saving Features (own section, own Save button) — TOP
+        // ─────────────────────────────────────────────────────────────────────
+        auto* userGroup = new QGroupBox("User Power Saving Features  —  Setting on AC  —  Setting on BAT", this);
+        // Center the group title and enlarge it (no per-row headers needed)
+        userGroup->setStyleSheet(
+            "QGroupBox::title {"
+            "  subcontrol-origin: margin;"
+            "  subcontrol-position: top center;"
+            "  font-size: 15pt;"
+            "  font-weight: 600;"
+            "  padding: 6px 8px;"
+            "}"
+        );
+        auto* userLay = new QVBoxLayout(userGroup);
+
+        m_userWidget = new UserFeaturesWidget(userGroup);
+        userLay->addWidget(m_userWidget);
+
+        // Save (User)
+        m_userSaveBtn = new QPushButton("Save (User)", userGroup);
+        auto* btnRowUser = new QHBoxLayout();
+        btnRowUser->addStretch(1);
+        btnRowUser->addWidget(m_userSaveBtn);
+        userLay->addLayout(btnRowUser);
+
+        connect(m_userSaveBtn, &QPushButton::clicked, this, [this]{
+            if (m_userWidget->save()) {
+                QMessageBox::information(this, "Saved", "User features saved.");
+            } else {
+                QMessageBox::critical(this, "Error", "Unable to write user config file.");
+            }
+        });
+
+        outer->addWidget(userGroup);
+
+        // Populate values and detect current screen refresh per monitor
+        m_userWidget->load();
+        m_userWidget->refreshLiveStatus();
+
 
         // Disclaimer strip
         auto* disclaimBox = new QHBoxLayout();
@@ -63,13 +103,13 @@ public:
         disclaimBox->addWidget(m_confirmBtn, 0);
         m_confirmNote = new QLabel("Saving is blocked until you accept the disclaimer.", this);
         disclaimBox->addWidget(m_confirmNote, 1);
-        outer->addLayout(disclaimBox);
 
         connect(m_confirmBtn, &QPushButton::clicked, this, [this]{ showDisclaimer(); });
 
         // Rows area inside a group + scroll
         auto* group = new QGroupBox("Root-required features (writes to /etc/dynamic_power.yaml)", this);
         auto* groupLay = new QVBoxLayout(group);
+        groupLay->addLayout(disclaimBox);
 
         m_rowsContainer = new QWidget(group);
         m_rowsLayout = new QVBoxLayout(m_rowsContainer);
@@ -136,46 +176,7 @@ public:
         groupLay->addLayout(btnRow);
 
         outer->addWidget(group);
-        // ─────────────────────────────────────────────────────────────────────
-        // User Power Saving Features (separate section with its own Save button)
-        // ─────────────────────────────────────────────────────────────────────
-        {
-            auto* userGroup = new QGroupBox("User Power Saving Features  —  Setting on AC  —  Setting on BAT", this);
-            // Enlarge the title for clarity without needing headers
-            userGroup->setStyleSheet(
-                "QGroupBox::title {"
-                "  font-size: 15pt;"
-                "  font-weight: 600;"
-                "  padding: 6px 8px;"
-                "}"
-            );
 
-            auto* userLay = new QVBoxLayout(userGroup);
-
-            m_userWidget = new UserFeaturesWidget(userGroup);
-            userLay->addWidget(m_userWidget);
-
-            // Save (User) button
-            m_userSaveBtn = new QPushButton("Save (User)", userGroup);
-            auto* btnRow2 = new QHBoxLayout();
-            btnRow2->addStretch(1);
-            btnRow2->addWidget(m_userSaveBtn);
-            userLay->addLayout(btnRow2);
-
-            connect(m_userSaveBtn, &QPushButton::clicked, this, [this]{
-                if (m_userWidget->save()) {
-                    QMessageBox::information(this, "Saved", "User features saved.");
-                } else {
-                    QMessageBox::critical(this, "Error", "Unable to write user config file.");
-                }
-            });
-
-            outer->addWidget(userGroup);
-
-            // Populate values and detect current screen refresh per monitor
-            m_userWidget->load();
-            m_userWidget->refreshLiveStatus();
-        }
 
         connect(m_addBtn, &QPushButton::clicked, this, [this]{ addRow(); });
         connect(m_saveBtn, &QPushButton::clicked, this, [this]{ onSave(); });
