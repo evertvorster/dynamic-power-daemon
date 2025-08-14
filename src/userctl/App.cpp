@@ -167,7 +167,7 @@ void App::onDaemonStateChanged() {
     const bool onBattery = m_power ? m_power->onBattery()
                                 : m_dbus->getDaemonState().value("on_battery").toBool();
     UserFeaturesWidget::applyForPowerState(onBattery);
-    UserFeaturesWidget::refreshStatusProbe();  // optional verify
+    if (m_mainWindow) m_mainWindow->closeFeaturesDialogIfOpen();
     updateTrayFromState();
 }
 
