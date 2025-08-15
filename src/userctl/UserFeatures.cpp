@@ -1,6 +1,7 @@
 // File: src/userctl/UserFeatures.cpp
 #include "UserFeatures.h"
 
+#include "features/FeatureBase.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
@@ -52,8 +53,7 @@ UserFeaturesWidget::UserFeaturesWidget(QWidget* parent)
 }
 
 QString UserFeaturesWidget::configPath() {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    return base + "/dynamic_power/config.yaml";
+    return dp::features::FeatureBase::configPath();
 }
 
 QString UserFeaturesWidget::cycle3(const QString& cur) {
@@ -63,9 +63,7 @@ QString UserFeaturesWidget::cycle3(const QString& cur) {
 }
 
 QString UserFeaturesWidget::normalizePolicy(const QString& s) {
-    const QString t = s.trimmed().toLower();
-    if (t == "min" || t == "max") return t;
-    return "unchanged";
+    return dp::features::FeatureBase::normalizePolicy(s);
 }
 
 void UserFeaturesWidget::load() {
@@ -80,11 +78,11 @@ void UserFeaturesWidget::load() {
     QString ac = "unchanged";
     QString bat = "unchanged";
 
-    if (root && root["features"] && root["features"]["user"] && root["features"]["user"]["screen_refresh"]) {
-        YAML::Node sr = root["features"]["user"]["screen_refresh"];
-        if (sr["enabled"])  enabled = sr["enabled"].as<bool>();
-        if (sr["ac"])       ac = QString::fromStdString(sr["ac"].as<std::string>());
-        if (sr["battery"])  bat = QString::fromStdString(sr["battery"].as<std::string>());
+    if (root && root[dp::features::Keys::features] && root[dp::features::Keys::features][dp::features::Keys::user] && root[dp::features::Keys::features][dp::features::Keys::user][dp::features::Keys::screen_refresh]) {
+        YAML::Node sr = root[dp::features::Keys::features][dp::features::Keys::user][dp::features::Keys::screen_refresh];
+        if (sr[dp::features::Keys::enabled])  enabled = sr[dp::features::Keys::enabled].as<bool>();
+        if (sr[dp::features::Keys::ac])       ac = QString::fromStdString(sr[dp::features::Keys::ac].as<std::string>());
+        if (sr[dp::features::Keys::battery])  bat = QString::fromStdString(sr[dp::features::Keys::battery].as<std::string>());
     }
 
     m_screenEnabled->setChecked(enabled);
@@ -110,20 +108,20 @@ bool UserFeaturesWidget::save() {
         root = YAML::Node(YAML::NodeType::Map);
     }
 
-    YAML::Node features = root["features"];
+    YAML::Node features = root[dp::features::Keys::features];
     if (!features || !features.IsMap()) features = YAML::Node(YAML::NodeType::Map);
 
-    YAML::Node user = features["user"];
+    YAML::Node user = features[dp::features::Keys::user];
     if (!user || !user.IsMap()) user = YAML::Node(YAML::NodeType::Map);
 
     YAML::Node sr;
-    sr["enabled"] = m_screenEnabled->isChecked();
-    sr["ac"]      = normalizePolicy(m_acBtn->text()).toStdString();
-    sr["battery"] = normalizePolicy(m_batBtn->text()).toStdString();
+    sr[dp::features::Keys::enabled] = m_screenEnabled->isChecked();
+    sr[dp::features::Keys::ac]      = normalizePolicy(m_acBtn->text()).toStdString();
+    sr[dp::features::Keys::battery] = normalizePolicy(m_batBtn->text()).toStdString();
 
-    user["screen_refresh"] = sr;
-    features["user"] = user;
-    root["features"] = features;
+    user[dp::features::Keys::screen_refresh] = sr;
+    features[dp::features::Keys::user] = user;
+    root[dp::features::Keys::features] = features;
 
     YAML::Emitter out;
     out << root;
@@ -323,11 +321,11 @@ void UserFeaturesWidget::applyForPowerState(bool onBattery) {
 
     // Screen Refresh Rate
     bool enabled = false; QString ac = "unchanged", bat = "unchanged";
-    if (root && root["features"] && root["features"]["user"] && root["features"]["user"]["screen_refresh"]) {
-        auto sr = root["features"]["user"]["screen_refresh"];
-        if (sr["enabled"])  enabled = sr["enabled"].as<bool>();
-        if (sr["ac"])       ac  = QString::fromStdString(sr["ac"].as<std::string>());
-        if (sr["battery"])  bat = QString::fromStdString(sr["battery"].as<std::string>());
+    if (root && root[dp::features::Keys::features] && root[dp::features::Keys::features][dp::features::Keys::user] && root[dp::features::Keys::features][dp::features::Keys::user][dp::features::Keys::screen_refresh]) {
+        auto sr = root[dp::features::Keys::features][dp::features::Keys::user][dp::features::Keys::screen_refresh];
+        if (sr[dp::features::Keys::enabled])  enabled = sr[dp::features::Keys::enabled].as<bool>();
+        if (sr[dp::features::Keys::ac])       ac  = QString::fromStdString(sr[dp::features::Keys::ac].as<std::string>());
+        if (sr[dp::features::Keys::battery])  bat = QString::fromStdString(sr[dp::features::Keys::battery].as<std::string>());
     }
     const QString policy = normalizePolicy(onBattery ? bat : ac); // "min"|"max"|"unchanged"
     if (enabled && policy != "unchanged") {
