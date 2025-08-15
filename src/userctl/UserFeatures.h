@@ -37,6 +37,7 @@ private:
     QCheckBox*  m_panelEnabled{};
     QPushButton* m_panelAcBtn{};
     QPushButton* m_panelBatBtn{};
+    QLabel*     m_panelStatus{};
 
     // Helpers
     static QString configPath();           // ~/.config/dynamic_power/config.yaml

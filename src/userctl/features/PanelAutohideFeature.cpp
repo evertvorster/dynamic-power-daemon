@@ -5,6 +5,8 @@
 #include <QDBusMessage>
 #include <QFile>
 #include <QIODevice>
+#include <QGuiApplication>
+#include <QScreen>
 
 #include <yaml-cpp/yaml.h>
 
@@ -61,30 +63,49 @@ QString PanelAutohideFeature::statusText() const {
     QDBusInterface iface("org.kde.plasmashell", "/PlasmaShell",
                          "org.kde.PlasmaShell", QDBusConnection::sessionBus());
     if (!iface.isValid()) {
-        return QStringLiteral("KDE Panel Autohide — Status: unavailable (PlasmaShell DBus not valid)");
+        return QStringLiteral("KDE Panel Autohide — Status: unavailable (PlasmaShell DBus invalid)");
     }
 
-    // Print one mode per line; we'll parse/count them here.
-    const QString js = QStringLiteral("panels().forEach(p => print(p.hiding + \"\\n\"))");
-    const QDBusMessage msg = iface.call(QStringLiteral("evaluateScript"), js);
-    if (msg.type() != QDBusMessage::ReplyMessage || msg.arguments().isEmpty()) {
+    // Ask Plasma for each panel's screen index and hiding mode
+    const QString js = QStringLiteral(
+        "panels().forEach(p => print(p.screen + ':' + p.hiding + '\\n'))"
+    );
+    const QDBusMessage reply = iface.call(QStringLiteral("evaluateScript"), js);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
         return QStringLiteral("KDE Panel Autohide — Status: unknown");
     }
 
-    const QString out = msg.arguments().at(0).toString();
-    QMap<QString,int> counts;
-    for (const QString& line : out.split('\n', Qt::SkipEmptyParts)) {
-        const QString m = normalize(line);
-        if (m != QStringLiteral("unchanged")) counts[m] += 1;
+    const QString out = reply.arguments().at(0).toString();
+    const auto screens = QGuiApplication::screens();
+
+    // Aggregate by screen index (one summary per output)
+    QMap<int, QString> modePerScreen;
+    const auto lines = out.split('\n', Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        const int sep = line.indexOf(':');
+        if (sep <= 0) continue;
+        bool ok = false;
+        const int idx = line.left(sep).toInt(&ok);
+        if (!ok) continue;
+        const QString mode = line.mid(sep + 1).trimmed();
+        modePerScreen[idx] = mode; // last one wins if multiple panels on same screen
+    }
+
+    if (modePerScreen.isEmpty()) {
+        return QStringLiteral("KDE Panel Autohide — no panels detected");
     }
 
     QStringList parts;
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
-        parts << QString("%1 (%2)").arg(it.value()).arg(it.key());
+    for (auto it = modePerScreen.cbegin(); it != modePerScreen.cend(); ++it) {
+        QString name;
+        if (it.key() >= 0 && it.key() < screens.size()) {
+            name = screens.at(it.key())->name();      // e.g. "eDP-1", "HDMI-A-1"
+        } else {
+            name = QStringLiteral("Screen %1").arg(it.key());
+        }
+        parts << QStringLiteral("%1: %2").arg(name, it.value());
     }
-    const QString summary = parts.isEmpty() ? QStringLiteral("no panels detected")
-                                            : parts.join(QStringLiteral(", "));
-    return QStringLiteral("KDE Panel Autohide — Current: %1").arg(summary);
+    return QStringLiteral("KDE Panel Autohide — %1").arg(parts.join(QStringLiteral(", ")));
 }
 
 void PanelAutohideFeature::applyForPowerState(bool onBattery) const {

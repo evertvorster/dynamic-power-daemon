@@ -59,8 +59,8 @@ UserFeaturesWidget::UserFeaturesWidget(QWidget* parent)
     m_panelEnabled = new QCheckBox(row2);
     h2->addWidget(m_panelEnabled);
 
-    auto* lblPA = new QLabel("KDE Panel Autohide", row2);
-    h2->addWidget(lblPA, 1);
+    m_panelStatus = new QLabel("KDE Panel Autohide — (detecting…)", row2);
+    h2->addWidget(m_panelStatus, 1);
 
     m_panelAcBtn  = new QPushButton("Unchanged", row2);
     m_panelBatBtn = new QPushButton("Unchanged", row2);
@@ -155,8 +155,11 @@ bool UserFeaturesWidget::save() {
 
 
 void UserFeaturesWidget::refreshLiveStatus() {
-    dp::features::ScreenRefreshFeature feat;
-    m_status->setText(feat.statusText());
+    dp::features::ScreenRefreshFeature srf;
+    m_status->setText(srf.statusText());
+
+    dp::features::PanelAutohideFeature paf;
+    if (m_panelStatus) m_panelStatus->setText(paf.statusText());
 }
 
 QStringList UserFeaturesWidget::detectDisplayRates() const {
