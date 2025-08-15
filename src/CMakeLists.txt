@@ -68,12 +68,12 @@ target_sources(dynamic_power_user PRIVATE
     userctl/features/FeatureBase.h
     userctl/features/FeatureRegistry.cpp
     userctl/features/FeatureRegistry.h
-
-    # First extracted implementations (to add progressively)
     userctl/features/ScreenRefreshFeature.cpp
     userctl/features/ScreenRefreshFeature.h
     userctl/features/RootCompositeFeature.cpp
     userctl/features/RootCompositeFeature.h
+    userctl/features/PanelAutohideFeature.cpp
+    userctl/features/PanelAutohideFeature.h    
 )
 
 target_include_directories(dynamic_power_user

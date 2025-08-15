@@ -11,6 +11,7 @@ struct Keys {
     static constexpr const char* enabled        = "enabled";
     static constexpr const char* ac             = "ac";
     static constexpr const char* battery        = "battery";
+    static constexpr const char* kde_panel_autohide = "kde_panel_autohide";
 };
 
 // Shared helpers for feature implementations and legacy UI wrappers.
