@@ -394,8 +394,11 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     auto* rootFeatBtn = new QPushButton("Power-saving Features…", this);
     layout->addWidget(rootFeatBtn);
     connect(rootFeatBtn, &QPushButton::clicked, this, [this]{
-        RootFeaturesDialog dlg(this, "/etc/dynamic_power.yaml");
-        dlg.exec();
+        if (m_rootDialog) { m_rootDialog->raise(); m_rootDialog->activateWindow(); return; }
+        m_rootDialog = new RootFeaturesDialog(this, "/etc/dynamic_power.yaml");
+        m_rootDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        connect(m_rootDialog, &QObject::destroyed, this, [this]{ m_rootDialog = nullptr; });
+        m_rootDialog->show();
     });
 
     // Power info label
@@ -578,4 +581,8 @@ void MainWindow::refreshProcessButtons() {
 
 void MainWindow::setPowerInfo(const QString& text) {
     m_powerLabel->setText(text);
+}
+
+void MainWindow::closeFeaturesDialogIfOpen() {
+    if (m_rootDialog) m_rootDialog->close();
 }

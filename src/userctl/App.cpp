@@ -45,7 +45,14 @@ void App::start() {
 
     // UPower client
     m_power = std::make_unique<UPowerClient>(this);
+    m_lastOnBattery = m_power->onBattery();
     connect(m_power.get(), &UPowerClient::powerInfoChanged, this, [this]() {
+        const bool now = m_power->onBattery();
+        if (now != m_lastOnBattery) {
+            m_lastOnBattery = now;
+            if (m_features) m_features->applyAll(now);              // apply user features only on AC↔BAT flip
+            if (m_mainWindow) m_mainWindow->closeFeaturesDialogIfOpen();
+        }
         updateTrayFromState();
         if (m_mainWindow) m_mainWindow->setPowerInfo(m_power->summaryText());
     });
@@ -166,9 +173,6 @@ void App::onDaemonStateChanged() {
         auto state = m_dbus->getDaemonState();
         m_mainWindow->setActiveProfile(state.value("active_profile").toString());
     }
-    const bool onBattery = m_power ? m_power->onBattery()
-                                : m_dbus->getDaemonState().value("on_battery").toBool();
-    if (m_features) m_features->applyAll(onBattery);
     /* dialog handles status on open; no mid-session probe */
     updateTrayFromState();
 }

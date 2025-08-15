@@ -25,6 +25,7 @@ private:
     std::unique_ptr<ProcessMonitor> m_procMon;
     std::unique_ptr<UPowerClient> m_power;
     std::unique_ptr<dp::features::FeatureRegistry> m_features;
+    bool m_lastOnBattery = false;
 
     void onShowMainRequested();
     void onDaemonStateChanged();
