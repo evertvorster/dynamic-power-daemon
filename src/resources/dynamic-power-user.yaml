@@ -2,15 +2,7 @@ features:
   user:
     screen_refresh:
       enabled: false
-      ac: unchanged     # allowed: unchanged | min | max
-      battery: unchanged
-    kde_panel_autohide:
-      enabled: false
-      ac: unchanged     # allowed: unchanged | on | off
-      battery: unchanged
-    panel_overdrive:
-      enabled: false
-      ac: unchanged     # allowed: unchanged | on | off
+      ac: unchanged     
       battery: unchanged
 
 power:

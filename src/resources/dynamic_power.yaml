@@ -1,28 +1,32 @@
 thresholds:
   low: 1
   high: 2
-
 grace_period: 15
-
 hardware:
   cpu_governor:
-    # File the daemon writes to set the governor
     path: /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-    # File we read to discover available governors
     options_path: /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors
-    modes: [powersave, performance]  # optional cache; UI refreshes from options_path
-
+    modes:
+      - performance
+      - powersave
+      - disabled
   acpi_platform_profile:
     path: /sys/firmware/acpi/platform_profile
     options_path: /sys/firmware/acpi/platform_profile_choices
-    modes: [low-power, balanced, performance]
-
+    modes:
+      - low-power
+      - balanced
+      - performance
+      - disabled
   aspm:
-    # Same file is used for options and set (active option may be bracketed)
     path: /sys/module/pcie_aspm/parameters/policy
     options_path: /sys/module/pcie_aspm/parameters/policy
-    modes: [powersave, default, performance]
-
+    modes:
+      - default
+      - performance
+      - powersave
+      - powersupersave
+      - disabled
 profiles:
   powersave:
     cpu_governor: powersave
@@ -46,4 +50,18 @@ features:
         path: /proc/sys/kernel/nmi_watchdog
         ac_value: 1
         battery_value: 0
-    
+      - enabled: false
+        path: /sys/module/snd_hda_intel/parameters/power_save
+        ac_value: 10
+        battery_value: 1
+      - enabled: false
+        path: /proc/sys/vm/dirty_writeback_centisecs
+        ac_value: 1000
+        battery_value: 6000
+      - enabled: false
+        path: /sys/devices/pci0000:00/0000:00:01.2/0000:02:00.0/power/control
+        ac_value: on
+        battery_value: auto
+      - enabled: false
+        path: /sys/devices/pci0000:00/0000:00:02.2/0000:07:00.0/power/control
+        ac_value: on
