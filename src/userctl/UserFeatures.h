@@ -34,11 +34,15 @@ private:
     QLabel*     m_status{};
     QPushButton* m_acBtn{};
     QPushButton* m_batBtn{};
+    QCheckBox*  m_panelEnabled{};
+    QPushButton* m_panelAcBtn{};
+    QPushButton* m_panelBatBtn{};
 
     // Helpers
     static QString configPath();           // ~/.config/dynamic_power/config.yaml
     static QString cycle3(const QString&); // Unchanged -> Min -> Max -> Unchanged
     static QString normalizePolicy(const QString&); // "min"/"max"/"unchanged" (lower)
+    static QString cycleOnOff(const QString&); // Unchanged -> On -> Off -> Unchanged
 
     QStringList detectDisplayRates() const;
 };

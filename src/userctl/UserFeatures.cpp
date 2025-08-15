@@ -1,6 +1,7 @@
 // File: src/userctl/UserFeatures.cpp
 #include "UserFeatures.h"
 #include "features/ScreenRefreshFeature.h"
+#include "features/PanelAutohideFeature.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
@@ -49,6 +50,28 @@ UserFeaturesWidget::UserFeaturesWidget(QWidget* parent)
     connect(m_batBtn, &QPushButton::clicked, this, [this]{ m_batBtn->setText(cycle3(m_batBtn->text())); });
 
     outer->addWidget(row);
+    
+    // Row: [checkbox] "KDE Panel Autohide" [AC] [BAT]
+    auto* row2 = new QWidget(this);
+    auto* h2 = new QHBoxLayout(row2);
+    h2->setContentsMargins(0,0,0,0);
+
+    m_panelEnabled = new QCheckBox(row2);
+    h2->addWidget(m_panelEnabled);
+
+    auto* lblPA = new QLabel("KDE Panel Autohide", row2);
+    h2->addWidget(lblPA, 1);
+
+    m_panelAcBtn  = new QPushButton("Unchanged", row2);
+    m_panelBatBtn = new QPushButton("Unchanged", row2);
+    h2->addWidget(m_panelAcBtn);
+    h2->addWidget(m_panelBatBtn);
+
+    connect(m_panelAcBtn,  &QPushButton::clicked, this, [this]{ m_panelAcBtn->setText(cycleOnOff(m_panelAcBtn->text())); });
+    connect(m_panelBatBtn, &QPushButton::clicked, this, [this]{ m_panelBatBtn->setText(cycleOnOff(m_panelBatBtn->text())); });
+
+    outer->addWidget(row2);
+
 }
 
 QString UserFeaturesWidget::configPath() {
@@ -62,6 +85,12 @@ QString UserFeaturesWidget::cycle3(const QString& cur) {
     return "Unchanged";
 }
 
+QString UserFeaturesWidget::cycleOnOff(const QString& cur) {
+    if (cur.compare("Unchanged", Qt::CaseInsensitive) == 0) return "On";
+    if (cur.compare("On", Qt::CaseInsensitive) == 0)        return "Off";
+    return "Unchanged";
+}
+
 QString UserFeaturesWidget::normalizePolicy(const QString& s) {
     const QString t = s.trimmed().toLower();
     if (t == "min" || t == "max") return t;
@@ -69,22 +98,44 @@ QString UserFeaturesWidget::normalizePolicy(const QString& s) {
 }
 
 void UserFeaturesWidget::load() {
-    dp::features::ScreenRefreshFeature feat;
-    auto st = feat.readState();
-    m_screenEnabled->setChecked(st.enabled);
-    auto toTitle = [](QString v){ v = v.toLower(); if (v=="min") return QString("Min"); if (v=="max") return QString("Max"); return QString("Unchanged"); };
-    m_acBtn->setText(toTitle(st.ac));
-    m_batBtn->setText(toTitle(st.battery));
+    // Screen Refresh
+    dp::features::ScreenRefreshFeature srf;
+    auto sr = srf.readState();
+    m_screenEnabled->setChecked(sr.enabled);
+    auto toTitleHz = [](QString v){ v = v.toLower(); if (v=="min") return QString("Min"); if (v=="max") return QString("Max"); return QString("Unchanged"); };
+    m_acBtn->setText(toTitleHz(sr.ac));
+    m_batBtn->setText(toTitleHz(sr.battery));
+
+    // Panel Autohide
+    dp::features::PanelAutohideFeature paf;
+    auto pa = paf.readState();
+    m_panelEnabled->setChecked(pa.enabled);
+    auto toTitleOnOff = [](QString v){ v = v.toLower(); if (v=="on") return QString("On"); if (v=="off") return QString("Off"); return QString("Unchanged"); };
+    m_panelAcBtn->setText(toTitleOnOff(pa.ac));
+    m_panelBatBtn->setText(toTitleOnOff(pa.battery));
 }
 
+
 bool UserFeaturesWidget::save() {
-    dp::features::ScreenRefreshFeature feat;
-    dp::features::ScreenRefreshFeature::State st;
-    st.enabled = m_screenEnabled->isChecked();
-    st.ac      = m_acBtn->text();
-    st.battery = m_batBtn->text();
-    return feat.writeState(st);
+    // Screen Refresh
+    dp::features::ScreenRefreshFeature srf;
+    dp::features::ScreenRefreshFeature::State sr;
+    sr.enabled = m_screenEnabled->isChecked();
+    sr.ac      = m_acBtn->text();
+    sr.battery = m_batBtn->text();
+    bool ok1 = srf.writeState(sr);
+
+    // Panel Autohide
+    dp::features::PanelAutohideFeature paf;
+    dp::features::PanelAutohideFeature::State pa;
+    pa.enabled = m_panelEnabled->isChecked();
+    pa.ac      = m_panelAcBtn->text();
+    pa.battery = m_panelBatBtn->text();
+    bool ok2 = paf.writeState(pa);
+
+    return ok1 && ok2;
 }
+
 
 void UserFeaturesWidget::refreshLiveStatus() {
     dp::features::ScreenRefreshFeature feat;
