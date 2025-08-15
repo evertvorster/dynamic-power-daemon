@@ -2,6 +2,7 @@
 #include "FeatureBase.h"
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QFile>
 #include <QIODevice>
 
@@ -57,37 +58,63 @@ bool PanelAutohideFeature::writeState(const State& s) const {
 }
 
 QString PanelAutohideFeature::statusText() const {
-    const auto st = readState();
-    return QStringLiteral("KDE Panel Autohide — AC: %1 — BAT: %2")
-            .arg(st.ac, st.battery);
+    QDBusInterface iface("org.kde.plasmashell", "/PlasmaShell",
+                         "org.kde.PlasmaShell", QDBusConnection::sessionBus());
+    if (!iface.isValid()) {
+        return QStringLiteral("KDE Panel Autohide — Status: unavailable (PlasmaShell DBus not valid)");
+    }
+
+    // Print one mode per line; we'll parse/count them here.
+    const QString js = QStringLiteral("panels().forEach(p => print(p.hiding + \"\\n\"))");
+    const QDBusMessage msg = iface.call(QStringLiteral("evaluateScript"), js);
+    if (msg.type() != QDBusMessage::ReplyMessage || msg.arguments().isEmpty()) {
+        return QStringLiteral("KDE Panel Autohide — Status: unknown");
+    }
+
+    const QString out = msg.arguments().at(0).toString();
+    QMap<QString,int> counts;
+    for (const QString& line : out.split('\n', Qt::SkipEmptyParts)) {
+        const QString m = normalize(line);
+        if (m != QStringLiteral("unchanged")) counts[m] += 1;
+    }
+
+    QStringList parts;
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
+        parts << QString("%1 (%2)").arg(it.value()).arg(it.key());
+    }
+    const QString summary = parts.isEmpty() ? QStringLiteral("no panels detected")
+                                            : parts.join(QStringLiteral(", "));
+    return QStringLiteral("KDE Panel Autohide — Current: %1").arg(summary);
 }
 
 void PanelAutohideFeature::applyForPowerState(bool onBattery) const {
     const auto st = readState();
-    const QString policy = normalize(onBattery ? st.battery : st.ac); // "on"/"off"/"unchanged"
+    const QString policy = normalize(onBattery ? st.battery : st.ac); // canonical
     if (!st.enabled || policy == QStringLiteral("unchanged")) return;
-    setAutohide(policy == QStringLiteral("on"));
+    setAutohide(policy);
 }
 
-// "on" | "off" | "unchanged"
+// canonical → none/autohide/dodgewindows/windowsgobelow/unchanged
 QString PanelAutohideFeature::normalize(const QString& s) {
     const QString t = s.trimmed().toLower();
-    if (t == "on" || t == "off") return t;
+    if (t == "none" || t == "off" || t == "normal" || t == "always") return "none";
+    if (t == "autohide" || t == "on") return "autohide";
+    if (t == "dodgewindows" || t == "dodge") return "dodgewindows";
+    if (t == "windowsgobelow" || t == "windowsbelow" || t == "below") return "windowsgobelow";
     return "unchanged";
 }
 
 // Use PlasmaShell DBus JS API to toggle all panels’ hide mode
-bool PanelAutohideFeature::setAutohide(bool on) {
+bool PanelAutohideFeature::setAutohide(const QString& mode) {
     QDBusInterface iface("org.kde.plasmashell", "/PlasmaShell",
                          "org.kde.PlasmaShell", QDBusConnection::sessionBus());
     if (!iface.isValid()) return false;
-    const QString mode = on ? QStringLiteral("autohide") : QStringLiteral("normal");
-    const QString js =
-        QStringLiteral("var d=desktops();"
-                       "for (var i=0;i<d.length;i++){"
-                       "  var p=d[i].panels();"
-                       "  for (var j=0;j<p.length;j++){ p[j].hiding='%1'; }"
-                       "}").arg(mode);
+
+    const QString m = normalize(mode); // accept synonyms here
+    if (m == QStringLiteral("unchanged")) return true; // no-op by design
+
+    // Plasma 6: panels().forEach(p => p.hiding = "<mode>")
+    const QString js = QStringLiteral("panels().forEach(p => p.hiding = '%1')").arg(m);
     iface.call(QStringLiteral("evaluateScript"), js);
     return true;
 }

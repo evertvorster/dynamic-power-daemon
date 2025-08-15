@@ -67,8 +67,8 @@ UserFeaturesWidget::UserFeaturesWidget(QWidget* parent)
     h2->addWidget(m_panelAcBtn);
     h2->addWidget(m_panelBatBtn);
 
-    connect(m_panelAcBtn,  &QPushButton::clicked, this, [this]{ m_panelAcBtn->setText(cycleOnOff(m_panelAcBtn->text())); });
-    connect(m_panelBatBtn, &QPushButton::clicked, this, [this]{ m_panelBatBtn->setText(cycleOnOff(m_panelBatBtn->text())); });
+    connect(m_panelAcBtn,  &QPushButton::clicked, this, [this]{ m_panelAcBtn->setText(cyclePanelMode(m_panelAcBtn->text())); });
+    connect(m_panelBatBtn, &QPushButton::clicked, this, [this]{ m_panelBatBtn->setText(cyclePanelMode(m_panelBatBtn->text())); });
 
     outer->addWidget(row2);
 
@@ -91,6 +91,16 @@ QString UserFeaturesWidget::cycleOnOff(const QString& cur) {
     return "Unchanged";
 }
 
+QString UserFeaturesWidget::cyclePanelMode(const QString& cur) {
+    // UI shows Title Case; cycle through in this order:
+    // Unchanged -> None -> Autohide -> DodgeWindows -> WindowsGoBelow -> Unchanged
+    if (cur.compare("Unchanged", Qt::CaseInsensitive) == 0) return "None";
+    if (cur.compare("None", Qt::CaseInsensitive) == 0) return "Autohide";
+    if (cur.compare("Autohide", Qt::CaseInsensitive) == 0) return "DodgeWindows";
+    if (cur.compare("DodgeWindows", Qt::CaseInsensitive) == 0) return "WindowsGoBelow";
+    return "Unchanged";
+}
+
 QString UserFeaturesWidget::normalizePolicy(const QString& s) {
     const QString t = s.trimmed().toLower();
     if (t == "min" || t == "max") return t;
@@ -110,9 +120,16 @@ void UserFeaturesWidget::load() {
     dp::features::PanelAutohideFeature paf;
     auto pa = paf.readState();
     m_panelEnabled->setChecked(pa.enabled);
-    auto toTitleOnOff = [](QString v){ v = v.toLower(); if (v=="on") return QString("On"); if (v=="off") return QString("Off"); return QString("Unchanged"); };
-    m_panelAcBtn->setText(toTitleOnOff(pa.ac));
-    m_panelBatBtn->setText(toTitleOnOff(pa.battery));
+    auto toTitlePanel = [](QString v){
+        v = v.toLower();
+        if (v == "none"           || v == "off" || v == "normal" || v == "always") return QString("None");
+        if (v == "autohide"       || v == "on") return QString("Autohide");
+        if (v == "dodgewindows"   || v == "dodge") return QString("DodgeWindows");
+        if (v == "windowsgobelow" || v == "windowsbelow" || v == "below") return QString("WindowsGoBelow");
+        return QString("Unchanged");
+    };
+    m_panelAcBtn->setText(toTitlePanel(pa.ac));
+    m_panelBatBtn->setText(toTitlePanel(pa.battery));
 }
 
 

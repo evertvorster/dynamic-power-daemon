@@ -7,8 +7,8 @@ class PanelAutohideFeature {
 public:
     struct State {
         bool enabled = false;
-        QString ac = "unchanged";      // allowed: unchanged | on | off
-        QString battery = "unchanged"; // allowed: unchanged | on | off
+        QString ac = "unchanged";      // allowed: unchanged | none | autohide | dodgewindows | windowsgobelow
+        QString battery = "unchanged"; // allowed: unchanged | none | autohide | dodgewindows | windowsgobelow
     };
 
     State readState() const;
@@ -19,8 +19,8 @@ public:
     void refreshStatus() const {}                // no-op for now
 
 private:
-    static QString normalize(const QString& s);  // -> "on"/"off"/"unchanged"
-    static bool setAutohide(bool on);            // via DBus: org.kde.PlasmaShell.evaluateScript
+    static QString normalize(const QString& s);  // -> canonical: none/autohide/dodgewindows/windowsgobelow/unchanged
+    static bool setAutohide(const QString& mode); // via DBus: org.kde.PlasmaShell.evaluateScript (panels().forEach)
 };
 
 } // namespace dp::features
