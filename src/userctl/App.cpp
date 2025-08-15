@@ -12,6 +12,7 @@
 #include "UPowerClient.h"
 #include <QSet>
 #include "UserFeatures.h"
+#include "features/FeatureRegistry.h"
 
 App::~App() = default; 
 
@@ -58,6 +59,7 @@ void App::start() {
     connect(m_mainWindow.get(), &MainWindow::userOverrideSelected, this, &App::onUserOverrideChanged);
     connect(m_mainWindow.get(), &MainWindow::thresholdsAdjusted, this, &App::onThresholdsAdjusted);
     connect(m_mainWindow.get(), &MainWindow::visibilityChanged, this, &App::onWindowVisibilityChanged);
+    m_features = std::make_unique<dp::features::FeatureRegistry>();
     m_mainWindow->refreshProcessButtons();
 
     // Process monitor (runs continuously)
@@ -166,8 +168,8 @@ void App::onDaemonStateChanged() {
     }
     const bool onBattery = m_power ? m_power->onBattery()
                                 : m_dbus->getDaemonState().value("on_battery").toBool();
-    UserFeaturesWidget::applyForPowerState(onBattery);
-    if (m_mainWindow) m_mainWindow->closeFeaturesDialogIfOpen();
+    if (m_features) m_features->applyAll(onBattery);
+    /* dialog handles status on open; no mid-session probe */
     updateTrayFromState();
 }
 
