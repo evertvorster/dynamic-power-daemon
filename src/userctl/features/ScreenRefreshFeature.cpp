@@ -39,8 +39,8 @@ ScreenRefreshFeature::State ScreenRefreshFeature::readState() const {
         if (sr[K::ac])       st.ac  = QString::fromStdString(sr[K::ac].as<std::string>());
         if (sr[K::battery])  st.battery = QString::fromStdString(sr[K::battery].as<std::string>());
     }
-    st.ac = normalizePolicy(st.ac);
-    st.battery = normalizePolicy(st.battery);
+    sr[K::ac]      = normalizePolicy(s.ac).toStdString();
+    sr[K::battery] = normalizePolicy(s.battery).toStdString();
     return st;
 }
 
