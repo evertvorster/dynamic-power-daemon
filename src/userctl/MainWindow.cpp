@@ -4,6 +4,7 @@
 #include "Config.h"
 #include "LoadGraphWidget.h"
 #include "ProcessRuleEditor.h"
+#include "features/RootCompositeFeature.h"
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QMenu>
@@ -304,35 +305,13 @@ private:
     }
 
     void loadYaml() {
-        YAML::Node root;
-        try { root = YAML::LoadFile(m_etcPath.toStdString()); } catch (...) {
-            root = YAML::Node(YAML::NodeType::Map);
-        }
-        YAML::Node fr = root["features"]["root"];
-        if (fr && fr["disclaimer"]) {
-            try { m_disclaimerAccepted = fr["disclaimer"]["accepted"].as<bool>(); } catch (...) {}
-            try { m_disclaimerAcceptedAt = QString::fromStdString(fr["disclaimer"]["accepted_at"].as<std::string>()); } catch (...) {}
-        }
+        dp::features::RootCompositeFeature feat(m_etcPath);
+        auto st = feat.read();
+        m_disclaimerAccepted = st.disclaimerAccepted;
+        m_disclaimerAcceptedAt = st.acceptedAt;
         clearRows();
-        if (fr && fr["features"] && fr["features"].IsSequence()) {
-            for (const auto& n : fr["features"]) {
-                const QString path = n["path"] ? QString::fromStdString(n["path"].as<std::string>()) : "/sys/";
-                const bool en = n["enabled"] ? n["enabled"].as<bool>() : false;
-                const QString ac = n["ac_value"] ? QString::fromStdString(n["ac_value"].as<std::string>()) : "";
-                const QString bat = n["battery_value"] ? QString::fromStdString(n["battery_value"].as<std::string>()) : "";
-                addRow(en, path, ac, bat);
-            }
-        } else if (fr && fr.IsMap()) {
-            for (auto it = fr.begin(); it != fr.end(); ++it) {
-                const std::string key = it->first.as<std::string>();
-                if (key == "disclaimer" || key == "features") continue;
-                YAML::Node n = it->second;
-                const QString path = n["path"] ? QString::fromStdString(n["path"].as<std::string>()) : "/sys/";
-                const bool en = n["enabled"] ? n["enabled"].as<bool>() : false;
-                const QString ac = n["ac"] ? QString::fromStdString(n["ac"].as<std::string>()) : "";
-                const QString bat = n["battery"] ? QString::fromStdString(n["battery"].as<std::string>()) : "";
-                addRow(en, path, ac, bat);
-            }
+        for (const auto& it : st.items) {
+            addRow(it.enabled, it.absPath, it.ac, it.battery);
         }
         if (m_rows.isEmpty()) addRow(); // seed
     }
@@ -360,42 +339,23 @@ private:
                                  "Saving is disabled until you click Confirm and agree to the disclaimer.");
             return;
         }
-
-        YAML::Node root;
-        try { root = YAML::LoadFile(m_etcPath.toStdString()); } catch (...) { root = YAML::Node(YAML::NodeType::Map); }
-        YAML::Node features = root["features"];
-        if (!features || !features.IsMap()) features = YAML::Node(YAML::NodeType::Map);
-        YAML::Node fr = features["root"];
-        if (!fr || !fr.IsMap()) fr = YAML::Node(YAML::NodeType::Map);
-
-        YAML::Node disc = fr["disclaimer"];
-        if (!disc || !disc.IsMap()) disc = YAML::Node(YAML::NodeType::Map);
-        disc["accepted"] = m_disclaimerAccepted;
-        if (!m_disclaimerAcceptedAt.isEmpty())
-            disc["accepted_at"] = m_disclaimerAcceptedAt.toStdString();
-        fr["disclaimer"] = disc;
-
-        YAML::Node arr(YAML::NodeType::Sequence);
+        dp::features::RootCompositeFeature feat(m_etcPath);
+        dp::features::RootCompositeFeature::State st;
+        st.disclaimerAccepted = m_disclaimerAccepted;
+        st.acceptedAt = m_disclaimerAcceptedAt;
         for (const auto& r : m_rows) {
             QString rel = r.pathRel->text().trimmed();
             if (rel.startsWith("/")) rel = rel.mid(1);
             const QString prefix = r.rootBtn->text().trimmed();   // "/sys" or "/proc"
             const QString abs = QString("%1/%2").arg(prefix, rel);
-
-            YAML::Node n;                           // ← add this line
-            n["enabled"]       = r.enabled->isChecked();
-            n["path"]          = abs.toStdString();
-            n["ac_value"]      = r.ac->text().trimmed().toStdString();
-            n["battery_value"] = r.bat->text().trimmed().toStdString();
-            arr.push_back(n);
+            dp::features::RootCompositeFeature::Item it;
+            it.enabled = r.enabled->isChecked();
+            it.absPath = abs;
+            it.ac = r.ac->text().trimmed();
+            it.battery = r.bat->text().trimmed();
+            st.items.push_back(it);
         }
-        fr["features"] = arr;
-        features["root"] = fr;
-        root["features"] = features;
-
-        YAML::Emitter out;
-        out << root;
-        QByteArray data(out.c_str());
+        QByteArray data = feat.serialize(st);
         if (pkexecWrite(data, m_etcPath)) {
             QMessageBox::information(this, "Saved", "Root features saved. The daemon will auto-reload.");
             accept();
@@ -434,15 +394,8 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     auto* rootFeatBtn = new QPushButton("Power-saving Features…", this);
     layout->addWidget(rootFeatBtn);
     connect(rootFeatBtn, &QPushButton::clicked, this, [this]{
-        if (m_rootDialog) {
-            m_rootDialog->raise();
-            m_rootDialog->activateWindow();
-            return;
-        }
-        m_rootDialog = new RootFeaturesDialog(this, "/etc/dynamic_power.yaml");
-        m_rootDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-        connect(m_rootDialog, &QObject::destroyed, this, [this]{ m_rootDialog = nullptr; });
-        m_rootDialog->show();
+        RootFeaturesDialog dlg(this, "/etc/dynamic_power.yaml");
+        dlg.exec();
     });
 
     // Power info label
@@ -539,10 +492,6 @@ void MainWindow::refreshOverrideButton() {
     m_overrideBtn->setStyleSheet(m_userMode != QStringLiteral("Dynamic")
         ? "background: palette(highlight); color: palette(highlighted-text);"
         : "");
-}
-
-void MainWindow::closeFeaturesDialogIfOpen() {
-    if (m_rootDialog) m_rootDialog->close();
 }
 
 void MainWindow::refreshProcessButtons() {
