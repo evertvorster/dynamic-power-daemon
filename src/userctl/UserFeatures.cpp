@@ -1,6 +1,6 @@
 // File: src/userctl/UserFeatures.cpp
 #include "UserFeatures.h"
-
+#include "features/ScreenRefreshFeature.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
@@ -69,82 +69,26 @@ QString UserFeaturesWidget::normalizePolicy(const QString& s) {
 }
 
 void UserFeaturesWidget::load() {
-    YAML::Node root;
-    try {
-        root = YAML::LoadFile(configPath().toStdString());
-    } catch (...) {
-        root = YAML::Node(YAML::NodeType::Map);
-    }
-
-    bool enabled = false;
-    QString ac = "unchanged";
-    QString bat = "unchanged";
-
-    if (root && root["features"] && root["features"]["user"] && root["features"]["user"]["screen_refresh"]) {
-        YAML::Node sr = root["features"]["user"]["screen_refresh"];
-        if (sr["enabled"])  enabled = sr["enabled"].as<bool>();
-        if (sr["ac"])       ac = QString::fromStdString(sr["ac"].as<std::string>());
-        if (sr["battery"])  bat = QString::fromStdString(sr["battery"].as<std::string>());
-    }
-
-    m_screenEnabled->setChecked(enabled);
-    auto toTitle = [](QString v){
-        v = v.toLower();
-        if (v == "min") return QString("Min");
-        if (v == "max") return QString("Max");
-        return QString("Unchanged");
-    };
-    m_acBtn->setText(toTitle(ac));
-    m_batBtn->setText(toTitle(bat));
+    dp::features::ScreenRefreshFeature feat;
+    auto st = feat.readState();
+    m_screenEnabled->setChecked(st.enabled);
+    auto toTitle = [](QString v){ v = v.toLower(); if (v=="min") return QString("Min"); if (v=="max") return QString("Max"); return QString("Unchanged"); };
+    m_acBtn->setText(toTitle(st.ac));
+    m_batBtn->setText(toTitle(st.battery));
 }
 
 bool UserFeaturesWidget::save() {
-    // Ensure directory exists
-    QFileInfo fi(configPath());
-    QDir().mkpath(fi.dir().absolutePath());
-
-    YAML::Node root;
-    try {
-        root = YAML::LoadFile(configPath().toStdString());
-    } catch (...) {
-        root = YAML::Node(YAML::NodeType::Map);
-    }
-
-    YAML::Node features = root["features"];
-    if (!features || !features.IsMap()) features = YAML::Node(YAML::NodeType::Map);
-
-    YAML::Node user = features["user"];
-    if (!user || !user.IsMap()) user = YAML::Node(YAML::NodeType::Map);
-
-    YAML::Node sr;
-    sr["enabled"] = m_screenEnabled->isChecked();
-    sr["ac"]      = normalizePolicy(m_acBtn->text()).toStdString();
-    sr["battery"] = normalizePolicy(m_batBtn->text()).toStdString();
-
-    user["screen_refresh"] = sr;
-    features["user"] = user;
-    root["features"] = features;
-
-    YAML::Emitter out;
-    out << root;
-    QByteArray data(out.c_str());
-
-    QFile f(configPath());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-    f.write(data);
-    f.close();
-    return true;
+    dp::features::ScreenRefreshFeature feat;
+    dp::features::ScreenRefreshFeature::State st;
+    st.enabled = m_screenEnabled->isChecked();
+    st.ac      = m_acBtn->text();
+    st.battery = m_batBtn->text();
+    return feat.writeState(st);
 }
 
 void UserFeaturesWidget::refreshLiveStatus() {
-    const auto list = detectDisplayRates();
-    if (list.isEmpty()) {
-        m_status->setText("Screen Refresh Rate — Current: (unavailable)");
-    } else {
-        m_status->setText(QString("Screen Refresh Rate — Current: %1").arg(list.join("; ")));
-    }
+    dp::features::ScreenRefreshFeature feat;
+    m_status->setText(feat.statusText());
 }
 
 QStringList UserFeaturesWidget::detectDisplayRates() const {
@@ -316,37 +260,11 @@ namespace {
 } // anon
 
 void UserFeaturesWidget::applyForPowerState(bool onBattery) {
-    // Read config
-    YAML::Node root;
-    try { root = YAML::LoadFile(configPath().toStdString()); }
-    catch (...) { root = YAML::Node(YAML::NodeType::Map); }
-
-    // Screen Refresh Rate
-    bool enabled = false; QString ac = "unchanged", bat = "unchanged";
-    if (root && root["features"] && root["features"]["user"] && root["features"]["user"]["screen_refresh"]) {
-        auto sr = root["features"]["user"]["screen_refresh"];
-        if (sr["enabled"])  enabled = sr["enabled"].as<bool>();
-        if (sr["ac"])       ac  = QString::fromStdString(sr["ac"].as<std::string>());
-        if (sr["battery"])  bat = QString::fromStdString(sr["battery"].as<std::string>());
-    }
-    const QString policy = normalizePolicy(onBattery ? bat : ac); // "min"|"max"|"unchanged"
-    if (enabled && policy != "unchanged") {
-        const auto outs = readOutputs();
-        for (const auto& o : outs) {
-            const QString modeId = selectSameResModeId(o, policy);
-            if (!modeId.isEmpty()) {
-                qCDebug(dpUser) << "output" << o.id
-                                << "policy" << policy
-                                << "switching to mode" << modeId
-                                << "(current w×h:" << o.w << "x" << o.h << ")";
-                applyMode(o.id, modeId);
-            }
-        }
-    } else {
-        qCDebug(dpUser) << "screen_refresh disabled or policy unchanged (" << policy << ")";
-    }
+    dp::features::ScreenRefreshFeature feat;
+    feat.applyForPowerState(onBattery);
 }
 
 void UserFeaturesWidget::refreshStatusProbe() {
-    (void)probeCurrentRefreshStrings(); // verifies current; UI updates via refreshLiveStatus()
+    dp::features::ScreenRefreshFeature feat;
+    feat.refreshStatus();
 }

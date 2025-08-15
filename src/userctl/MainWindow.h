@@ -6,6 +6,7 @@
 #include <QHideEvent>
 #include <QCloseEvent>
 #include <QSet>
+#include <QDialog>
 
 class DbusClient;
 class Config;
@@ -25,6 +26,7 @@ public:
     void refreshProcessButtons();
     void setPowerInfo(const QString& text);
     void setProcessMatchState(const QSet<QString>& matches, const QString& winnerLower);
+    void closeFeaturesDialogIfOpen();
 
 signals:
     void userOverrideSelected(const QString& mode, bool boss);
@@ -53,4 +55,5 @@ private:
     QLabel* m_powerLabel = nullptr;
     QSet<QString> m_matchedProcs;
     QString m_winnerProc; // lowercased
+    QDialog* m_rootDialog = nullptr;   // track features window
 };

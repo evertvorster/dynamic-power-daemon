@@ -9,6 +9,7 @@ class MainWindow;
 class ProcessMonitor;
 class UPowerClient;
 
+namespace dp { namespace features { class FeatureRegistry; } }
 class App : public QObject {
     Q_OBJECT
 public:
@@ -23,6 +24,8 @@ private:
     std::unique_ptr<MainWindow> m_mainWindow;
     std::unique_ptr<ProcessMonitor> m_procMon;
     std::unique_ptr<UPowerClient> m_power;
+    std::unique_ptr<dp::features::FeatureRegistry> m_features;
+    bool m_lastOnBattery = false;
 
     void onShowMainRequested();
     void onDaemonStateChanged();
