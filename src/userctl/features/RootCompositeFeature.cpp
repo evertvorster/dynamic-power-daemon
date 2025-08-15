@@ -26,8 +26,24 @@ RootCompositeFeature::State RootCompositeFeature::read() const {
             Item it;
             try { it.absPath = QString::fromStdString(n["path"].as<std::string>()); } catch (...) { it.absPath = QStringLiteral("/sys/"); }
             try { it.enabled = n["enabled"].as<bool>(); } catch (...) { it.enabled = false; }
-            try { it.ac = QString::fromStdString(n["ac"].as<std::string>()); } catch (...) {}
-            try { it.battery = QString::fromStdString(n["battery"].as<std::string>()); } catch (...) {}
+            try {
+                if (n["ac_value"]) {
+                    try { it.ac = QString::fromStdString(n["ac_value"].as<std::string>()); }
+                    catch (...) { try { it.ac = QString::number(n["ac_value"].as<int>()); } catch (...) { try { it.ac = QString::number(n["ac_value"].as<double>()); } catch (...) {} } }
+                } else if (n["ac"]) {
+                    try { it.ac = QString::fromStdString(n["ac"].as<std::string>()); }
+                    catch (...) { try { it.ac = QString::number(n["ac"].as<int>()); } catch (...) { try { it.ac = QString::number(n["ac"].as<double>()); } catch (...) {} } }
+                }
+            } catch (...) {}
+            try {
+                if (n["battery_value"]) {
+                    try { it.battery = QString::fromStdString(n["battery_value"].as<std::string>()); }
+                    catch (...) { try { it.battery = QString::number(n["battery_value"].as<int>()); } catch (...) { try { it.battery = QString::number(n["battery_value"].as<double>()); } catch (...) {} } }
+                } else if (n["battery"]) {
+                    try { it.battery = QString::fromStdString(n["battery"].as<std::string>()); }
+                    catch (...) { try { it.battery = QString::number(n["battery"].as<int>()); } catch (...) { try { it.battery = QString::number(n["battery"].as<double>()); } catch (...) {} } }
+                }
+            } catch (...) {}
             st.items.push_back(it);
         }
     }
@@ -57,8 +73,8 @@ QByteArray RootCompositeFeature::serialize(const State& s) const {
         YAML::Node n(YAML::NodeType::Map);
         n["enabled"] = it.enabled;
         n["path"]    = it.absPath.toStdString();
-        if (!it.ac.isEmpty()) n["ac"] = it.ac.toStdString();
-        if (!it.battery.isEmpty()) n["battery"] = it.battery.toStdString();
+        if (!it.ac.isEmpty()) n["ac_value"] = it.ac.toStdString();
+        if (!it.battery.isEmpty()) n["battery_value"] = it.battery.toStdString();
         arr.push_back(n);
     }
     fr["features"] = arr;
