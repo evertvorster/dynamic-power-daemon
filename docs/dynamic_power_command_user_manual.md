@@ -7,12 +7,14 @@
 
 ## Overview
 
-**Dynamic Power** helps your laptop pick the right power/performance behavior automatically and gives you a quick way to override it when you need to. The GUI shows your system load over time, the active power profile (from power-profiles-daemon), and provides simple editors for power‑saving rules that require root‑level sysfs writes.
+**Dynamic Power** helps your laptop pick the right power/performance behavior automatically and gives you a quick way to override it when you need to. 
+The GUI shows your system load over time, the active power profile and provides simple editors for power‑saving rules that require root‑level sysfs writes.
+There is a button for power saving features, and this is where you can set various features that are aimed at saving power when your laptop is unplugged from power. 
 
 ### What you can do
 
 - **See current status** at a glance (active mode and profile). When the UI is closed, the panel icon will change to show you something significant has happened.
-- **Override** the daemon’s behavior temporarily. This woverride ignored power supply concerns, so use sparingly when on battery.
+- **Override** the daemon’s behavior temporarily. This override ignores power supply concerns, so use sparingly when on battery.
 - **Watch the system load** and threshold lines that guide automatic switching.
 - **Manage root-required features** (e.g., sysfs knobs) with per‑power‑source values.
 
@@ -22,14 +24,19 @@
 
 ## Quick Start
 
-1. **Launch the app**: run `dynamic_power_command` from your menu or terminal.
-2. **Read the status**:
+1. **Install**
+On Arch, use your favorite AUR helper and install dynamic-power-daemon.
+```
+sudo systemctl enable --now dynamic_power.service
+```
+2. **Launch the app**: run `dynamic_power_command` from your menu or terminal.
+3. **Read the status**:
    - The top **User Override** button shows  
      `User Override: <Mode> - Current power profile: <Profile>`.
    - The graph titled **Load Average** shows recent system load and the **Low/High** threshold lines used for automatic decisions.
-3. **(Optional) Set an override**: click the **User Override** button and choose a mode (e.g., *Dynamic*, *Powersave*, *Balanced*, *Performance*).  
+4. **(Optional) Set an override**: click the **User Override** button and choose a mode (e.g., *Dynamic*, *Powersave*, *Balanced*, *Performance*).  
    - When not **Dynamic**, the button highlights to remind you an override is active.
-4. **(Optional) Edit root-required features**: open the **Root‑required features** editor to add or adjust entries (explained below).
+5. **(Optional) Edit root-required features**: open the **Root‑required features** editor to add or adjust entries (explained below).
 
 ---
 
@@ -39,7 +46,7 @@
 
 - **Format:** `User Override: {Mode} - Current power profile: {Profile}`
   - **Mode** is what *you* requested (e.g., **Dynamic**, **Balanced**, **Performance**, **Powersave**).
-  - **Current power profile** is what the system is actually running (from **power‑profiles‑daemon**).
+  - **Current power profile** is the power mode of the system, in the Dynamic mode, these are not always the same.
 - **Click** to open the menu and choose a mode.  
   - **Dynamic** hands control back to the daemon’s automatic behavior.  
   - Any non‑Dynamic choice applies an override until you switch back.
@@ -73,6 +80,9 @@
 - Some commonly used overrides are here as examples. Modify, add or delete as you see fit.
 - Matched processes do not apply if the system is on battery, this is by design. 
 - Use it to confirm that expected applications are being detected.
+- What happens when there is more than one process match? 
+  - Since there is only one system, only one proces can control system behavior.
+  - Each process match has a priority slider, so you pick which one actually controls your system
 
 ---
 
@@ -114,6 +124,11 @@ User utilities like PowerTOP and others can help you identify hardware settings 
 
 Test the feature on YOUR system before putting it in here.
 
+**Layout - User features**
+Currently there are only two user features: 
+- Screen refresh rates can dynamically adjust screen refresh rates. 
+- Panel Autohide may be a weird one at first glance, but KDE polls the panel aggressively and wastes power on battery.
+
 ---
 
 ## Frequently Asked Questions
@@ -135,6 +150,7 @@ Test the feature on YOUR system before putting it in here.
 ## Troubleshooting
 - **Current power profile shows "Error"**
   - Immediately inspect your system logs. The daemon is trying to set a value and it is not happening. The journal will shed some light on what it was trying to do, and why it is not working. Most probably the profile configuration is not correct.
+
 - **No data / graph doesn’t move**  
   - Ensure the **dynamic_power** daemon is running.  
   - Check that **power‑profiles‑daemon** is installed and active.  
@@ -143,6 +159,7 @@ Test the feature on YOUR system before putting it in here.
 - **Override button doesn’t respond**  
   - Try returning to **Dynamic**, then re‑select your mode.  
   - Restart the GUI; if the issue persists, check daemon logs.
+  - Report a bug at: https://github.com/evertvorster/dynamic-power-daemon
 
 - **Root‑required rule not applied**  
   - Double‑check the **Path** and values.  
@@ -154,7 +171,8 @@ Test the feature on YOUR system before putting it in here.
 ## Configuration & Files
 
 - **User configuration**  
-  - Stored under `~/.config/dynamic_power/config.yaml` (contains your UI-configurable settings, including root‑required features).
+  - Stored under `~/.config/dynamic_power/config.yaml` (contains your UI-configurable settings, including root‑required features). 
+  - There is no need to manually edit this file, everything is done through GUI, and changes here are quite likely to be wiped out. 
 
 - **Daemon**  
   - Runs as root via systemd.  
@@ -167,11 +185,13 @@ Test the feature on YOUR system before putting it in here.
 - Keep **Mode** on **Dynamic** for everyday use; use overrides for special cases (e.g., compiling or long battery stretches).
 - Add root‑required entries gradually; test each one so you can quickly pinpoint regressions.
 - If you find yourself setting a user override often to run a certain program, find the name of that program with ps -ef | grep -i <program>. Then make a process match rule and your system will automatically switch to that mode when it detects the program running.
+
+If this application is doing something unexpected, or there is a feature that you would like to see implemented, contact the developers at: https://github.com/evertvorster/dynamic-power-daemon
 ---
 
 ## About
 
 - **License:** GPL‑3.0-or-later
-- **Project:** Dynamic Power Daemon (C++ rewrite), `dynamic_power_command` GUI (Qt 6)
+- **Project:** Dynamic Power Daemon `dynamic_power_command` GUI (Qt 6)
 
 If you spot anything unclear or want more advanced controls, open an issue or PR with your suggestions.
