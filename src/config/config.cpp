@@ -69,6 +69,11 @@ Settings Config::loadSettings(const QString& path) {
                 if (hwNode["cpu_governor"]["modes"])
                     hardware.cpu_governor.modes = hwNode["cpu_governor"]["modes"].as<std::vector<std::string>>();
             }
+            if (hwNode["epp_profile"]) {
+                hardware.epp_profile.path = hwNode["epp_profile"]["path"].as<std::string>("");
+                if (hwNode["epp_profile"]["modes"])
+                    hardware.epp_profile.modes = hwNode["epp_profile"]["modes"].as<std::vector<std::string>>();
+            }
             if (hwNode["acpi_platform_profile"]) {
                 hardware.acpi_platform_profile.path = hwNode["acpi_platform_profile"]["path"].as<std::string>("");
                 if (hwNode["acpi_platform_profile"]["modes"])
@@ -86,6 +91,8 @@ Settings Config::loadSettings(const QString& path) {
                 ProfileSetting ps;
                 if (it.second["cpu_governor"])
                     ps.cpu_governor = it.second["cpu_governor"].as<std::string>("");
+                if (it.second["epp_profile"])
+                    ps.epp_profile = it.second["epp_profile"].as<std::string>("");
                 if (it.second["acpi_platform_profile"])
                     ps.acpi_platform_profile = it.second["acpi_platform_profile"].as<std::string>("");
                 if (it.second["aspm"])

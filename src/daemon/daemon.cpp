@@ -349,12 +349,77 @@ bool Daemon::setProfile(const QString& internalName)
         return write_value(path, value, "cpu_governor");
     };
 
+    // Write the epp profile to all CPU policy/cpu nodes based on the single path in config
+    auto write_epp_all = [&](const std::string &path, const std::string &value) -> bool {
+        if (path.empty() || value.empty()) return true;
+
+        namespace fs = std::filesystem;
+        fs::path p(path);
+        bool all_ok = true;
+        std::error_code ec;
+        if (p.filename() == "energy_performance_preference") {
+            fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
+            const std::string parent_name = parent.filename().string();
+
+            // Case A: /sys/.../cpufreq/policyX/energy_performance_preference  → write to all policyN/energy_performance_preference
+            fs::path root = parent.parent_path(); // .../cpufreq
+            for (const auto &e : fs::directory_iterator(root, ec)) {
+                if (!e.is_directory(ec)) continue;
+                const std::string name = e.path().filename().string();
+                // only policyN dirs (skip anything else)
+                bool is_policyN = name.rfind("policy", 0) == 0 &&
+                                std::all_of(name.begin() + 6, name.end(),
+                                            [](unsigned char ch){ return std::isdigit(ch); });
+                if (!is_policyN) continue;
+                fs::path target = e.path() / "energy_performance_preference";
+                all_ok &= write_value(target.string(), value, "epp_profile");
+            }
+            if (all_ok)
+                return all_ok;
+
+
+            // Case B: /sys/.../cpu/cpuX/cpufreq/energy_performance_preference  → write to all cpuN/cpufreq/energy_performance_preference
+            fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
+
+            // Probe just cpu0 as a sanity check (your requested behavior)
+            fs::path probe = cpu_root / "cpu0" / "cpufreq" / "energy_performance_preference";
+            if (!fs::exists(probe, ec)) {
+                // If cpu0 path isn't present, fall back to the single configured node
+                return write_value(path, value, "energy_performance_preference");
+            }
+
+            for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
+                if (!e.is_directory(ec)) continue;
+                const std::string name = e.path().filename().string();
+                // only cpuN dirs (skip 'cpufreq' and anything else)
+                bool is_cpuN = name.rfind("cpu", 0) == 0 &&
+                            std::all_of(name.begin() + 3, name.end(),
+                                        [](unsigned char ch){ return std::isdigit(ch); });
+                if (!is_cpuN) continue;
+                fs::path target = e.path() / "cpufreq" / "energy_performance_preference";
+                all_ok &= write_value(target.string(), value, "epp_profile");
+            }
+            if (all_ok)
+               return all_ok;
+
+        }
+
+        // Fallback: single write (if the configured path isn’t a known pattern)
+        return write_value(path, value, "epp_profile");
+    };
+
 
     bool ok = true;
-    if (!is_disabled(ps.cpu_governor))
-        ok &= write_value(hardware.cpu_governor.path,          ps.cpu_governor,          "cpu_governor");
-    else
+    if (!is_disabled(ps.cpu_governor)){
+        //ok &= write_value(hardware.cpu_governor.path,          ps.cpu_governor,          "cpu_governor");
+        ok &= write_governor_all(hardware.cpu_governor.path, ps.cpu_governor);
+    }else
         log_info("cpu_governor disabled in profile; skipping write");
+
+    if (!is_disabled(ps.epp_profile)){
+        ok &= write_epp_all(hardware.epp_profile.path, ps.epp_profile);
+    }else
+        log_info("epp_profile disabled in profile; skipping write");
 
     if (!is_disabled(ps.acpi_platform_profile))
         ok &= write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile");

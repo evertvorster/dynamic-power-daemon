@@ -19,7 +19,7 @@
 #include <yaml-cpp/yaml.h>
 
 static QStringList capKeys() {
-    return {"cpu_governor","acpi_platform_profile","aspm"};
+    return {"cpu_governor","epp_profile", "acpi_platform_profile","aspm"};
 }
 
 ProfileConfigDialog::ProfileConfigDialog(QWidget* parent, const QString& configPath)

@@ -92,6 +92,7 @@ You can and must configure exactly what happens when a profile is set, especiall
 
 **Features to be set**
 - CPU governor to be used.
+- EPP profile to set.
 - ACPI system state.
 - ASPM system state.
 All of these have a disable option per profile, in which case the daemon won't try to set this feature for the profile, and leave it to the previous set setting.
@@ -165,6 +166,11 @@ Currently there are only two user features:
   - Double‑check the **Path** and values.  
   - Ensure the entry is **Enabled**.  
   - Some paths differ across kernels and hardware.
+
+- **Energy Performance Preference** can't be found (epp profile)
+  - Check your BIOS setting for Intel Speed Shift and enable it.
+  - Make sure intel_pstate is in active in kernel cmdline (intel_pstate=active which is default).
+  - Check paths for epp, may differ across kernels or hardware.
 
 ---
 

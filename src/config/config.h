@@ -24,12 +24,14 @@ struct HardwareSetting {
 
 struct ProfileSetting {
     std::string cpu_governor;
+    std::string epp_profile;
     std::string acpi_platform_profile;
     std::string aspm;
 };
 
 struct HardwareConfig {
     HardwareSetting cpu_governor;
+    HardwareSetting epp_profile;
     HardwareSetting acpi_platform_profile;
     HardwareSetting aspm;
 };
