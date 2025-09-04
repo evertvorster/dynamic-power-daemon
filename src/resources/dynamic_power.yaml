@@ -10,6 +10,16 @@ hardware:
       - performance
       - powersave
       - disabled
+  epp_profile:
+    path: /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference
+    modes:
+      - default
+      - performance
+      - balance_performance
+      - balance_power
+      - power
+      - disabled
+    options_path: /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_available_preferences
   acpi_platform_profile:
     path: /sys/firmware/acpi/platform_profile
     options_path: /sys/firmware/acpi/platform_profile_choices
@@ -30,14 +40,17 @@ hardware:
 profiles:
   powersave:
     cpu_governor: powersave
+    epp_profile: power
     acpi_platform_profile: low-power
     aspm: powersave
   balanced:
     cpu_governor: performance
+    epp_profile: balance_power
     acpi_platform_profile: balanced
     aspm: default
   performance:
     cpu_governor: performance
+    epp_profile: performance
     acpi_platform_profile: performance
     aspm: performance
 features:

@@ -36,7 +36,7 @@ load in real time, and make adjustments to fine tune your experience. Set it onc
 - Per-process overrides (e.g. set Steam to "performance")
 
 ✅ Configurable Daemon power interface:
-- CPU Governors, ACPI and ASPM configuration on the fly
+- CPU Governors, Intel/AMD pstate preference, ACPI and ASPM configuration on the fly
 - Power saving features similar to Laptop Mode Tools or TLP and others.
 
 ✅ Manual override via tray icon:
