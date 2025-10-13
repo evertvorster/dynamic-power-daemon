@@ -67,6 +67,7 @@ void App::start() {
     connect(m_mainWindow.get(), &MainWindow::thresholdsAdjusted, this, &App::onThresholdsAdjusted);
     connect(m_mainWindow.get(), &MainWindow::visibilityChanged, this, &App::onWindowVisibilityChanged);
     m_features = std::make_unique<dp::features::FeatureRegistry>();
+    m_features->applyAll(m_lastOnBattery);   // <-- apply once on startup using current UPower state
     m_mainWindow->refreshProcessButtons();
 
     // Process monitor (runs continuously)
