@@ -123,13 +123,15 @@ Daemon::Daemon(const Thresholds &thresholds,
         log_debug(QString("Grace period active: forcing 'performance' for %1 seconds")
                 .arg(graceSeconds).toUtf8().constData());
 
+    }
+    
     // Watch the config for changes and hot-reload thresholds/profiles
     m_configWatcher = new QFileSystemWatcher(this);
     m_configWatcher->addPath(DEFAULT_CONFIG_PATH);
     connect(m_configWatcher, &QFileSystemWatcher::fileChanged,
             this, &Daemon::onConfigFileChanged);
 
-    }
+    
 }
 
 void Daemon::handleUPowerDeviceChanged(const QDBusMessage &message) {
@@ -203,9 +205,8 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
     if (DEBUG_MODE) {
         log_info(QString("UPower PropertiesChanged from interface: %1").arg(interface).toUtf8().constData());
     }
-    // Send this signal to user space
+    // Refresh cached power source and notify UI once per event
     updatePowerSource();
-    emitPowerStateChanged();
 
     for (auto it = changedProps.begin(); it != changedProps.end(); ++it) {
         const QString &key = it.key();
@@ -213,14 +214,6 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
 
         if (DEBUG_MODE) {
             log_info(QString("  %1 → %2").arg(key, value.toString()).toUtf8().constData());
-        }
-
-        if (key == "OnBattery") {
-            bool onBattery = value.toBool();
-            m_powerSource = onBattery ? "battery" : "AC";
-            log_info(QString("Power source changed: now on %1").arg(m_powerSource).toUtf8().constData());
-            applyRootPowerTweaks();
-
         }
     }
 }
@@ -471,6 +464,8 @@ void Daemon::updatePowerSource()
 
     log_debug(QString("Power source detected: %1").arg(m_powerSource).toUtf8().constData());
     applyRootPowerTweaks();
+    // Notify UI/subscribers even at startup (Unknown → AC/BAT) and on any change
+    emitPowerStateChanged();
 }
 
 void Daemon::emitPowerStateChanged()
