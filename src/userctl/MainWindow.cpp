@@ -506,13 +506,17 @@ void MainWindow::refreshProcessButtons() {
         delete child;
     }
 
-    // One button per config rule (display the match string = process_name)
+    // One button per config rule: show friendly name; fall back to process_name
     const auto& rules = m_config->processRules();
     for (int i = 0; i < rules.size(); ++i) {
         const auto& r = rules[i];
 
-        auto* btn = new QPushButton(r.process_name, m_rulesPanel);
-        btn->setToolTip(QString("Priority %1 · Mode %2").arg(r.priority).arg(r.active_profile));
+        const QString label = r.name.trimmed().isEmpty() ? r.process_name : r.name;
+        auto* btn = new QPushButton(label, m_rulesPanel);
+        btn->setToolTip(QString("Process “%1” · Priority %2 · Mode %3")
+                            .arg(r.process_name)
+                            .arg(r.priority)
+                            .arg(r.active_profile));
 
         // Open editor for this rule
         connect(btn, &QPushButton::clicked, this, [this, i]() {

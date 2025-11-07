@@ -89,30 +89,44 @@ void Config::startWatching() {
 }
 
 bool Config::save() const {
+    // Load existing YAML so we preserve unrelated sections (e.g. features.user.*)
     YAML::Node root;
-    root["features"]["kde_autohide_on_battery"] = false;
-    root["features"]["auto_panel_overdrive"] = true;
-    root["features"]["screen_refresh"] = false;
-    root["power"]["load_thresholds"]["low"] = m_thresholds.first;
+    try {
+        root = YAML::LoadFile(m_path.toStdString());
+        if (!root || !root.IsMap()) root = YAML::Node(YAML::NodeType::Map);
+    } catch (...) {
+        root = YAML::Node(YAML::NodeType::Map);
+    }
+
+    // Remove obsolete flat keys if they exist (legacy cleanup)
+    if (root["features"] && root["features"].IsMap()) {
+        auto& f = root["features"];
+        f.remove("kde_autohide_on_battery");
+        f.remove("auto_panel_overdrive");
+        f.remove("screen_refresh");
+    }
+
+    // Update only what this class owns
+    root["power"]["load_thresholds"]["low"]  = m_thresholds.first;
     root["power"]["load_thresholds"]["high"] = m_thresholds.second;
+
     YAML::Node arr(YAML::NodeType::Sequence);
     for (const auto& r : m_rules) {
         YAML::Node n;
-        n["name"] = r.name.toStdString();
-        n["process_name"] = r.process_name.toStdString();
-        n["active_profile"] = r.active_profile.toStdString();
-        n["priority"] = r.priority;
+        n["name"]          = r.name.toStdString();
+        n["process_name"]  = r.process_name.toStdString();
+        n["active_profile"]= r.active_profile.toStdString();
+        n["priority"]      = r.priority;
         arr.push_back(n);
     }
     root["process_overrides"] = arr;
+
     try {
-        m_saving = true;  // tell watcher to ignore the next change
+        m_saving = true;
         std::ofstream fout(m_path.toStdString());
         fout << root;
         fout.flush();
-        // some editors replace the file; make sure watcher still tracks it
-        if (!m_watch.files().contains(m_path))
-            m_watch.addPath(m_path);
+        if (!m_watch.files().contains(m_path)) m_watch.addPath(m_path);
         m_saving = false;
         return true;
     } catch (...) {
