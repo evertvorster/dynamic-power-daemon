@@ -93,30 +93,31 @@ bool Config::save() const {
     YAML::Node root;
     try {
         root = YAML::LoadFile(m_path.toStdString());
-        if (!root || !root.IsMap()) root = YAML::Node(YAML::NodeType::Map);
+        if (!root || !root.IsMap())
+            root = YAML::Node(YAML::NodeType::Map);
     } catch (...) {
         root = YAML::Node(YAML::NodeType::Map);
     }
 
     // Remove obsolete flat keys if they exist (legacy cleanup)
-    if (root["features"] && root["features"].IsMap()) {
-        auto& f = root["features"];
-        f.remove("kde_autohide_on_battery");
-        f.remove("auto_panel_overdrive");
-        f.remove("screen_refresh");
+    YAML::Node f = root["features"];   // NOTE: handle, not a reference to a temporary
+    if (f && f.IsMap()) {
+        try { f.remove("kde_autohide_on_battery"); } catch (...) {}
+        try { f.remove("auto_panel_overdrive"); } catch (...) {}
+        try { f.remove("screen_refresh"); } catch (...) {}
     }
 
-    // Update only what this class owns
+    // Update only what Config owns
     root["power"]["load_thresholds"]["low"]  = m_thresholds.first;
     root["power"]["load_thresholds"]["high"] = m_thresholds.second;
 
     YAML::Node arr(YAML::NodeType::Sequence);
     for (const auto& r : m_rules) {
         YAML::Node n;
-        n["name"]          = r.name.toStdString();
-        n["process_name"]  = r.process_name.toStdString();
-        n["active_profile"]= r.active_profile.toStdString();
-        n["priority"]      = r.priority;
+        n["name"]           = r.name.toStdString();
+        n["process_name"]   = r.process_name.toStdString();
+        n["active_profile"] = r.active_profile.toStdString();
+        n["priority"]       = r.priority;
         arr.push_back(n);
     }
     root["process_overrides"] = arr;
