@@ -5,6 +5,7 @@
 #include <QStringList>
 
 class QVBoxLayout;
+class QWidget;
 class QGridLayout;
 class QToolButton;
 class QLabel;
@@ -43,6 +44,7 @@ private:
     
     // UI state
     QVBoxLayout* m_outer = nullptr;
+    QWidget*     m_capsContainer = nullptr;
     QGridLayout* m_profilesGrid = nullptr;
     // profile -> (capKey -> selectedMode)
     QMap<QString, QMap<QString, QString>> m_selection;

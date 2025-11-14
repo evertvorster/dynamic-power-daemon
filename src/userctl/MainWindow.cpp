@@ -58,7 +58,7 @@ public:
         // ─────────────────────────────────────────────────────────────────────
         // User Power Saving Features (own section, own Save button) — TOP
         // ─────────────────────────────────────────────────────────────────────
-        auto* userGroup = new QGroupBox("User Power Saving Features  —  Setting on AC  —  Setting on BAT", this);
+        auto* userGroup = new QGroupBox("User Power Saving Features", this);
         // Center the group title and enlarge it (no per-row headers needed)
         userGroup->setStyleSheet(
             "QGroupBox::title {"
@@ -70,6 +70,26 @@ public:
             "}"
         );
         auto* userLay = new QVBoxLayout(userGroup);
+
+        // NEW: header row for AC/BAT columns
+        auto* headerRow = new QWidget(userGroup);
+        auto* hh = new QHBoxLayout(headerRow);
+        hh->setContentsMargins(0,0,0,0);
+
+        // Spacer over the checkbox column
+        hh->addSpacing(24);
+
+        // Spacer over the description/status column
+        hh->addStretch(1);
+
+        auto* acHeader  = new QLabel("On AC        ", headerRow);
+        auto* batHeader = new QLabel("On Battery   ", headerRow);
+        acHeader->setAlignment(Qt::AlignCenter);
+        batHeader->setAlignment(Qt::AlignCenter);
+        hh->addWidget(acHeader);
+        hh->addWidget(batHeader);
+
+        userLay->addWidget(headerRow);
 
         m_userWidget = new UserFeaturesWidget(userGroup);
         userLay->addWidget(m_userWidget);
@@ -128,9 +148,9 @@ public:
         // Make header columns match data-row columns
         hgrid->setColumnStretch(0, 0); // [✓] checkbox
         hgrid->setColumnStretch(1, 0); // [✓] root button
-        hgrid->setColumnStretch(2, 3); // [→] Path (wide)
-        hgrid->setColumnStretch(3, 2); // [→] AC value
-        hgrid->setColumnStretch(4, 2); // [→] Battery value
+        hgrid->setColumnStretch(2, 8); // [→] Path (wide)
+        hgrid->setColumnStretch(3, 1); // [→] AC value
+        hgrid->setColumnStretch(4, 1); // [→] Battery value
         hgrid->setColumnStretch(5, 0); // [✓] delete button
         // Ensure header's first two columns match the row widgets
         QCheckBox chkProbe;                           // checkbox width probe
@@ -152,7 +172,7 @@ public:
         lblAc->setIndent(0); lblAc->setMargin(0); lblAc->setContentsMargins(0,0,0,0);
         lblAc->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         hgrid->addWidget(lblAc, 0, c++);
-        auto* lblBat = new QLabel("Battery value", header);
+        auto* lblBat = new QLabel("BAT value", header);
         lblBat->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         lblBat->setIndent(0); lblBat->setMargin(0); lblBat->setContentsMargins(0,0,0,0);
         lblBat->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -247,9 +267,9 @@ private:
         // Match header column model exactly
         grid->setColumnStretch(0, 0); // checkbox
         grid->setColumnStretch(1, 0); // root button
-        grid->setColumnStretch(2, 3); // Path
-        grid->setColumnStretch(3, 2); // AC value
-        grid->setColumnStretch(4, 2); // Battery value
+        grid->setColumnStretch(2, 8); // Path
+        grid->setColumnStretch(3, 1); // AC value
+        grid->setColumnStretch(4, 1); // Battery value
         grid->setColumnStretch(5, 0); // delete button
         int col = 0;
 

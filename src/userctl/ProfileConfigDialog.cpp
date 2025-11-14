@@ -15,11 +15,21 @@
 #include <QScrollArea>
 #include <QLineEdit>
 #include <QRegularExpression>
+#include <QFontMetrics>
 
 #include <yaml-cpp/yaml.h>
 
 static QStringList capKeys() {
     return {"cpu_governor","epp_profile", "acpi_platform_profile","aspm"};
+}
+
+// Human-friendly labels for capability keys
+static QString capDisplayName(const QString& key) {
+    if (key == "cpu_governor")         return "CPU governor";
+    if (key == "epp_profile")          return "CPU EPP policy";
+    if (key == "acpi_platform_profile")return "ACPI profile";
+    if (key == "aspm")                 return "PCIe ASPM";
+    return key;
 }
 
 ProfileConfigDialog::ProfileConfigDialog(QWidget* parent, const QString& configPath)
@@ -31,8 +41,13 @@ ProfileConfigDialog::ProfileConfigDialog(QWidget* parent, const QString& configP
     m_outer = new QVBoxLayout(this);
 
     loadYaml();            // fills m_root
-    buildCapabilitiesUI(); // fills m_caps
-    buildProfilesUI();     // builds grid + dropdowns
+    buildCapabilitiesUI(); // fills m_caps and builds m_capsContainer (but not added)
+    buildProfilesUI();     // builds grid + dropdowns (goes on top)
+
+    // Now add the capabilities block underneath
+    if (m_capsContainer) {
+        m_outer->addWidget(m_capsContainer);
+    }
 
     // Buttons row
     auto* btnRow = new QHBoxLayout();
@@ -61,11 +76,15 @@ void ProfileConfigDialog::loadYaml() {
 }
 
 void ProfileConfigDialog::buildCapabilitiesUI() {
-    auto* groupLabel = new QLabel(QString("Detected Capabilities — %1").arg(m_configPath), this);
-    groupLabel->setStyleSheet("font-weight: 600; margin: 6px 0;");
-    m_outer->addWidget(groupLabel);
+    // Container so we can position this block as a unit
+    m_capsContainer = new QWidget(this);
+    auto* v = new QVBoxLayout(m_capsContainer);
 
-    QWidget* area = new QWidget(this);
+    auto* groupLabel = new QLabel(QString("Detected Capabilities — %1").arg(m_configPath), m_capsContainer);
+    groupLabel->setStyleSheet("font-weight: 600; margin-top: 12px;");
+    v->addWidget(groupLabel);
+
+    QWidget* area = new QWidget(m_capsContainer);
     auto* grid = new QGridLayout(area);
     grid->setHorizontalSpacing(8);
     grid->setVerticalSpacing(4);
@@ -100,7 +119,7 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
         m_caps.insert(key, ci);
 
         // Section header
-        auto* sect = new QLabel(QString("• %1").arg(key), area);
+        auto* sect = new QLabel(QString("• %1").arg(capDisplayName(key)), area);
         sect->setStyleSheet("font-weight: 600;");
         grid->addWidget(sect, row++, 0, 1, 4);
 
@@ -168,7 +187,8 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
         connect(optCheck, &QPushButton::clicked,       this, checkOptions);
     }
 
-    m_outer->addWidget(area);
+    // Attach the capabilities grid into the container, not directly to m_outer
+    v->addWidget(area);
 
     // Initial validation + options load
     for (const auto& key : capKeys()) {
@@ -199,11 +219,25 @@ void ProfileConfigDialog::buildProfilesUI() {
     QWidget* area = new QWidget(this);
     m_profilesGrid = new QGridLayout(area);
 
+    // Compute minimum button widths per capability column based on modes
+    QFontMetrics fm(font());
+    QMap<QString, int> columnMinWidth;
+    for (const auto& capKey : capKeys()) {
+        int w = fm.horizontalAdvance("<unset>");
+        const auto& cap = m_caps.value(capKey);
+        for (const auto& m : cap.modes) {
+            int mw = fm.horizontalAdvance(m);
+            if (mw > w) w = mw;
+        }
+        // some padding for the button frame and arrow
+        columnMinWidth.insert(capKey, w + fm.horizontalAdvance("   "));
+    }
+
     // Header
     m_profilesGrid->addWidget(new QLabel("Profile"), 0, 0);
     int col = 1;
     for (const auto& key : capKeys()) {
-        m_profilesGrid->addWidget(new QLabel(key), 0, col++);
+        m_profilesGrid->addWidget(new QLabel(capDisplayName(key)), 0, col++);
     }
 
     // Load initial selections from YAML, fallback to first mode
@@ -226,7 +260,16 @@ void ProfileConfigDialog::buildProfilesUI() {
             auto* btn = new QToolButton(area);
             btn->setText(current.isEmpty() ? "<unset>" : current);
             btn->setPopupMode(QToolButton::InstantPopup);
+            btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            btn->setMinimumWidth(columnMinWidth.value(capKey, btn->sizeHint().width()));
             updateButtonMenu(profile, capKey, btn);
+
+            m_profilesGrid->addWidget(
+                btn,
+                row,
+                m_profilesGrid->columnCount() - (int)capKeys().size() + capKeys().indexOf(capKey)
+            );
+            btnMap.insert(capKey, btn);
 
             m_profilesGrid->addWidget(btn, row, m_profilesGrid->columnCount() - (int)capKeys().size() + capKeys().indexOf(capKey));
             btnMap.insert(capKey, btn);
