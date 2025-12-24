@@ -291,6 +291,8 @@ bool Daemon::setProfile(const QString& internalName)
         namespace fs = std::filesystem;
         fs::path p(path);
         bool all_ok = true;
+        bool did_write = false;
+        bool found_policy = false;
         std::error_code ec;
 
         if (p.filename() == "scaling_governor") {
@@ -307,11 +309,14 @@ bool Daemon::setProfile(const QString& internalName)
                                 std::all_of(name.begin() + 6, name.end(),
                                             [](unsigned char ch){ return std::isdigit(ch); });
                 if (!is_policyN) continue;
+                found_policy = true;
                 fs::path target = e.path() / "scaling_governor";
                 all_ok &= write_value(target.string(), value, "cpu_governor");
+                did_write = true;
             }
-            return all_ok;
-
+            if (found_policy) {
+                return all_ok && did_write;
+            }
 
             // Case B: /sys/.../cpu/cpuX/cpufreq/scaling_governor  → write to all cpuN/cpufreq/scaling_governor
             fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
@@ -333,8 +338,9 @@ bool Daemon::setProfile(const QString& internalName)
                 if (!is_cpuN) continue;
                 fs::path target = e.path() / "cpufreq" / "scaling_governor";
                 all_ok &= write_value(target.string(), value, "cpu_governor");
+                did_write = true;
             }
-            return all_ok;
+            return all_ok && did_write;
 
         }
 
