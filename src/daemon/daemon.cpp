@@ -355,6 +355,8 @@ bool Daemon::setProfile(const QString& internalName)
         namespace fs = std::filesystem;
         fs::path p(path);
         bool all_ok = true;
+        bool did_write = false;
+        bool found_policy = false;
         std::error_code ec;
         if (p.filename() == "energy_performance_preference") {
             fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
@@ -370,11 +372,14 @@ bool Daemon::setProfile(const QString& internalName)
                                 std::all_of(name.begin() + 6, name.end(),
                                             [](unsigned char ch){ return std::isdigit(ch); });
                 if (!is_policyN) continue;
+                found_policy = true;
                 fs::path target = e.path() / "energy_performance_preference";
                 all_ok &= write_value(target.string(), value, "epp_profile");
+                did_write = true;
             }
-            if (all_ok)
-                return all_ok;
+            if (found_policy) {
+                return all_ok && did_write;
+            }
 
 
             // Case B: /sys/.../cpu/cpuX/cpufreq/energy_performance_preference  → write to all cpuN/cpufreq/energy_performance_preference
@@ -384,7 +389,7 @@ bool Daemon::setProfile(const QString& internalName)
             fs::path probe = cpu_root / "cpu0" / "cpufreq" / "energy_performance_preference";
             if (!fs::exists(probe, ec)) {
                 // If cpu0 path isn't present, fall back to the single configured node
-                return write_value(path, value, "energy_performance_preference");
+                return write_value(path, value, "epp_profile");
             }
 
             for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
@@ -397,9 +402,9 @@ bool Daemon::setProfile(const QString& internalName)
                 if (!is_cpuN) continue;
                 fs::path target = e.path() / "cpufreq" / "energy_performance_preference";
                 all_ok &= write_value(target.string(), value, "epp_profile");
+                did_write = true;
             }
-            if (all_ok)
-               return all_ok;
+            return all_ok && did_write;
 
         }
 
