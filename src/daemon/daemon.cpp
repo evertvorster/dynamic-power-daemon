@@ -279,6 +279,21 @@ bool Daemon::setProfile(const QString& internalName)
         return true;
     };
 
+    // Helper to read a single line from a sysfs file (best-effort). Returns empty on failure.
+    auto read_sysfs_line = [&](const std::string &path) -> std::string {
+        if (path.empty()) return {};
+        std::ifstream ifs(path);
+        if (!ifs.is_open()) return {};
+        std::string line;
+        std::getline(ifs, line);
+        // trim trailing whitespace/newlines
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || std::isspace(static_cast<unsigned char>(line.back())))) {
+            line.pop_back();
+        }
+        return line;
+    };
+
+
     // Treat "Disabled" (case-insensitive) as a no-op for this knob
     auto is_disabled = [](const std::string& v) -> bool {
         return QString::fromStdString(v).compare("disabled", Qt::CaseInsensitive) == 0;
@@ -374,8 +389,21 @@ bool Daemon::setProfile(const QString& internalName)
                 if (!is_policyN) continue;
                 found_policy = true;
                 fs::path target = e.path() / "energy_performance_preference";
-                all_ok &= write_value(target.string(), value, "epp_profile");
-                did_write = true;
+                bool w = write_value(target.string(), value, "epp_profile");
+                if (!w) {
+                    fs::path avail = e.path() / "energy_performance_available_preferences";
+                    fs::path gov   = e.path() / "scaling_governor";
+                    const std::string avail_s = read_sysfs_line(avail.string());
+                    const std::string gov_s   = read_sysfs_line(gov.string());
+                    log_error(QString("setProfile(): EPP request '%1' rejected at %2 (governor=%3; available=%4)")
+                              .arg(QString::fromStdString(value),
+                                   QString::fromStdString(target.string()),
+                                   QString::fromStdString(gov_s.empty() ? std::string("<unknown>") : gov_s),
+                                   QString::fromStdString(avail_s.empty() ? std::string("<unknown>") : avail_s))
+                              .toUtf8().constData());
+                }
+                all_ok &= w;
+                if (w) did_write = true;
             }
             if (found_policy) {
                 return all_ok && did_write;
@@ -401,8 +429,21 @@ bool Daemon::setProfile(const QString& internalName)
                                         [](unsigned char ch){ return std::isdigit(ch); });
                 if (!is_cpuN) continue;
                 fs::path target = e.path() / "cpufreq" / "energy_performance_preference";
-                all_ok &= write_value(target.string(), value, "epp_profile");
-                did_write = true;
+                bool w = write_value(target.string(), value, "epp_profile");
+                if (!w) {
+                    fs::path avail = e.path() / "cpufreq" / "energy_performance_available_preferences";
+                    fs::path gov   = e.path() / "cpufreq" / "scaling_governor";
+                    const std::string avail_s = read_sysfs_line(avail.string());
+                    const std::string gov_s   = read_sysfs_line(gov.string());
+                    log_error(QString("setProfile(): EPP request '%1' rejected at %2 (governor=%3; available=%4)")
+                              .arg(QString::fromStdString(value),
+                                   QString::fromStdString(target.string()),
+                                   QString::fromStdString(gov_s.empty() ? std::string("<unknown>") : gov_s),
+                                   QString::fromStdString(avail_s.empty() ? std::string("<unknown>") : avail_s))
+                              .toUtf8().constData());
+                }
+                all_ok &= w;
+                if (w) did_write = true;
             }
             return all_ok && did_write;
 
