@@ -68,6 +68,8 @@ target_sources(dynamic_power_user PRIVATE
     userctl/features/FeatureBase.h
     userctl/features/FeatureRegistry.cpp
     userctl/features/FeatureRegistry.h
+    userctl/features/RootFeatureDetector.cpp
+    userctl/features/RootFeatureDetector.h
     userctl/features/ScreenRefreshFeature.cpp
     userctl/features/ScreenRefreshFeature.h
     userctl/features/RootCompositeFeature.cpp

@@ -1,22 +1,34 @@
 // File: src/userctl/features/RootCompositeFeature.h
 #pragma once
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 namespace dp::features {
 
 class RootCompositeFeature {
 public:
-    struct Item {
+    struct Node {
+        QString id;
+        QString parentId;
+        QString absPath;
+        QString label;
+        QString nodeClass;
         bool enabled = false;
-        QString absPath;   // absolute path like "/sys/...." or "/proc/..."
-        QString ac;        // value to write on AC
-        QString battery;   // value to write on Battery
+        QString acValue;
+        QString batteryValue;
+        QString policyScope = QStringLiteral("override");
+        bool supported = true;
+        bool detected = false;
+        bool legacy = false;
+        bool isGroup = false;
+        QString currentValue;
+        QStringList allowedValues;
     };
     struct State {
         bool disclaimerAccepted = false;
-        QString acceptedAt;        // ISO string if present
-        QVector<Item> items;       // ordered as in file
+        QString acceptedAt;
+        QVector<Node> nodes;
     };
 
     explicit RootCompositeFeature(const QString& etcPath = QStringLiteral("/etc/dynamic_power.yaml"));
