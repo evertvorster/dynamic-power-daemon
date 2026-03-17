@@ -22,6 +22,7 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
 #include <QLayoutItem>
 #include <QMap>
 #include <QMenu>
@@ -117,6 +118,16 @@ public:
         groupLay->addLayout(disclaimBox);
         connect(m_confirmBtn, &QPushButton::clicked, this, [this] { showDisclaimer(); });
         connect(m_advancedToggle, &QCheckBox::toggled, this, [this](bool) { rebuildTree(); });
+
+        auto* filterRow = new QHBoxLayout();
+        auto* filterLabel = new QLabel("Search", this);
+        filterRow->addWidget(filterLabel, 0);
+        m_filterEdit = new QLineEdit(this);
+        m_filterEdit->setClearButtonEnabled(true);
+        m_filterEdit->setPlaceholderText("Filter targets...");
+        filterRow->addWidget(m_filterEdit, 1);
+        groupLay->addLayout(filterRow);
+        connect(m_filterEdit, &QLineEdit::textChanged, this, [this](const QString&) { rebuildTree(); });
 
         auto* splitter = new QSplitter(Qt::Horizontal, group);
         m_tree = new QTreeWidget(splitter);
@@ -223,6 +234,7 @@ private:
     QPushButton* m_saveBtn{};
     QPushButton* m_confirmBtn{};
     QCheckBox* m_advancedToggle{};
+    QLineEdit* m_filterEdit{};
     QLabel* m_confirmNote{};
     UserFeaturesWidget* m_userWidget{};
     QPushButton* m_userSaveBtn{};
@@ -265,6 +277,55 @@ private slots:
         if (node.id == QStringLiteral("group:devices")) return true;
         if (node.nodeClass != QStringLiteral("device")) return true;
         return isPciNode(node);
+    }
+
+    QString filterText() const {
+        return m_filterEdit ? m_filterEdit->text().trimmed() : QString();
+    }
+
+    bool nodeMatchesFilter(const RootNode& node, const QString& needle) const {
+        if (needle.isEmpty()) return true;
+        const Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+        if (node.label.contains(needle, cs)) return true;
+        if (node.id.contains(needle, cs)) return true;
+        if (node.absPath.contains(needle, cs)) return true;
+        if (!node.currentValue.isEmpty() && node.currentValue.contains(needle, cs)) return true;
+        return false;
+    }
+
+    bool shouldShowNode(const RootNode& node, const QString& needle) const {
+        if (!isVisibleNode(node)) return false;
+        if (needle.isEmpty()) return true;
+        if (nodeMatchesFilter(node, needle)) return true;
+        for (const auto& child : m_state.nodes) {
+            if (child.parentId != node.id) continue;
+            if (shouldShowNode(child, needle)) return true;
+        }
+        return false;
+    }
+
+    bool subtreeHasDirectMatch(const RootNode& node, const QString& needle) const {
+        if (needle.isEmpty()) return false;
+        for (const auto& child : m_state.nodes) {
+            if (child.parentId != node.id) continue;
+            if (!shouldShowNode(child, needle)) continue;
+            if (nodeMatchesFilter(child, needle) || subtreeHasDirectMatch(child, needle)) return true;
+        }
+        return false;
+    }
+
+    QVector<const RootNode*> visibleEditableDescendants(const QString& parentId, const QString& needle) const {
+        QVector<const RootNode*> out;
+        std::function<void(const QString&)> walk = [&](const QString& id) {
+            for (const auto& child : m_state.nodes) {
+                if (child.parentId != id) continue;
+                if (!shouldShowNode(child, needle)) continue;
+                if (!child.isGroup) out.push_back(&child);
+                walk(child.id);
+            }
+        };
+        walk(parentId);
+        return out;
     }
 
     void updateConfirmUI() {
@@ -329,6 +390,14 @@ private slots:
         return path;
     }
 
+    QString nodePathForOrdering(const RootNode& node) const {
+        if (!node.absPath.isEmpty()) return node.absPath;
+        if (node.id.startsWith(QStringLiteral("segment:"))) {
+            return node.id.mid(QStringLiteral("segment:").size());
+        }
+        return {};
+    }
+
     QStringList detectKernelOptions(const QString& path) const {
         QFile f(path);
         if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
@@ -366,6 +435,49 @@ private slots:
             return false;
         }
         return true;
+    }
+
+    bool isRealControlLeaf(const RootNode& node) const {
+        return !node.isGroup && !node.absPath.isEmpty() && node.absPath.endsWith(QStringLiteral("/power/control"));
+    }
+
+    bool isBulkEditableDeviceNode(const RootNode& node) const {
+        return node.nodeClass == QStringLiteral("device") && node.isGroup;
+    }
+
+    QVector<RootNode*> descendantControlLeaves(const QString& parentId) {
+        QVector<RootNode*> out;
+        std::function<void(const QString&)> walk = [&](const QString& id) {
+            for (auto& child : m_state.nodes) {
+                if (child.parentId != id) continue;
+                if (isRealControlLeaf(child)) out.push_back(&child);
+                walk(child.id);
+            }
+        };
+        walk(parentId);
+        return out;
+    }
+
+    QVector<const RootNode*> descendantControlLeavesConst(const QString& parentId) const {
+        QVector<const RootNode*> out;
+        std::function<void(const QString&)> walk = [&](const QString& id) {
+            for (const auto& child : m_state.nodes) {
+                if (child.parentId != id) continue;
+                if (isRealControlLeaf(child)) out.push_back(&child);
+                walk(child.id);
+            }
+        };
+        walk(parentId);
+        return out;
+    }
+
+    void applyBulkEditToLeaves(const RootNode& source, bool enabled, const QString& acValue, const QString& batteryValue) {
+        for (RootNode* leaf : descendantControlLeaves(source.id)) {
+            leaf->policyScope = QStringLiteral("override");
+            leaf->enabled = enabled;
+            leaf->acValue = acValue;
+            leaf->batteryValue = batteryValue;
+        }
     }
 
     bool effectiveEnabled(const RootNode& node) const {
@@ -505,6 +617,7 @@ private slots:
         m_updatingUi = true;
         m_tree->clear();
         m_treeItems.clear();
+        const QString needle = filterText();
 
         bool hasLegacyChildren = false;
         for (const auto& node : m_state.nodes) {
@@ -516,7 +629,7 @@ private slots:
 
         for (const auto& node : m_state.nodes) {
             if (node.id == QStringLiteral("group:legacy") && !hasLegacyChildren) continue;
-            if (!isVisibleNode(node)) continue;
+            if (!shouldShowNode(node, needle)) continue;
             auto* item = new QTreeWidgetItem();
             item->setText(0, node.label);
             item->setText(1, node.isGroup ? QString() : (node.currentValue.isEmpty() ? "-" : node.currentValue));
@@ -531,13 +644,64 @@ private slots:
             }
         }
 
+        auto sortChildren = [&](auto&& self, QTreeWidgetItem* parentItem) -> void {
+            if (!parentItem) return;
+            const RootNode* parentNode = nodeById(parentItem->data(0, Qt::UserRole).toString());
+            auto children = parentItem->takeChildren();
+            std::stable_sort(children.begin(), children.end(),
+                             [this, parentNode](QTreeWidgetItem* a, QTreeWidgetItem* b) {
+                const RootNode* nodeA = nodeById(a->data(0, Qt::UserRole).toString());
+                const RootNode* nodeB = nodeById(b->data(0, Qt::UserRole).toString());
+                if (!parentNode || !nodeA || !nodeB) return false;
+
+                const QString parentPath = nodePathForOrdering(*parentNode);
+                const bool aIsOwnRuntime = !parentPath.isEmpty() &&
+                    nodeA->absPath == parentPath + QStringLiteral("/power/control");
+                const bool bIsOwnRuntime = !parentPath.isEmpty() &&
+                    nodeB->absPath == parentPath + QStringLiteral("/power/control");
+                if (aIsOwnRuntime != bIsOwnRuntime) return aIsOwnRuntime;
+                return false;
+            });
+            parentItem->addChildren(children);
+            for (int i = 0; i < parentItem->childCount(); ++i) self(self, parentItem->child(i));
+        };
+
+        for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
+            sortChildren(sortChildren, m_tree->topLevelItem(i));
+        }
+
         refreshTreeState();
         adjustTreeColumns();
         m_tree->collapseAll();
         for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
-            m_tree->topLevelItem(i)->setExpanded(true);
+            auto* top = m_tree->topLevelItem(i);
+            top->setExpanded(true);
+            if (!needle.isEmpty()) {
+                std::function<void(QTreeWidgetItem*)> expandMatches = [&](QTreeWidgetItem* item) {
+                    if (!item) return;
+                    const RootNode* node = nodeById(item->data(0, Qt::UserRole).toString());
+                    if (node && subtreeHasDirectMatch(*node, needle)) item->setExpanded(true);
+                    for (int j = 0; j < item->childCount(); ++j) expandMatches(item->child(j));
+                };
+                expandMatches(top);
+            }
         }
-        if (m_tree->topLevelItemCount() > 0) m_tree->setCurrentItem(m_tree->topLevelItem(0));
+        if (m_tree->topLevelItemCount() > 0) {
+            QTreeWidgetItem* firstMatch = nullptr;
+            if (!needle.isEmpty()) {
+                std::function<void(QTreeWidgetItem*)> findFirst = [&](QTreeWidgetItem* item) {
+                    if (!item || firstMatch) return;
+                    const RootNode* node = nodeById(item->data(0, Qt::UserRole).toString());
+                    if (node && nodeMatchesFilter(*node, needle)) {
+                        firstMatch = item;
+                        return;
+                    }
+                    for (int j = 0; j < item->childCount(); ++j) findFirst(item->child(j));
+                };
+                for (int i = 0; i < m_tree->topLevelItemCount() && !firstMatch; ++i) findFirst(m_tree->topLevelItem(i));
+            }
+            m_tree->setCurrentItem(firstMatch ? firstMatch : m_tree->topLevelItem(0));
+        }
         if (m_userWidget) m_userWidget->refreshLiveStatus();
         m_updatingUi = false;
     }
@@ -571,25 +735,28 @@ private slots:
     }
 
     Qt::CheckState subtreeCheckState(const RootNode& node) const {
+        const QString needle = filterText();
         bool anyEnabled = false;
         bool allEnabled = true;
-        bool mixedPolicy = false;
+        bool sawLeaf = false;
 
         std::function<void(const RootNode&)> walk = [&](const RootNode& current) {
             if (!current.isGroup) {
                 const bool enabled = effectiveEnabled(current);
+                sawLeaf = true;
                 anyEnabled |= enabled;
                 allEnabled &= enabled;
             }
             for (const auto& child : m_state.nodes) {
                 if (child.parentId != current.id) continue;
-                if (child.policyScope == QStringLiteral("override")) mixedPolicy = true;
+                if (!needle.isEmpty() && !shouldShowNode(child, needle)) continue;
                 walk(child);
             }
         };
         walk(node);
+        if (!sawLeaf) return Qt::Unchecked;
         if (!anyEnabled) return Qt::Unchecked;
-        if (allEnabled && !mixedPolicy) return Qt::Checked;
+        if (allEnabled) return Qt::Checked;
         return Qt::PartiallyChecked;
     }
 
@@ -629,10 +796,55 @@ private slots:
             return;
         }
 
+        const bool bulkNode = isBulkEditableDeviceNode(*node);
+        const bool aggregateNode = node->isGroup;
         const RootNode* parent = parentNode(*node);
-        const bool canInherit = parent != nullptr;
-        const bool override = !canInherit || node->policyScope != QStringLiteral("inherit");
-        const QStringList options = effectiveOptions(*node);
+        const bool canInherit = !aggregateNode && parent != nullptr;
+        bool override = !canInherit || node->policyScope != QStringLiteral("inherit");
+        QString enabledTextAc;
+        QString enabledTextBat;
+        bool enabled = node->enabled;
+        QStringList options = effectiveOptions(*node);
+
+        if (aggregateNode) {
+            QVector<const RootNode*> leaves;
+            if (bulkNode) leaves = descendantControlLeavesConst(node->id);
+            else leaves = visibleEditableDescendants(node->id, filterText());
+            if (!leaves.isEmpty()) {
+                enabled = true;
+                bool first = true;
+                bool sameEnabled = true;
+                bool sameAc = true;
+                bool sameBat = true;
+                options = effectiveOptions(*leaves.first());
+                for (const RootNode* leaf : leaves) {
+                    if (first) {
+                        enabled = leaf->enabled;
+                        enabledTextAc = leaf->acValue;
+                        enabledTextBat = leaf->batteryValue;
+                        first = false;
+                        continue;
+                    }
+                    sameEnabled &= (leaf->enabled == enabled);
+                    sameAc &= (leaf->acValue == enabledTextAc);
+                    sameBat &= (leaf->batteryValue == enabledTextBat);
+                    const QStringList childOptions = effectiveOptions(*leaf);
+                    QStringList next;
+                    for (const QString& value : options) {
+                        if (childOptions.contains(value) && !next.contains(value)) next.push_back(value);
+                    }
+                    options = next;
+                }
+                override = true;
+                if (!sameEnabled) enabled = false;
+                if (!sameAc) enabledTextAc.clear();
+                if (!sameBat) enabledTextBat.clear();
+            }
+        } else {
+            enabled = node->enabled;
+            enabledTextAc = override ? node->acValue : effectiveValue(*node, false);
+            enabledTextBat = override ? node->batteryValue : effectiveValue(*node, true);
+        }
 
         m_labelValue->setText(node->label);
         m_classValue->setText(QString("Class: %1").arg(node->nodeClass));
@@ -640,9 +852,9 @@ private slots:
         m_overrideCheck->setEnabled(canInherit);
         m_overrideCheck->setChecked(override);
         m_enabledCheck->setEnabled(override || !canInherit);
-        m_enabledCheck->setChecked(node->enabled);
-        populateCombo(m_acCombo, options, override ? node->acValue : effectiveValue(*node, false));
-        populateCombo(m_batCombo, options, override ? node->batteryValue : effectiveValue(*node, true));
+        m_enabledCheck->setChecked(enabled);
+        populateCombo(m_acCombo, options, enabledTextAc);
+        populateCombo(m_batCombo, options, enabledTextBat);
         m_acCombo->setEnabled(override || !canInherit);
         m_batCombo->setEnabled(override || !canInherit);
         const bool kernelGroup = node->id.startsWith("group:kernel");
@@ -656,8 +868,20 @@ private slots:
         if (m_updatingUi || column != 0 || !item) return;
         RootNode* node = nodeById(item->data(0, Qt::UserRole).toString());
         if (!node) return;
-        node->policyScope = QStringLiteral("override");
-        node->enabled = item->checkState(0) == Qt::Checked;
+        const bool enabled = item->checkState(0) == Qt::Checked;
+        if (isBulkEditableDeviceNode(*node)) {
+            QString acValue;
+            QString batteryValue;
+            const QVector<const RootNode*> leaves = descendantControlLeavesConst(node->id);
+            if (!leaves.isEmpty()) {
+                acValue = leaves.first()->acValue;
+                batteryValue = leaves.first()->batteryValue;
+            }
+            applyBulkEditToLeaves(*node, enabled, acValue, batteryValue);
+        } else {
+            node->policyScope = QStringLiteral("override");
+            node->enabled = enabled;
+        }
         refreshTreeState();
         if (m_tree->currentItem() == item) loadInspector(item);
     }
@@ -666,6 +890,16 @@ private slots:
         if (m_updatingUi) return;
         RootNode* node = selectedNode();
         if (!node) return;
+
+        if (isBulkEditableDeviceNode(*node)) {
+            applyBulkEditToLeaves(*node,
+                                  m_enabledCheck->isChecked(),
+                                  m_acCombo->currentText().trimmed(),
+                                  m_batCombo->currentText().trimmed());
+            refreshTreeState();
+            loadInspector(m_tree->currentItem());
+            return;
+        }
 
         const bool canInherit = parentNode(*node) != nullptr;
         node->policyScope = (!canInherit || m_overrideCheck->isChecked()) ? QStringLiteral("override")
@@ -750,6 +984,7 @@ private slots:
                                  "Saving is disabled until you click Confirm and agree to the disclaimer.");
             return;
         }
+        onInspectorChanged();
         dp::features::RootCompositeFeature composite(m_etcPath);
         m_state.disclaimerAccepted = m_disclaimerAccepted;
         m_state.acceptedAt = m_disclaimerAcceptedAt;
