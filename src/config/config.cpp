@@ -15,6 +15,9 @@ static const QString TEMPLATE_CONFIG_PATH = "/usr/share/dynamic-power/dynamic_po
 
 Settings Config::loadSettings(const QString& path) {
     Settings settings;
+    hardware = HardwareConfig{};
+    profiles.clear();
+    rootFeatures = RootFeaturesConfig{};
 
     // Step 1: Check if config exists
     if (!QFile::exists(path)) {

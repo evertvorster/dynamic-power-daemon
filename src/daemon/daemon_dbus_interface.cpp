@@ -35,12 +35,13 @@ bool DaemonDBusInterface::SetLoadThresholds(double low, double high) {
     log_debug(QString("SetLoadThresholds(%1, %2)").arg(low).arg(high).toUtf8().constData());
     auto *daemon = static_cast<Daemon*>(parent());
     daemon->setRequestedThresholds(low, high);
+    daemon->refreshState();
     return true;
 }
 
 bool DaemonDBusInterface::SetPollInterval(uint interval) {
-    log_info(QString("SetPollInterval(%1)").arg(interval).toUtf8().constData());
-    return true;
+    auto *daemon = qobject_cast<Daemon*>(parent());
+    return daemon && daemon->setPollInterval(interval);
 }
 
 bool DaemonDBusInterface::SetProfile(const QString& name, bool userRequested) {
@@ -52,5 +53,6 @@ bool DaemonDBusInterface::SetProfile(const QString& name, bool userRequested) {
     if (!daemon) return false;
 
     daemon->setRequestedProfile(name, userRequested);  // observational only
+    daemon->refreshState();
     return true;
 }

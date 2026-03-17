@@ -19,6 +19,8 @@ public:
     Daemon(const Thresholds &thresholds,  int graceSeconds, QObject *parent = nullptr);
     bool loadAvailableProfiles();
     bool setProfile(const QString& internalName);
+    bool setPollInterval(uint intervalMs);
+    void refreshState();
     QString m_requestedProfile;
     bool    m_userRequestedProfile = false;
     // getters.
@@ -49,7 +51,7 @@ private Q_SLOTS:
 
 private:
     Thresholds m_thresholds;              // Low/high thresholds from config
-    Thresholds m_actualThresholds;        // Low/high thresholds actually used. 
+    Thresholds m_actualThresholds;        // Low/high thresholds actually used.
     Thresholds m_requestedThresholds;     // Low/high thresholds requested from user.
     QMap<QString, QString> m_profileMap;  // Internal → actual DBus profile name
     QTimer* m_timer = nullptr;            // Polling timer for load average
@@ -69,4 +71,3 @@ private:
     DaemonDBusInterface* m_dbusInterface = nullptr; // Dbus comms with user class
     QFileSystemWatcher* m_configWatcher = nullptr;  // watches DEFAULT_CONFIG_PATH
 };
-

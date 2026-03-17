@@ -35,13 +35,8 @@ static QString toBatteryStateString(int s) {
 Daemon::Daemon(const Thresholds &thresholds, 
                 int graceSeconds,  
                 QObject *parent)
-    : QObject(parent), m_thresholds(thresholds)
+    : QObject(parent), m_thresholds(thresholds), m_actualThresholds(thresholds)
 {
-    // Connect to the new dbus interface for user
-    m_dbusInterface = new DaemonDBusInterface(this);
-    QDBusConnection::systemBus().registerObject("/org/dynamic_power", this, QDBusConnection::ExportAdaptors);
-    QDBusConnection::systemBus().registerService("org.dynamic_power.Daemon");
-
     // Connection to Upower
     bool upowerConnected = QDBusConnection::systemBus().connect(
         "org.freedesktop.UPower",
@@ -88,19 +83,17 @@ Daemon::Daemon(const Thresholds &thresholds,
         log_info("QTimer started for load average polling every 5s");
     }
 
-    // ✅ Register DBus object and name
+    // Register DBus object, service, and adaptor once.
     QDBusConnection bus = QDBusConnection::systemBus();
-    // Export our daemon object at a custom path
     if (!bus.registerObject("/org/dynamic_power/Daemon", this)) {
         log_error("Failed to register DBus object path");
     }
-    // Register service name 
     if (!bus.registerService("org.dynamic_power.Daemon")) {
         log_error("Failed to register DBus service name");
     }
-    // Attach the DBus adaptor to this object
-    new DaemonDBusInterface(this);
+    m_dbusInterface = new DaemonDBusInterface(this);
     log_info("DBus service org.dynamic_power.Daemon is now live");
+
     // load available power profiles
     if (!loadAvailableProfiles()) {
         log_warning("Warning: Failed to load available power profiles. Switching may not work.");
@@ -131,7 +124,7 @@ Daemon::Daemon(const Thresholds &thresholds,
     connect(m_configWatcher, &QFileSystemWatcher::fileChanged,
             this, &Daemon::onConfigFileChanged);
 
-    
+    refreshState();
 }
 
 void Daemon::handleUPowerDeviceChanged(const QDBusMessage &message) {
@@ -157,6 +150,9 @@ void Daemon::onConfigFileChanged(const QString &path)
 
     // Apply new thresholds immediately (requested overrides still win)
     m_thresholds = s.thresholds;
+    loadAvailableProfiles();
+    applyRootPowerTweaks();
+    refreshState();
     log_info(QString("New thresholds: low=%1 high=%2")
              .arg(m_thresholds.low).arg(m_thresholds.high).toUtf8().constData());
 
@@ -522,16 +518,26 @@ void Daemon::updatePowerSource()
 
 void Daemon::emitPowerStateChanged()
 {
-    // Emit via the adaptor we hold (registered at /org/dynamic_power)
     if (m_dbusInterface)
         Q_EMIT m_dbusInterface->PowerStateChanged();
+}
 
-    // Also emit explicitly on the second exported path (/org/dynamic_power/Daemon)
-    QDBusMessage sig = QDBusMessage::createSignal(
-        "/org/dynamic_power/Daemon",
-        "org.dynamic_power.Daemon",
-        "PowerStateChanged");
-    QDBusConnection::systemBus().send(sig);
+bool Daemon::setPollInterval(uint intervalMs)
+{
+    if (!m_timer || intervalMs < 5000) {
+        log_warning(QString("Rejected poll interval %1 ms (minimum is 5000 ms)")
+                    .arg(intervalMs).toUtf8().constData());
+        return false;
+    }
+
+    m_timer->setInterval(static_cast<int>(intervalMs));
+    log_info(QString("Updated poll interval to %1 ms").arg(intervalMs).toUtf8().constData());
+    return true;
+}
+
+void Daemon::refreshState()
+{
+    checkLoadAverage();
 }
 
 void Daemon::updateBatteryState()
