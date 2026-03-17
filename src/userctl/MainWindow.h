@@ -26,7 +26,6 @@ public:
     void refreshProcessButtons();
     void setPowerInfo(const QString& text);
     void setProcessMatchState(const QSet<QString>& matches, const QString& winnerLower);
-    void closeFeaturesDialogIfOpen();
 
 signals:
     void userOverrideSelected(const QString& mode, bool boss);

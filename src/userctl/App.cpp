@@ -51,7 +51,6 @@ void App::start() {
         if (now != m_lastOnBattery) {
             m_lastOnBattery = now;
             if (m_features) m_features->applyAll(now);              // apply user features only on AC↔BAT flip
-            if (m_mainWindow) m_mainWindow->closeFeaturesDialogIfOpen();
         }
         updateTrayFromState();
         if (m_mainWindow) m_mainWindow->setPowerInfo(m_power->summaryText());

@@ -101,7 +101,6 @@ public:
 
         outer->addWidget(userGroup);
         m_userWidget->load();
-        m_userWidget->refreshLiveStatus();
 
         auto* group = new QGroupBox("Root-required features (writes to /etc/dynamic_power.yaml)", this);
         auto* groupLay = new QVBoxLayout(group);
@@ -243,8 +242,13 @@ private:
     bool m_updatingUi = false;
 
 private slots:
-    void onDaemonPowerStateChanged() {
+    void refreshLiveState() {
         refreshCurrentValues();
+        if (m_userWidget) m_userWidget->refreshLiveStatus();
+    }
+
+    void onDaemonPowerStateChanged() {
+        refreshLiveState();
     }
 
     bool isPciNode(const RootNode& node) const {
@@ -534,6 +538,7 @@ private slots:
             m_tree->topLevelItem(i)->setExpanded(true);
         }
         if (m_tree->topLevelItemCount() > 0) m_tree->setCurrentItem(m_tree->topLevelItem(0));
+        if (m_userWidget) m_userWidget->refreshLiveStatus();
         m_updatingUi = false;
     }
 
@@ -962,10 +967,6 @@ void MainWindow::refreshProcessButtons() {
 
 void MainWindow::setPowerInfo(const QString& text) {
     m_powerLabel->setText(text);
-}
-
-void MainWindow::closeFeaturesDialogIfOpen() {
-    if (m_rootDialog) m_rootDialog->close();
 }
 
 #include "MainWindow.moc"
