@@ -534,11 +534,12 @@ private slots:
                 target.acValue = savedNode.acValue;
                 target.batteryValue = savedNode.batteryValue;
                 target.policyScope = savedNode.policyScope;
-                if (!savedNode.label.isEmpty()) target.label = savedNode.label;
+                if (!savedNode.label.isEmpty() && !isRealControlLeaf(target)) target.label = savedNode.label;
                 continue;
             }
 
             auto legacy = savedNode;
+            if (isRealControlLeaf(legacy)) legacy.label = QStringLiteral("Runtime Power Control");
             legacy.detected = false;
             legacy.legacy = true;
             if (legacy.parentId.isEmpty()) {
