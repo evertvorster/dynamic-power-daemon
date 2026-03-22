@@ -1,161 +1,182 @@
 # dynamic-power-daemon
 
-**Dynamic system performance tuning and power saving for Linux laptops and desktops** — responsive power profile switching, and configurable user overrides. Keeps your laptop in a low power state when you are not using it, and turns on the power when you are. 
+Dynamic system performance tuning and power saving for Linux laptops and desktops.
 
----
+`dynamic-power-daemon` combines a root-owned system daemon with a user session GUI. It switches between `performance`, `balanced`, and `powersave` based on load, power source, and user-defined process rules, and it can apply additional sysfs-based power-saving tweaks when AC or battery state changes.
 
-## 🧠 Overview
+## Overview
 
-`dynamic-power-daemon` is a lightweight power management suite for Linux systems that dynamically adjusts:
+The project has two parts:
 
-- **Adjustable CPU power profiles (performance, balanced, powersave)**
-- **Adjustable power saving features**
-- **Panel overdrive (Asus laptops)** <- Removed with a rewrite, will re-implement it
-- **Display refresh rates** <- Removed with a rewrite, will re-implement it
-- **Desktop panel auto-hide (KDE)** <- Coming soon!
+- `dynamic_power`: a system daemon started by systemd, running as root.
+- `dynamic_power_user`: a Qt tray application and control panel running in the user session.
 
-It monitors system load, power source, and running applications to deliver the optimal performance or power saving profile — automatically, or with user control. 
+The daemon is responsible for:
 
----
+- Monitoring system load
+- Watching AC/battery state through UPower
+- Applying profile-specific hardware settings
+- Applying optional root-level sysfs tweaks
+- Exposing status and control over D-Bus
 
-## ⚙️ Architecture
+The user application is responsible for:
 
-- **System Daemon** (`dynamic_power`) — runs as root via systemd, monitors load and power source, applies profiles.
-- **User Program** (`dynamic_power_user`) — monitors user processes, sends override requests via DBus. Provides a gui and the controls to your system. You can watch system 
-load in real time, and make adjustments to fine tune your experience. Set it once, and the app remembers it until you feel like adjusting it again. 
-- **Low power usage** - Optimized to only use power when needed, and stays out of the way if you don't need it.
+- Manual override controls
+- Threshold tuning
+- Process-based override rules
+- Editing daemon profile mappings
+- Inspecting and configuring root-required power features
 
+## Current Feature Set
 
----
+- Automatic switching between `powersave`, `balanced`, and `performance`
+- Per-profile hardware configuration for:
+  - CPU governor
+  - Energy Performance Preference (EPP)
+  - ACPI platform profile
+  - PCIe ASPM policy
+- Per-process overrides from the user session
+- Live load graph and tray controls
+- Root-required feature editor for sysfs power-saving knobs
+- Dynamic inspection of device runtime power controls under `/sys/devices`
 
-## 🧩 Features
+Removed or not yet re-implemented:
 
-✅ Dynamic switching based on:
-- CPU load averages
-- Power source (AC or battery)
-- Per-process overrides (e.g. set Steam to "performance")
+- Panel overdrive
+- Display refresh-rate switching
 
-✅ Configurable Daemon power interface:
-- CPU Governors, Intel/AMD pstate preference, ACPI and ASPM configuration on the fly
-- Power saving features similar to Laptop Mode Tools or TLP and others.
+## PCI Runtime Power Inspection
 
-✅ Manual override via tray icon:
-- One-click switch to Performance / Balanced / Powersave
-- Live graph of system load with adjustable thresholds
+The root feature editor no longer relies only on static example paths in the config template.
 
-✅ Configurable with YAML:
-- System-wide config: `/etc/dynamic_power.yaml`
-- User overrides: `~/.config/dynamic_power/config.yaml`
+The GUI now scans `/sys/devices` for writable `power/control` nodes and builds a device tree from what the current machine actually exposes. In practice this means:
 
+- PCI runtime power control entries are discovered dynamically
+- PCI devices are labeled from `lspci -D` when available
+- Non-PCI device nodes can also be shown in the advanced view
+- Detected nodes expose the values the kernel currently accepts, such as `on` and `auto`
 
-✅ Clean DBus integration:
-- Root daemon only accepts authorized commands
-- DBus interface separates system metrics and user requests
+This makes the feature editor much more useful on real hardware, because the relevant paths often differ across machines and kernels.
 
----
+The daemon still applies whatever is stored in `/etc/dynamic_power.yaml`, but the GUI now helps you discover valid device paths instead of forcing you to find them manually first.
 
-## 🚀 Installation
+## Configuration
 
-### Arch Linux (via AUR)
+Two config files are involved:
+
+- Daemon config: `/etc/dynamic_power.yaml`
+- User config: `~/.config/dynamic_power/config.yaml`
+
+`/etc/dynamic_power.yaml` contains:
+
+- Load thresholds used by the daemon
+- Profile-to-hardware mappings
+- Root-required power feature rules
+
+`~/.config/dynamic_power/config.yaml` contains:
+
+- User threshold preferences pushed to the daemon
+- Process override rules
+- User-session feature settings
+
+The installed templates are:
+
+- `/usr/share/dynamic-power/dynamic_power.yaml`
+- `/usr/share/dynamic-power/dynamic-power-user.yaml`
+
+## Root-Required Features
+
+Root-required features are sysfs or procfs writes that should happen when the machine changes between AC and battery power.
+
+Examples include:
+
+- `/proc/sys/kernel/nmi_watchdog`
+- `/sys/module/snd_hda_intel/parameters/power_save`
+- `/proc/sys/vm/dirty_writeback_centisecs`
+- `/sys/devices/.../power/control`
+
+Each rule can define:
+
+- Whether it is enabled
+- The path to write
+- The value to use on AC
+- The value to use on battery
+
+The daemon applies these rules only when the root feature disclaimer has been accepted in the daemon config.
+
+## Installation
+
+### Arch Linux
+
+From AUR:
 
 ```bash
 yay -S dynamic-power-daemon
 ```
 
-This will install:
-- `dynamic_power` systemd daemon
-- All user tools (`dynamic_power_user`)
-- Example config templates
-- When started for the first time, the daemon and user will copy in a template
-    config file. For now the daemon config is manual, config utility coming soon.
-- User config has been populated with some examples. Add and remove as you feel like.
-
-### Manual Install
-
-Clone the repo:
+### Manual Build
 
 ```bash
 git clone https://github.com/evertvorster/dynamic-power-daemon.git
-cd dynamic-power-daemon
-cd src
+cd dynamic-power-daemon/src
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
 cmake --build build --parallel
 sudo cmake --install build
-
-<Yeah, this is stupid, we will fix this soon.>
 ```
 
-Enable the root daemon:
+Enable the daemon:
 
 ```bash
 sudo systemctl enable --now dynamic_power.service
 ```
 
-Start the GUI controller from your user session:
+Start the user application in your session:
 
 ```bash
 dynamic_power_user &
 ```
-Recommended to add this to your autolaunching scripts. 
 
----
+## Dependencies
 
-## 🖥 Screenshots
+Build and runtime requirements include:
 
-Coming soon — tray UI, graph view, and live refresh rate monitor.
+- `cmake`
+- `pkgconf`
+- `qt6-base`
+- `qt6-tools`
+- `yaml-cpp`
+- `systemd`
+- `upower`
+- `pciutils` for `lspci`-based PCI labeling in the root feature inspector
 
----
+Optional:
 
-## 📦 AUR Package
+- `kscreen`
 
-📦 [`dynamic-power-daemon`](https://aur.archlinux.org/packages/dynamic-power-daemon)
+Conflicts:
 
-Maintained and released by the author. Updates match GitHub releases.
+- `power-profiles-daemon`
+- `tlp`
+- `laptop-mode-tools`
+- Other tools that try to manage the same sysfs power settings
 
----
+Running multiple power-management stacks at once is a bad idea. This project expects to own the settings it writes.
 
-## 📚 Documentation
+## Usage Notes
 
-The project includes detailed markdown docs in `/docs/`:
+- The daemon polls load every 5 seconds.
+- UPower power-source changes trigger root feature re-application immediately.
+- CPU governor and EPP writes are expanded across all detected CPU policy nodes, not just the single example path in the config.
+- Profile capability paths can be adjusted from the GUI if your sysfs layout differs from the template.
 
-Manual coming soon!
+## Documentation
 
----
+Additional project documentation lives in [`docs/`](./docs):
 
----
+- [`docs/dynamic_power_user_manual.md`](./docs/dynamic_power_user_manual.md)
+- [`docs/dbus_interface_introspection.txt`](./docs/dbus_interface_introspection.txt)
+- [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)
 
-## 🧷 Dependencies
+## License
 
-The following system packages are required:
--  'qt6-tools'
--  'kscreen'
--  'cmake'
--  'pkgconf'
--  'qt6-base'
--  'yaml-cpp'
--  'systemd'
-
-
-optionally:
-'asusctl: panel overdrive toggle on Asus laptops'
-
-conflicts:
-Anything that wants to set the system power management features. 
-Includes but is not limited to power-profiles-control, TLP, Laptop mode tools
-    The list goes on... The intention here is to be a modern replacement for these tools.
-    DBus interface is available if you want to plug into the profiles, and control them even. 
-
-
----
-
-## ✨ Credits
-
-Developed and maintained by [Evert Vorster](https://github.com/evertvorster)
-
-Contributions, bug reports, and feature suggestions are welcome!
-
----
-
-## 📄 License
-
-	GPL-3.0-or-later
+GPL-3.0-or-later
