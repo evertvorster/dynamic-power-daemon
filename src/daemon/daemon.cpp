@@ -253,6 +253,9 @@ bool Daemon::setProfile(const QString& internalName)
     }
     const ProfileSetting &ps = it->second;
 
+    // Track what's been applied (keyed by "label = value") to collapse repeated writes
+    QMap<QString, int> appliedCount;
+
     // Helper to write a single value to a sysfs path
     auto write_value = [&](const std::string &path, const std::string &value, const char *label) -> bool {
         if (path.empty() || value.empty()) {
@@ -271,7 +274,7 @@ bool Daemon::setProfile(const QString& internalName)
                       .arg(QString::fromStdString(value), QString::fromStdString(path)).toUtf8().constData());
             return false;
         }
-        log_info(QString("Applied %1 = %2").arg(label, QString::fromStdString(value)).toUtf8().constData());
+        appliedCount[QString("%1 = %2").arg(label, QString::fromStdString(value))]++;
         return true;
     };
 
@@ -475,6 +478,14 @@ bool Daemon::setProfile(const QString& internalName)
         log_error(QString("setProfile(): one or more hardware writes failed for '%1'")
                   .arg(internalName).toUtf8().constData());
         return false;
+    }
+
+    // Summarise what was applied (collapsing repeated writes like per-CPU governor/EPP)
+    for (auto it = appliedCount.constBegin(); it != appliedCount.constEnd(); ++it) {
+        if (it.value() > 1)
+            log_info(QString("Applied %1 (%2\u00d7)").arg(it.key()).arg(it.value()).toUtf8().constData());
+        else
+            log_info(QString("Applied %1").arg(it.key()).toUtf8().constData());
     }
 
     // Track what we just applied
