@@ -107,6 +107,12 @@ QStringList detectOptions(const QString& path) {
     return current.isEmpty() ? QStringList{} : QStringList{current};
 }
 
+bool runtimePmEnabledForControl(const QString& controlPath) {
+    const QString devicePath = QFileInfo(controlPath).dir().absolutePath().chopped(QString("/power").size());
+    const QString status = readLine(devicePath + "/power/runtime_status");
+    return !status.isEmpty() && status != QStringLiteral("unsupported");
+}
+
 Node makeNode(const QString& id, const QString& parentId, const QString& label,
               const QString& nodeClass, const QString& path = QString()) {
     Node node;
@@ -163,6 +169,10 @@ RootCompositeFeature::State RootFeatureDetector::detect()
         }
 
         Node leaf = makeNode(QString("node:%1").arg(controlPath), parentId, "Runtime Power Control", "device", controlPath);
+        // A device reporting "unsupported" has runtime PM disabled, so writing "auto"
+        // to its power/control calls pm_runtime_allow() on a disabled device and does
+        // nothing. Mark it so the UI can leave out knobs that cannot take effect.
+        leaf.supported = runtimePmEnabledForControl(controlPath);
         st.nodes.push_back(leaf);
     }
 

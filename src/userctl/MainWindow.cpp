@@ -273,6 +273,11 @@ private slots:
     }
 
     bool isVisibleNode(const RootNode& node) const {
+        // Leave out runtime-PM knobs that cannot take effect. A device the kernel
+        // reports as "unsupported" has runtime PM disabled, so its power/control
+        // write is a no-op. Anything already enabled stays visible so a configured
+        // rule can always be found and turned off again.
+        if (isRealControlLeaf(node) && !node.supported && !node.enabled) return false;
         if (m_advancedToggle && m_advancedToggle->isChecked()) return true;
         if (node.id == QStringLiteral("group:devices")) return true;
         if (node.nodeClass != QStringLiteral("device")) return true;

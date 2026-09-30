@@ -49,12 +49,13 @@ Removed or not yet re-implemented:
 
 The root feature editor no longer relies only on static example paths in the config template.
 
-The GUI now scans `/sys/devices` for writable `power/control` nodes and builds a device tree from what the current machine actually exposes. In practice this means:
+The GUI now scans `/sys/devices` for `power/control` nodes and builds a device tree from what the current machine actually exposes. Nodes belonging to devices where the kernel has runtime power management disabled are left out of the tree, since writing to their `power/control` cannot take effect. In practice this means:
 
 - PCI runtime power control entries are discovered dynamically
 - PCI devices are labeled from `lspci -D` when available
 - Non-PCI device nodes can also be shown in the advanced view
 - Detected nodes expose the values the kernel currently accepts, such as `on` and `auto`
+- Only devices that can actually be autosuspended are offered
 
 This makes the feature editor much more useful on real hardware, because the relevant paths often differ across machines and kernels.
 
