@@ -80,6 +80,8 @@ Two config files are involved:
 - Process override rules
 - User-session feature settings
 
+Only rules that are enabled, point at hardware that is present, and have values to write are stored in `/etc/dynamic_power.yaml`. Everything else — disabled rules, untouched devices, tree scaffolding, and paths for hardware no longer in the machine — is omitted, because the daemon would skip it anyway and the next load re-seeds it from the live sysfs reading.
+
 The installed templates are:
 
 - `/usr/share/dynamic-power/dynamic_power.yaml`

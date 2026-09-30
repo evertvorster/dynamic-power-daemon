@@ -543,6 +543,12 @@ private slots:
                 continue;
             }
 
+            // A saved rule whose path is gone is not worth resurrecting: it can never
+            // be applied, the next save would discard it anyway, and showing it would
+            // offer a rule that saving immediately throws away. Scaffolding whose
+            // devices are all gone has no path at all and drops out here too.
+            if (!QFileInfo::exists(savedNode.absPath)) continue;
+
             auto legacy = savedNode;
             if (isRealControlLeaf(legacy)) legacy.label = QStringLiteral("Runtime Power Control");
             legacy.detected = false;
@@ -633,9 +639,21 @@ private slots:
             }
         }
 
+        // Decide which rows appear before building them. Only value nodes mark
+        // themselves; a branch row is marked solely by being the ancestor of one.
+        // That is what stops a segment whose devices are all hidden from leaving an
+        // empty row behind.
+        QSet<QString> shown;
+        for (const auto& node : m_state.nodes) {
+            if (node.isGroup) continue;
+            if (!isVisibleNode(node)) continue;
+            if (!nodeMatchesFilter(node, needle)) continue;
+            for (const RootNode* p = &node; p; p = parentNode(*p)) shown.insert(p->id);
+        }
+
         for (const auto& node : m_state.nodes) {
             if (node.id == QStringLiteral("group:legacy") && !hasLegacyChildren) continue;
-            if (!shouldShowNode(node, needle)) continue;
+            if (!shown.contains(node.id)) continue;
             auto* item = new QTreeWidgetItem();
             item->setText(0, node.label);
             item->setText(1, node.isGroup ? QString() : (node.currentValue.isEmpty() ? "-" : node.currentValue));
@@ -984,6 +1002,34 @@ private slots:
         rebuildTree();
     }
 
+    // Only rules that will actually do something are written out. A node that is
+    // disabled, inherits a disabled parent, has no value to write, or points at
+    // hardware that is not present is indistinguishable from one the user never
+    // touched: the daemon skips it and the next load re-seeds it from the live
+    // sysfs reading. Writing just the active set keeps tree scaffolding, stale
+    // device paths and untouched devices out of the config file.
+    RootState activeRulesOnly() const {
+        RootState out;
+        out.disclaimerAccepted = m_disclaimerAccepted;
+        out.acceptedAt = m_disclaimerAcceptedAt;
+        for (const auto& node : m_state.nodes) {
+            if (node.absPath.isEmpty()) continue;                 // groups and tree segments
+            if (!QFileInfo::exists(node.absPath)) continue;       // hardware not present
+            if (!effectiveEnabled(node)) continue;                // disabled
+            const QString ac = effectiveValue(node, false);
+            const QString battery = effectiveValue(node, true);
+            if (ac.isEmpty() || battery.isEmpty()) continue;      // nothing the daemon could write
+
+            RootNode rule = node;
+            rule.parentId.clear();                                // flat list, values resolved
+            rule.policyScope = QStringLiteral("override");
+            rule.acValue = ac;
+            rule.batteryValue = battery;
+            out.nodes.push_back(std::move(rule));
+        }
+        return out;
+    }
+
     void onSave() {
         if (!m_disclaimerAccepted) {
             QMessageBox::warning(this, "Confirmation required",
@@ -992,9 +1038,7 @@ private slots:
         }
         onInspectorChanged();
         dp::features::RootCompositeFeature composite(m_etcPath);
-        m_state.disclaimerAccepted = m_disclaimerAccepted;
-        m_state.acceptedAt = m_disclaimerAcceptedAt;
-        const QByteArray data = composite.serialize(m_state);
+        const QByteArray data = composite.serialize(activeRulesOnly());
         if (pkexecWrite(data, m_etcPath)) {
             QMessageBox::information(this, "Saved", "Root features saved. The daemon will auto-reload.");
             accept();
