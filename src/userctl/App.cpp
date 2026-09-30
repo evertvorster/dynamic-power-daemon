@@ -259,7 +259,12 @@ void App::updateTrayFromState() {
     const QString userMode = m_mainWindow ? m_mainWindow->currentUserMode() : QStringLiteral("Dynamic");
 
     QString iconKey;
-    if (userMode != QStringLiteral("Dynamic")) {
+    // The daemon reports "Error" whenever the profile could not be applied. Warning about
+    // that outranks which mode is nominally selected, and the icon clears on its own once
+    // a switch succeeds.
+    if (active == QStringLiteral("Error")) {
+        iconKey = QStringLiteral("error");
+    } else if (userMode != QStringLiteral("Dynamic")) {
         iconKey = onBattery ? "override_battery" : "override_ac";
     } else if (m_procMon && m_procMon->hasActiveMatch()) {
         iconKey = onBattery ? "match_battery" : "match_ac";

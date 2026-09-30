@@ -40,6 +40,11 @@ QIcon TrayController::iconForKey(const QString& key) {
     if (!themed.isNull())
         return themed;
 
+    // "error" matches neither fallback below, so without this it would land on the
+    // generic computer icon and warn about nothing.
+    if (key == QStringLiteral("error"))
+        return QApplication::style()->standardIcon(QStyle::SP_MessageBoxWarning);
+
     // Fallbacks (keep existing placeholders)
     if (key.contains("override")) return QApplication::style()->standardIcon(QStyle::SP_DialogYesButton);
     if (key.contains("match"))    return QApplication::style()->standardIcon(QStyle::SP_BrowserReload);
