@@ -69,7 +69,18 @@ QString deviceLabel(const QString& devicePath) {
         return desc.isEmpty() ? QString("PCI Device %1").arg(seg)
                               : QString("%1 (%2)").arg(desc, seg);
     }
-    if (subsystemName == "usb") return QString("USB Device %1").arg(seg);
+    if (subsystemName == "usb") {
+        // USB carries its own product and manufacturer strings; lspci has nothing
+        // for these. The kernel fills manufacturer with its own version banner for
+        // root hubs, which tells the user nothing, so it is dropped.
+        const QString product = readLine(devicePath + "/product");
+        QString vendor = readLine(devicePath + "/manufacturer");
+        if (vendor.startsWith(QStringLiteral("Linux "))) vendor.clear();
+        if (!product.isEmpty() && !vendor.isEmpty())
+            return QString("USB Device %1 [%2] (%3)").arg(product, vendor, seg);
+        if (!product.isEmpty()) return QString("USB Device %1 (%2)").arg(product, seg);
+        return QString("USB Device %1").arg(seg);
+    }
     if (subsystemName == "nvme") return QString("NVMe %1").arg(seg);
     if (subsystemName == "net") return QString("Network Device %1").arg(seg);
     if (subsystemName == "drm") return QString("Display Device %1").arg(seg);
@@ -161,7 +172,11 @@ RootCompositeFeature::State RootFeatureDetector::detect()
             const QString segmentKey = canonicalPath(runningPath);
             if (!segmentToId.contains(segmentKey)) {
                 const QString id = QString("segment:%1").arg(segmentKey);
-                QString label = (i == segments.size() - 1) ? deviceLabel(segmentKey) : humanizeSegment(segments[i]);
+                // Every segment gets the same treatment. A PCI bridge is normally
+                // first reached as an intermediate segment on the way to a device
+                // behind it, so labelling only the final segment left those rows as
+                // bare bus addresses. deviceLabel() falls back to humanizeSegment().
+                QString label = deviceLabel(segmentKey);
                 st.nodes.push_back(makeNode(id, parentId, label, "device"));
                 segmentToId.insert(segmentKey, id);
             }
