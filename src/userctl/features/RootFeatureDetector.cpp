@@ -105,6 +105,7 @@ QStringList optionsFromBracketList(const QString& content) {
 
 QStringList detectOptions(const QString& path) {
     if (path.endsWith("/power/control")) return {"on", "auto"};
+    if (path.endsWith("/power/wakeup")) return {"enabled", "disabled"};
     if (path == "/proc/sys/kernel/nmi_watchdog") return {"0", "1"};
 
     if (path == "/sys/firmware/acpi/platform_profile") {
@@ -141,6 +142,20 @@ Node makeNode(const QString& id, const QString& parentId, const QString& label,
         node.allowedValues = detectOptions(path);
     }
     return node;
+}
+
+// A secondary knob on the same device. Only emitted when the kernel says it is usable:
+// power/autosuspend_delay_ms reads back EIO unless the device actually uses autosuspend,
+// and power/wakeup only exists on wakeup-capable devices. An unreadable knob is not offered.
+void addKnob(RootCompositeFeature::State& st, const QString& parentId, const QString& devicePath,
+             const QString& fileName, const QString& label)
+{
+    const QString path = devicePath + "/power/" + fileName;
+    if (readLine(path).isEmpty()) return;
+
+    Node node = makeNode(QString("node:%1").arg(path), parentId, label, "device", path);
+    node.supported = true;
+    st.nodes.push_back(node);
 }
 
 } // namespace
@@ -184,12 +199,14 @@ RootCompositeFeature::State RootFeatureDetector::detect()
             parentId = segmentToId.value(segmentKey);
         }
 
-        Node leaf = makeNode(QString("node:%1").arg(controlPath), parentId, "Runtime Power Control", "device", controlPath);
+        Node leaf = makeNode(QString("node:%1").arg(controlPath), parentId, "Runtime PM", "device", controlPath);
         // A device reporting "unsupported" has runtime PM disabled, so writing "auto"
         // to its power/control calls pm_runtime_allow() on a disabled device and does
         // nothing. Mark it so the UI can leave out knobs that cannot take effect.
         leaf.supported = runtimePmEnabledForControl(controlPath);
         st.nodes.push_back(leaf);
+        addKnob(st, parentId, devicePath, "autosuspend_delay_ms", "Autosuspend delay");
+        addKnob(st, parentId, devicePath, "wakeup", "Wake");
     }
 
     return st;

@@ -561,7 +561,7 @@ private slots:
             if (!QFileInfo::exists(savedNode.absPath)) continue;
 
             auto legacy = savedNode;
-            if (isRealControlLeaf(legacy)) legacy.label = QStringLiteral("Runtime Power Control");
+            if (isRealControlLeaf(legacy)) legacy.label = QStringLiteral("Runtime PM");
             legacy.detected = false;
             legacy.legacy = true;
             if (legacy.parentId.isEmpty()) {
@@ -655,14 +655,15 @@ private slots:
         // That is what stops a segment whose devices are all hidden from leaving an
         // empty row behind.
         QSet<QString> shown;
-        QMap<QString, int> deviceCount;   // shown value rows beneath each ancestor
+        QMap<QString, int> deviceCount;   // devices (power/control knobs) beneath each ancestor
         for (const auto& node : m_state.nodes) {
             if (node.isGroup) continue;
             if (!isVisibleNode(node)) continue;
             if (!nodeMatchesFilter(node, needle)) continue;
+            const bool isDevice = node.absPath.endsWith(QStringLiteral("/power/control"));
             for (const RootNode* p = &node; p; p = parentNode(*p)) {
                 shown.insert(p->id);
-                deviceCount[p->id] += 1;
+                if (isDevice) deviceCount[p->id] += 1;   // count devices, not knob rows
             }
         }
 
@@ -670,9 +671,9 @@ private slots:
             if (node.id == QStringLiteral("group:legacy") && !hasLegacyChildren) continue;
             if (!shown.contains(node.id)) continue;
             auto* item = new QTreeWidgetItem();
-            // Branch rows say how many value rows are under them. Only worth showing when
-            // there is more than the device's own power/control, otherwise every device row
-            // would carry a meaningless "(1)".
+            // Branch rows say how many devices are in them. Only worth showing when there
+            // is more than the device's own, otherwise every device row carries a
+            // meaningless "(1)".
             const int under = deviceCount.value(node.id);
             item->setText(0, node.isGroup && under > 1
                              ? QStringLiteral("%1 (%2)").arg(node.label).arg(under)
@@ -700,11 +701,18 @@ private slots:
                 if (!parentNode || !nodeA || !nodeB) return false;
 
                 const QString parentPath = nodePathForOrdering(*parentNode);
-                const bool aIsOwnRuntime = !parentPath.isEmpty() &&
-                    nodeA->absPath == parentPath + QStringLiteral("/power/control");
-                const bool bIsOwnRuntime = !parentPath.isEmpty() &&
-                    nodeB->absPath == parentPath + QStringLiteral("/power/control");
-                if (aIsOwnRuntime != bIsOwnRuntime) return aIsOwnRuntime;
+                // The device's own knobs come first, Runtime PM ahead of the others.
+                auto knobRank = [&parentPath](const RootNode* n) -> int {
+                    if (parentPath.isEmpty() ||
+                        !n->absPath.startsWith(parentPath + QStringLiteral("/power/"))) return -1;
+                    if (n->absPath.endsWith(QStringLiteral("/power/control"))) return 0;
+                    if (n->absPath.endsWith(QStringLiteral("/power/autosuspend_delay_ms"))) return 1;
+                    if (n->absPath.endsWith(QStringLiteral("/power/wakeup"))) return 2;
+                    return 3;
+                };
+                const int rankA = knobRank(nodeA), rankB = knobRank(nodeB);
+                if ((rankA >= 0) != (rankB >= 0)) return rankA >= 0;
+                if (rankA != rankB) return rankA < rankB;
                 const QString keyA = addressOf(*nodeA);
                 const QString keyB = addressOf(*nodeB);
                 if (keyA != keyB) return keyA < keyB;
