@@ -162,7 +162,7 @@ Build and runtime requirements include:
 
 Optional:
 
-- `kscreen`
+- `libkscreen` — provides `kscreen-doctor`, used to read and set monitor refresh rates
 
 Conflicts:
 
