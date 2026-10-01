@@ -281,7 +281,6 @@ bool Daemon::setProfile(const QString& internalName)
 
         if (p.filename() == "scaling_governor") {
             fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
-            const std::string parent_name = parent.filename().string();
 
             // Case A: /sys/.../cpufreq/policyX/scaling_governor  → write to all policyN/scaling_governor
             fs::path root = parent.parent_path(); // .../cpufreq
@@ -344,7 +343,6 @@ bool Daemon::setProfile(const QString& internalName)
         std::error_code ec;
         if (p.filename() == "energy_performance_preference") {
             fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
-            const std::string parent_name = parent.filename().string();
 
             // Case A: /sys/.../cpufreq/policyX/energy_performance_preference  → write to all policyN/energy_performance_preference
             fs::path root = parent.parent_path(); // .../cpufreq

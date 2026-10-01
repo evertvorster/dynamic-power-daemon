@@ -63,7 +63,6 @@ add_executable(dynamic_power_user
 
 # Feature module sources (scaffold + first extractions)
 target_sources(dynamic_power_user PRIVATE
-    userctl/features/Feature.h
     userctl/features/FeatureBase.cpp
     userctl/features/FeatureBase.h
     userctl/features/FeatureRegistry.cpp

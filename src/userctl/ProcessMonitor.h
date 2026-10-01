@@ -12,7 +12,6 @@ public:
     explicit ProcessMonitor(QObject* parent = nullptr);
     void setRules(const QVector<ProcessRule>& rules);
     void start(int intervalMs = 5000);
-    void stop();
     bool hasActiveMatch() const { return m_hasMatch; }
 
 signals:

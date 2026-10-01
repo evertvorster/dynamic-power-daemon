@@ -17,7 +17,6 @@ int main(int argc, char *argv[]) {
 
     Settings settings = Config::loadSettings(DEFAULT_CONFIG_PATH);
     Thresholds thresholds = settings.thresholds;
-    int grace = settings.gracePeriodSeconds;
 
     // Load and optionall display thresholds
     log_info(QString("Loaded thresholds: low=%1 high=%2")

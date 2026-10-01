@@ -14,14 +14,6 @@ public:
     // Load from ~/.config/dynamic_power/config.yaml
     void load();
 
-    // Apply user features for current power source (AC/BAT).
-    // Reads ~/.config/dynamic_power/config.yaml and applies policies.
-    static void applyForPowerState(bool onBattery);
-
-    // Re-probe current state (non-UI), same detection used by the dialog.
-    static void refreshStatusProbe();
-
-
     // Save to ~/.config/dynamic_power/config.yaml
     bool save();
 
@@ -45,7 +37,4 @@ private:
     static QString normalizePolicy(const QString&); // "min"/"max"/"unchanged" (lower)
     static QString cycleOnOff(const QString&); // Unchanged -> On -> Off -> Unchanged
     static QString cyclePanelMode(const QString&); // Unchanged -> None -> Autohide -> DodgeWindows -> WindowsGoBelow -> Unchanged
-
-
-    QStringList detectDisplayRates() const;
 };

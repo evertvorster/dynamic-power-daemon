@@ -162,50 +162,6 @@ void UserFeaturesWidget::refreshLiveStatus() {
     if (m_panelStatus) m_panelStatus->setText(paf.statusText());
 }
 
-QStringList UserFeaturesWidget::detectDisplayRates() const {
-    QStringList outLines;
-
-    QProcess p;
-    p.start("kscreen-doctor", {"-j"});
-    if (!p.waitForStarted(2000)) return outLines;
-    if (!p.waitForFinished(3000)) return outLines;
-    if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) return outLines;
-
-    const QByteArray bytes = p.readAllStandardOutput();
-    const QJsonDocument doc = QJsonDocument::fromJson(bytes);
-    if (!doc.isObject()) return outLines;
-
-    const QJsonObject obj = doc.object();
-    const QJsonArray outputs = obj.value("outputs").toArray();
-    for (const QJsonValue& v : outputs) {
-        const QJsonObject o = v.toObject();
-        if (!o.value("connected").toBool() || !o.value("enabled").toBool()) continue;
-
-        const QString name = o.value("name").toString(o.value("id").toString());
-        double rateHz = 0.0;
-
-        const QString curId = o.value("currentModeId").toString();
-        const QJsonArray modes = o.value("modes").toArray();
-        if (!curId.isEmpty() && !modes.isEmpty()) {
-            for (const QJsonValue& mv : modes) {
-                const QJsonObject m = mv.toObject();
-                if (m.value("id").toString() == curId) {
-                    rateHz = m.value("refreshRate").toDouble();
-                    break;
-                }
-            }
-        }
-        if (rateHz <= 0.0) {
-            const QJsonObject cm = o.value("currentMode").toObject();
-            rateHz = cm.value("refreshRate").toDouble();
-        }
-
-        if (rateHz > 0.0) {
-            outLines << QString("%1 %2 Hz").arg(name).arg(rateHz, 0, 'f', 1);
-        }
-    }
-    return outLines;
-}
 // ─────────────────────────────────────────────────────────────────────────────
 // Non-UI static applier on UserFeaturesWidget
 // ─────────────────────────────────────────────────────────────────────────────
@@ -296,7 +252,7 @@ namespace {
         return p.exitStatus()==QProcess::NormalExit && p.exitCode()==0;
     }
 
-    // Non-UI probe for verification (same semantics as detectDisplayRates())
+    // Non-UI probe: current refresh rate per connected output, as "name rate Hz".
     static QStringList probeCurrentRefreshStrings() {
         QStringList out;
         QProcess p; p.start("kscreen-doctor", {"-j"});
@@ -329,13 +285,3 @@ namespace {
         return out;
     }
 } // anon
-
-void UserFeaturesWidget::applyForPowerState(bool onBattery) {
-    dp::features::ScreenRefreshFeature feat;
-    feat.applyForPowerState(onBattery);
-}
-
-void UserFeaturesWidget::refreshStatusProbe() {
-    dp::features::ScreenRefreshFeature feat;
-    feat.refreshStatus();
-}

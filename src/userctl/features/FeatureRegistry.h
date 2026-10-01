@@ -11,7 +11,6 @@ public:
     ~FeatureRegistry() = default;
 
     void applyAll(bool onBattery) const;
-    void refreshAll() const;
 
 private:
     mutable ScreenRefreshFeature m_screenRefresh;

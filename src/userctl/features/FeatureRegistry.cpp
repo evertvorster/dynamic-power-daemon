@@ -13,9 +13,4 @@ void FeatureRegistry::applyAll(bool onBattery) const {
     }
 }
 
-void FeatureRegistry::refreshAll() const {
-    m_screenRefresh.refreshStatus();
-    m_panelAutohide.refreshStatus();
-}
-
 } // namespace dp::features

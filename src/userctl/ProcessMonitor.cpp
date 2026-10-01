@@ -19,7 +19,6 @@ ProcessMonitor::ProcessMonitor(QObject* parent) : QObject(parent) {
 
 void ProcessMonitor::setRules(const QVector<ProcessRule>& rules) { m_rules = rules; }
 void ProcessMonitor::start(int intervalMs) { m_timer->start(intervalMs); }
-void ProcessMonitor::stop() { m_timer->stop(); }
 
 QSet<QString> ProcessMonitor::currentProcesses() const {
     QSet<QString> names;
