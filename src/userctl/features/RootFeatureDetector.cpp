@@ -30,7 +30,7 @@ QString humanizeSegment(const QString& segment) {
     if (segment.isEmpty()) return segment;
     static const QRegularExpression pciRe("^\\d{4}:\\d{2}:\\d{2}\\.\\d$");
     static const QRegularExpression usbRe("^\\d+-\\d+(\\.\\d+)*$");
-    if (pciRe.match(segment).hasMatch()) return QString("PCI Device %1").arg(segment);
+    if (pciRe.match(segment).hasMatch()) return QString("%1  PCI device").arg(segment);
     if (usbRe.match(segment).hasMatch()) return QString("USB Device %1").arg(segment);
     QString label = segment;
     label.replace('_', ' ');
@@ -65,9 +65,10 @@ QString deviceLabel(const QString& devicePath) {
     static const QMap<QString, QString> pciMap = pciDescriptions();
 
     if (subsystemName == "pci") {
+        // Address first, so the tree reads as a bus listing and sorts into bus order.
         const QString desc = pciMap.value(seg);
-        return desc.isEmpty() ? QString("PCI Device %1").arg(seg)
-                              : QString("%1 (%2)").arg(desc, seg);
+        return desc.isEmpty() ? QString("%1  PCI device").arg(seg)
+                              : QString("%1  %2").arg(seg, desc);
     }
     if (subsystemName == "usb") {
         // USB carries its own product and manufacturer strings; lspci has nothing

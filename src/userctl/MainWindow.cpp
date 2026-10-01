@@ -403,6 +403,17 @@ private slots:
         return {};
     }
 
+    // The device's own address: the PCI BDF for PCI devices, otherwise the sysfs node
+    // name. PCI addresses are fixed width, so plain string order is bus order - and since
+    // a bridge's secondary bus number is always greater than its primary, bus order is
+    // also topology order: a bridge sorts immediately before the devices behind it.
+    QString addressOf(const RootNode& node) const {
+        QString path = nodePathForOrdering(node);
+        if (path.endsWith(QStringLiteral("/power/control")))
+            path = QFileInfo(QFileInfo(path).absolutePath()).absolutePath();
+        return path.isEmpty() ? node.label : QFileInfo(path).fileName();
+    }
+
     QStringList detectKernelOptions(const QString& path) const {
         QFile f(path);
         if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
@@ -644,18 +655,28 @@ private slots:
         // That is what stops a segment whose devices are all hidden from leaving an
         // empty row behind.
         QSet<QString> shown;
+        QMap<QString, int> deviceCount;   // shown value rows beneath each ancestor
         for (const auto& node : m_state.nodes) {
             if (node.isGroup) continue;
             if (!isVisibleNode(node)) continue;
             if (!nodeMatchesFilter(node, needle)) continue;
-            for (const RootNode* p = &node; p; p = parentNode(*p)) shown.insert(p->id);
+            for (const RootNode* p = &node; p; p = parentNode(*p)) {
+                shown.insert(p->id);
+                deviceCount[p->id] += 1;
+            }
         }
 
         for (const auto& node : m_state.nodes) {
             if (node.id == QStringLiteral("group:legacy") && !hasLegacyChildren) continue;
             if (!shown.contains(node.id)) continue;
             auto* item = new QTreeWidgetItem();
-            item->setText(0, node.label);
+            // Branch rows say how many value rows are under them. Only worth showing when
+            // there is more than the device's own power/control, otherwise every device row
+            // would carry a meaningless "(1)".
+            const int under = deviceCount.value(node.id);
+            item->setText(0, node.isGroup && under > 1
+                             ? QStringLiteral("%1 (%2)").arg(node.label).arg(under)
+                             : node.label);
             item->setText(1, node.isGroup ? QString() : (node.currentValue.isEmpty() ? "-" : node.currentValue));
             item->setText(2, node.nodeClass);
             item->setData(0, Qt::UserRole, node.id);
@@ -684,7 +705,10 @@ private slots:
                 const bool bIsOwnRuntime = !parentPath.isEmpty() &&
                     nodeB->absPath == parentPath + QStringLiteral("/power/control");
                 if (aIsOwnRuntime != bIsOwnRuntime) return aIsOwnRuntime;
-                return false;
+                const QString keyA = addressOf(*nodeA);
+                const QString keyB = addressOf(*nodeB);
+                if (keyA != keyB) return keyA < keyB;
+                return nodeA->label < nodeB->label;
             });
             parentItem->addChildren(children);
             for (int i = 0; i < parentItem->childCount(); ++i) self(self, parentItem->child(i));
