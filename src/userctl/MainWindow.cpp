@@ -47,7 +47,7 @@ MainWindow::MainWindow(DbusClient* dbus, UserConfig* config, QWidget* parent)
         // closes: exec() returns however it closed, so this one line covers Save, Cancel,
         // Escape and the title bar alike.
         const QString previousMode = m_userMode;
-        ProfileConfigDialog dlg(this, DEFAULT_CONFIG_PATH);
+        ProfileConfigDialog dlg(this, DEFAULT_CONFIG_PATH, m_dbus);
         connect(&dlg, &ProfileConfigDialog::modeRequested, this, [this](const QString& mode) {
             emit userOverrideSelected(mode, mode != QStringLiteral("Dynamic"));
         });

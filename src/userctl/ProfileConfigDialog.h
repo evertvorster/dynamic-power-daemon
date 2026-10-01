@@ -15,6 +15,8 @@ class QCloseEvent;
 
 namespace YAML { class Node; }
 
+class DbusClient;
+
 struct CapabilityInfo {
     QString key;       // e.g. "cpu_governor"
     QString path;      // sysfs path
@@ -33,7 +35,8 @@ class ProfileConfigDialog : public QDialog {
     Q_OBJECT
 public:
     explicit ProfileConfigDialog(QWidget* parent = nullptr,
-                                 const QString& configPath = DEFAULT_CONFIG_PATH);
+                                 const QString& configPath = DEFAULT_CONFIG_PATH,
+                                 DbusClient* dbus = nullptr);
     ~ProfileConfigDialog() override;   // make dtor public so stack allocation works
 
 signals:
@@ -64,6 +67,22 @@ private:
     // Selecting a profile puts the machine into it and greys the other rows, so the
     // option lists shown are read from the mode that is actually running.
     void onProfileSelected(const QString& profile);
+
+    // Marks a value the profile in effect will refuse. Only the selected profile can be
+    // judged: the accepted set is read from the mode that is running, so it says nothing
+    // about a profile the machine is not in.
+    void refreshValueMarking();
+
+    // Once per dialog, not once per change: comparing governors should not re-ask.
+    void maybeShowGovernorNote();
+
+    // What the daemon refused on the last apply, if the caller gave us a way to ask.
+    void refreshDaemonWarnings();
+
+    QString m_selectedProfile;
+    bool m_governorNoteShown = false;
+    DbusClient* m_dbus = nullptr;
+    class QLabel* m_daemonNote = nullptr;
     
     // UI state
     QVBoxLayout* m_outer = nullptr;

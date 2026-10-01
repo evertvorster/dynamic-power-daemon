@@ -42,6 +42,8 @@ hardware:
 profiles:
   powersave:
     epp_profile: beta
+  balanced:
+    epp_profile: alpha
 )";
 
 } // namespace
@@ -55,6 +57,7 @@ private slots:
     void theAcceptedListStillFollowsTheMachine();
     void everyRowStartsGreyed();
     void selectingAProfileAsksForThatModeAndUngreysOnlyThatRow();
+    void onlyTheSelectedProfilesValuesAreMarked();
 
 private:
     QTemporaryDir m_dir;
@@ -68,7 +71,7 @@ void TestProfileConfigDialog::init()
     const QString optionsPath = m_dir.filePath(QStringLiteral("available"));
     QFile o(optionsPath);
     QVERIFY(o.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    o.write("gamma\ndelta\n");
+    o.write("alpha\ndelta\n");
     o.close();
 
     QString cfg = QString::fromUtf8(kConfig);
@@ -102,7 +105,7 @@ void TestProfileConfigDialog::theAcceptedListStillFollowsTheMachine()
     const CapabilityInfo cap = dlg.m_caps.value(QStringLiteral("epp_profile"));
     // readModesFromFile appends the project's "disabled" sentinel, which means "do not
     // write this knob". Both lists carry it, so they stay comparable.
-    QCOMPARE(cap.accepted, QStringList({ QStringLiteral("gamma"), QStringLiteral("delta"),
+    QCOMPARE(cap.accepted, QStringList({ QStringLiteral("alpha"), QStringLiteral("delta"),
                                          QStringLiteral("disabled") }));
     QVERIFY2(cap.accepted != cap.modes, "the two lists must be distinguishable");
 }
@@ -148,6 +151,33 @@ void TestProfileConfigDialog::selectingAProfileAsksForThatModeAndUngreysOnlyThat
         for (QToolButton* b : dlg.m_buttons.value(other))
             QVERIFY2(!b->isEnabled(), qPrintable(other + QStringLiteral(" must stay greyed")));
     }
+}
+
+static QString eppButtonStyle(ProfileConfigDialog& dlg, const QString& profile)
+{
+    QToolButton* b = dlg.m_buttons.value(profile).value(QStringLiteral("epp_profile"));
+    return b ? b->styleSheet() : QStringLiteral("<missing>");
+}
+
+void TestProfileConfigDialog::onlyTheSelectedProfilesValuesAreMarked()
+{
+    // The accepted set is read from the mode that is running, so it can only speak for
+    // the profile the machine is actually in. Marking the others would be guessing.
+    ProfileConfigDialog dlg(nullptr, m_configPath);
+
+    toggleFor(dlg, QStringLiteral("balanced"))->setChecked(true);
+    // balanced asks for alpha, which this machine accepts -> nothing marked
+    QVERIFY2(eppButtonStyle(dlg, QStringLiteral("balanced")).isEmpty(), "alpha is accepted");
+    // powersave asks for beta, which it does not - but powersave is not selected, so it
+    // is not judged either
+    QVERIFY2(eppButtonStyle(dlg, QStringLiteral("powersave")).isEmpty(),
+             "an unselected profile cannot be judged");
+
+    toggleFor(dlg, QStringLiteral("powersave"))->setChecked(true);
+    QVERIFY2(!eppButtonStyle(dlg, QStringLiteral("powersave")).isEmpty(),
+             "beta is refused by the running mode and must be marked");
+    QVERIFY2(eppButtonStyle(dlg, QStringLiteral("balanced")).isEmpty(),
+             "balanced is no longer selected, so its marking must be cleared");
 }
 
 QTEST_MAIN(TestProfileConfigDialog)

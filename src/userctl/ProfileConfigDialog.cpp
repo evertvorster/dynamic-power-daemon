@@ -15,6 +15,8 @@
 #include <QScrollArea>
 #include <QRadioButton>
 #include <QButtonGroup>
+#include <QMessageBox>
+#include "DbusClient.h"
 #include <QLineEdit>
 #include <QRegularExpression>
 #include <QFontMetrics>
@@ -34,8 +36,9 @@ static QString capDisplayName(const QString& key) {
     return key;
 }
 
-ProfileConfigDialog::ProfileConfigDialog(QWidget* parent, const QString& configPath)
-    : QDialog(parent), m_configPath(configPath)
+ProfileConfigDialog::ProfileConfigDialog(QWidget* parent, const QString& configPath,
+                                         DbusClient* dbus)
+    : QDialog(parent), m_configPath(configPath), m_dbus(dbus)
 {
     setWindowTitle("Profile Configuration");
     resize(720, 560);
@@ -309,6 +312,15 @@ void ProfileConfigDialog::buildProfilesUI() {
                                "restored when this window closes.");
     modeNote->setWordWrap(true);
     v->addWidget(modeNote);
+
+    // What the daemon refused on the last apply. Hidden when there is nothing to say, so
+    // a clean setup shows no clutter.
+    m_daemonNote = new QLabel(this);
+    m_daemonNote->setWordWrap(true);
+    m_daemonNote->setStyleSheet("color:#c0392b;");
+    m_daemonNote->setVisible(false);
+    v->addWidget(m_daemonNote);
+
     v->addWidget(area);
     rowHBox->addWidget(container);
     rowHBox->addStretch(1);
@@ -344,9 +356,63 @@ void ProfileConfigDialog::onProfileSelected(const QString& profile)
         }
     }
 
+    m_selectedProfile = profile;
+    refreshValueMarking();
+
     emit modeRequested(profile.isEmpty()
                            ? QStringLiteral("Dynamic")
                            : profile.left(1).toUpper() + profile.mid(1));
+
+    // SetProfile applies synchronously, so by the time this returns the daemon has
+    // already applied the profile and any refusal is ready to read.
+    refreshDaemonWarnings();
+}
+
+// Only the profile the machine is in can be judged. The accepted set is read from the
+// running mode, so it says nothing about the others - marking them would be guessing.
+void ProfileConfigDialog::refreshValueMarking()
+{
+    for (const auto& capKey : capKeys()) {
+        const CapabilityInfo cap = m_caps.value(capKey);
+        for (const auto& profile : m_profiles) {
+            QToolButton* btn = m_buttons.value(profile).value(capKey);
+            if (!btn) continue;
+
+            const QString value = m_selection.value(profile).value(capKey);
+            const bool knowable = profile == m_selectedProfile
+                                  && !m_selectedProfile.isEmpty()
+                                  && !cap.accepted.isEmpty();
+            const bool refused = knowable
+                                 && value != QStringLiteral("disabled")
+                                 && !cap.accepted.contains(value);
+
+            btn->setStyleSheet(refused ? QStringLiteral("color:#c0392b;") : QString());
+            btn->setToolTip(refused
+                ? QStringLiteral("%1 is not accepted by the running mode. Accepted now: %2")
+                      .arg(value, cap.accepted.join(QStringLiteral(", ")))
+                : QString());
+        }
+    }
+}
+
+void ProfileConfigDialog::maybeShowGovernorNote()
+{
+    if (m_governorNoteShown) return;
+    m_governorNoteShown = true;
+    QMessageBox::information(this, QStringLiteral("CPU governor changed"),
+        QStringLiteral("After changing CPU governors for a profile, it is recommended to "
+                       "save first before setting other options for the profile."));
+}
+
+void ProfileConfigDialog::refreshDaemonWarnings()
+{
+    if (!m_dbus || !m_daemonNote) return;
+    const QString skipped = m_dbus->getDaemonState()
+                                .value(QStringLiteral("last_skipped")).toString();
+    m_daemonNote->setText(skipped.isEmpty()
+        ? QString()
+        : QStringLiteral("The daemon refused: %1").arg(skipped));
+    m_daemonNote->setVisible(!skipped.isEmpty());
 }
 
 
@@ -520,6 +586,11 @@ void ProfileConfigDialog::refreshMenusForCap(const QString& capKey) {
             connect(act, &QAction::triggered, this, [this, profile, capKey, m, btn]() {
                 m_selection[profile][capKey] = m;
                 btn->setText(m);
+                // The available EPP values follow the governor, and edits are not applied
+                // until Save, so the lists follow the *saved* governor. Say so once.
+                if (capKey == QStringLiteral("cpu_governor"))
+                    maybeShowGovernorNote();
+                refreshValueMarking();
             });
         }
         btn->setMenu(menu);

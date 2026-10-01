@@ -38,10 +38,12 @@ add_test(NAME tst_rootcompositefeature COMMAND tst_rootcompositefeature)
 add_executable(tst_profileconfigdialog
     tst_profileconfigdialog.cpp
     ${DP_SRC}/userctl/ProfileConfigDialog.cpp
+    ${DP_SRC}/userctl/DbusClient.cpp
 )
 target_include_directories(tst_profileconfigdialog PRIVATE ${DP_SRC})
 target_compile_options(tst_profileconfigdialog PRIVATE -fno-access-control)
-target_link_libraries(tst_profileconfigdialog PRIVATE Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core yaml-cpp)
+target_link_libraries(tst_profileconfigdialog PRIVATE
+    Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core Qt6::DBus yaml-cpp)
 add_test(NAME tst_profileconfigdialog COMMAND tst_profileconfigdialog)
 
 # --- the rule deciding what gets written back ---------------------------------
