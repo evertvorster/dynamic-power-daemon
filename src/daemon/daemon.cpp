@@ -1,6 +1,10 @@
 #include "log.h"
 #include "daemon.h"
 #include "daemon_dbus_interface.h"
+#include "cpu_targets.h"
+
+using dp::daemon::cpuTargetsFor;
+using dp::daemon::availableValuesFileName;
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusArgument>
@@ -16,6 +20,7 @@
 #include <string>
 #include <filesystem>
 #include <cctype>
+#include <vector>
 
 // Helpers
 
@@ -213,7 +218,8 @@ bool Daemon::setProfile(const QString& internalName)
         return true;
     }
     const std::string key = internalName.toStdString();
-    
+
+    namespace fs = std::filesystem;
     // Look up the desired profile in YAML
     auto it = profiles.find(key);
     if (it == profiles.end()) {
@@ -269,168 +275,56 @@ bool Daemon::setProfile(const QString& internalName)
     };
 
     // Write the governor to all CPU policy/cpu nodes based on the single path in config
-    auto write_governor_all = [&](const std::string &path, const std::string &value) -> bool {
-        if (path.empty() || value.empty()) return true;
-
-        namespace fs = std::filesystem;
-        fs::path p(path);
-        bool all_ok = true;
-        bool did_write = false;
-        bool found_policy = false;
-        std::error_code ec;
-
-        if (p.filename() == "scaling_governor") {
-            fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
-
-            // Case A: /sys/.../cpufreq/policyX/scaling_governor  → write to all policyN/scaling_governor
-            fs::path root = parent.parent_path(); // .../cpufreq
-            for (const auto &e : fs::directory_iterator(root, ec)) {
-                if (!e.is_directory(ec)) continue;
-                const std::string name = e.path().filename().string();
-                // only policyN dirs (skip anything else)
-                bool is_policyN = name.rfind("policy", 0) == 0 &&
-                                std::all_of(name.begin() + 6, name.end(),
-                                            [](unsigned char ch){ return std::isdigit(ch); });
-                if (!is_policyN) continue;
-                found_policy = true;
-                fs::path target = e.path() / "scaling_governor";
-                all_ok &= write_value(target.string(), value, "cpu_governor");
-                did_write = true;
-            }
-            if (found_policy) {
-                return all_ok && did_write;
-            }
-
-            // Case B: /sys/.../cpu/cpuX/cpufreq/scaling_governor  → write to all cpuN/cpufreq/scaling_governor
-            fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
-
-            // Probe just cpu0 as a sanity check (your requested behavior)
-            fs::path probe = cpu_root / "cpu0" / "cpufreq" / "scaling_governor";
-            if (!fs::exists(probe, ec)) {
-                // If cpu0 path isn't present, fall back to the single configured node
-                return write_value(path, value, "cpu_governor");
-            }
-
-            for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
-                if (!e.is_directory(ec)) continue;
-                const std::string name = e.path().filename().string();
-                // only cpuN dirs (skip 'cpufreq' and anything else)
-                bool is_cpuN = name.rfind("cpu", 0) == 0 &&
-                            std::all_of(name.begin() + 3, name.end(),
-                                        [](unsigned char ch){ return std::isdigit(ch); });
-                if (!is_cpuN) continue;
-                fs::path target = e.path() / "cpufreq" / "scaling_governor";
-                all_ok &= write_value(target.string(), value, "cpu_governor");
-                did_write = true;
-            }
-            return all_ok && did_write;
-
+    // Write one field to every CPU node the config's single example path implies,
+    // returning the nodes that refused so the caller can explain it in its terms.
+    // An empty return means every target took the value.
+    //
+    // The old code had a copy of this per field, and the copies had drifted: the
+    // governor path reported a failed write as success, and only the EPP path said
+    // anything when the kernel refused a value.
+    auto write_all = [&](const std::string& configuredPath, const std::string& value,
+                         const std::string& fieldName, const char* label) {
+        std::vector<std::string> rejected;
+        if (configuredPath.empty() || value.empty()) return rejected;
+        for (const std::string& target : cpuTargetsFor(configuredPath, fieldName)) {
+            if (!write_value(target, value, label)) rejected.push_back(target);
         }
-
-        // Fallback: single write (if the configured path isn’t a known pattern)
-        return write_value(path, value, "cpu_governor");
+        return rejected;
     };
 
-    // Write the epp profile to all CPU policy/cpu nodes based on the single path in config
-    auto write_epp_all = [&](const std::string &path, const std::string &value) -> bool {
-        if (path.empty() || value.empty()) return true;
-
-        namespace fs = std::filesystem;
-        fs::path p(path);
-        bool all_ok = true;
-        bool did_write = false;
-        bool found_policy = false;
-        std::error_code ec;
-        if (p.filename() == "energy_performance_preference") {
-            fs::path parent = p.parent_path(); // .../policyX or .../cpufreq
-
-            // Case A: /sys/.../cpufreq/policyX/energy_performance_preference  → write to all policyN/energy_performance_preference
-            fs::path root = parent.parent_path(); // .../cpufreq
-            for (const auto &e : fs::directory_iterator(root, ec)) {
-                if (!e.is_directory(ec)) continue;
-                const std::string name = e.path().filename().string();
-                // only policyN dirs (skip anything else)
-                bool is_policyN = name.rfind("policy", 0) == 0 &&
-                                std::all_of(name.begin() + 6, name.end(),
-                                            [](unsigned char ch){ return std::isdigit(ch); });
-                if (!is_policyN) continue;
-                found_policy = true;
-                fs::path target = e.path() / "energy_performance_preference";
-                bool w = write_value(target.string(), value, "epp_profile");
-                if (!w) {
-                    fs::path avail = e.path() / "energy_performance_available_preferences";
-                    fs::path gov   = e.path() / "scaling_governor";
-                    const std::string avail_s = read_sysfs_line(avail.string());
-                    const std::string gov_s   = read_sysfs_line(gov.string());
-                    log_error(QString("setProfile(): EPP request '%1' rejected at %2 (governor=%3; available=%4)")
-                              .arg(QString::fromStdString(value),
-                                   QString::fromStdString(target.string()),
-                                   QString::fromStdString(gov_s.empty() ? std::string("<unknown>") : gov_s),
-                                   QString::fromStdString(avail_s.empty() ? std::string("<unknown>") : avail_s))
-                              .toUtf8().constData());
-                }
-                all_ok &= w;
-                if (w) did_write = true;
-            }
-            if (found_policy) {
-                return all_ok && did_write;
-            }
-
-
-            // Case B: /sys/.../cpu/cpuX/cpufreq/energy_performance_preference  → write to all cpuN/cpufreq/energy_performance_preference
-            fs::path cpu_root = parent.parent_path().parent_path(); // .../cpu
-
-            // Probe just cpu0 as a sanity check (your requested behavior)
-            fs::path probe = cpu_root / "cpu0" / "cpufreq" / "energy_performance_preference";
-            if (!fs::exists(probe, ec)) {
-                // If cpu0 path isn't present, fall back to the single configured node
-                return write_value(path, value, "epp_profile");
-            }
-
-            for (const auto &e : fs::directory_iterator(cpu_root, ec)) {
-                if (!e.is_directory(ec)) continue;
-                const std::string name = e.path().filename().string();
-                // only cpuN dirs (skip 'cpufreq' and anything else)
-                bool is_cpuN = name.rfind("cpu", 0) == 0 &&
-                            std::all_of(name.begin() + 3, name.end(),
-                                        [](unsigned char ch){ return std::isdigit(ch); });
-                if (!is_cpuN) continue;
-                fs::path target = e.path() / "cpufreq" / "energy_performance_preference";
-                bool w = write_value(target.string(), value, "epp_profile");
-                if (!w) {
-                    fs::path avail = e.path() / "cpufreq" / "energy_performance_available_preferences";
-                    fs::path gov   = e.path() / "cpufreq" / "scaling_governor";
-                    const std::string avail_s = read_sysfs_line(avail.string());
-                    const std::string gov_s   = read_sysfs_line(gov.string());
-                    log_error(QString("setProfile(): EPP request '%1' rejected at %2 (governor=%3; available=%4)")
-                              .arg(QString::fromStdString(value),
-                                   QString::fromStdString(target.string()),
-                                   QString::fromStdString(gov_s.empty() ? std::string("<unknown>") : gov_s),
-                                   QString::fromStdString(avail_s.empty() ? std::string("<unknown>") : avail_s))
-                              .toUtf8().constData());
-                }
-                all_ok &= w;
-                if (w) did_write = true;
-            }
-            return all_ok && did_write;
-
+    // A refused value is the one failure worth explaining: say what the kernel would
+    // have accepted. The governor is included because EPP acceptance depends on it.
+    auto report_rejections = [&](const std::vector<std::string>& rejected,
+                                 const std::string& value, const std::string& fieldName) {
+        for (const std::string& target : rejected) {
+            const fs::path dir = fs::path(target).parent_path();
+            const std::string avail = read_sysfs_line((dir / availableValuesFileName(fieldName)).string());
+            const std::string gov   = read_sysfs_line((dir / "scaling_governor").string());
+            log_error(QString("setProfile(): request '%1' rejected at %2 (governor=%3; available=%4)")
+                      .arg(QString::fromStdString(value),
+                           QString::fromStdString(target),
+                           QString::fromStdString(gov.empty()   ? std::string("<unknown>") : gov),
+                           QString::fromStdString(avail.empty() ? std::string("<unknown>") : avail))
+                      .toUtf8().constData());
         }
-
-        // Fallback: single write (if the configured path isn’t a known pattern)
-        return write_value(path, value, "epp_profile");
     };
 
 
     bool ok = true;
-    if (!is_disabled(ps.cpu_governor)){
-        //ok &= write_value(hardware.cpu_governor.path,          ps.cpu_governor,          "cpu_governor");
-        ok &= write_governor_all(hardware.cpu_governor.path, ps.cpu_governor);
-    }else
+    if (!is_disabled(ps.cpu_governor)) {
+        const auto rejected = write_all(hardware.cpu_governor.path, ps.cpu_governor,
+                                        "scaling_governor", "cpu_governor");
+        report_rejections(rejected, ps.cpu_governor, "scaling_governor");
+        ok &= rejected.empty();
+    } else
         log_info("cpu_governor disabled in profile; skipping write");
 
-    if (!is_disabled(ps.epp_profile)){
-        ok &= write_epp_all(hardware.epp_profile.path, ps.epp_profile);
-    }else
+    if (!is_disabled(ps.epp_profile)) {
+        const auto rejected = write_all(hardware.epp_profile.path, ps.epp_profile,
+                                        "energy_performance_preference", "epp_profile");
+        report_rejections(rejected, ps.epp_profile, "energy_performance_preference");
+        ok &= rejected.empty();
+    } else
         log_info("epp_profile disabled in profile; skipping write");
 
     if (!is_disabled(ps.acpi_platform_profile))

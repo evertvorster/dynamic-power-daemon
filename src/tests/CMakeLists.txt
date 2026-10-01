@@ -16,6 +16,15 @@ target_include_directories(tst_config PRIVATE ${DP_SRC} ${SYSTEMD_INCLUDE_DIRS})
 target_link_libraries(tst_config PRIVATE Qt6::Test Qt6::Core yaml-cpp ${SYSTEMD_LIBRARIES})
 add_test(NAME tst_config COMMAND tst_config)
 
+# --- which sysfs nodes a configured example path stands for --------------------
+add_executable(tst_cpu_targets
+    tst_cpu_targets.cpp
+    ${DP_SRC}/daemon/cpu_targets.cpp
+)
+target_include_directories(tst_cpu_targets PRIVATE ${DP_SRC})
+target_link_libraries(tst_cpu_targets PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME tst_cpu_targets COMMAND tst_cpu_targets)
+
 # --- the read/serialize side of the same file --------------------------------
 add_executable(tst_rootcompositefeature
     tst_rootcompositefeature.cpp
