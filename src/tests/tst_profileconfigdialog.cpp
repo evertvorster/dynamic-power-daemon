@@ -16,6 +16,9 @@
 #include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
+#include <QRadioButton>
+#include <QToolButton>
+#include <QSignalSpy>
 #include <QString>
 
 #include "userctl/ProfileConfigDialog.h"
@@ -50,6 +53,8 @@ private slots:
     void init();
     void declaredModesSurviveOpeningTheDialog();
     void theAcceptedListStillFollowsTheMachine();
+    void everyRowStartsGreyed();
+    void selectingAProfileAsksForThatModeAndUngreysOnlyThatRow();
 
 private:
     QTemporaryDir m_dir;
@@ -100,6 +105,49 @@ void TestProfileConfigDialog::theAcceptedListStillFollowsTheMachine()
     QCOMPARE(cap.accepted, QStringList({ QStringLiteral("gamma"), QStringLiteral("delta"),
                                          QStringLiteral("disabled") }));
     QVERIFY2(cap.accepted != cap.modes, "the two lists must be distinguishable");
+}
+
+static QRadioButton* toggleFor(ProfileConfigDialog& dlg, const QString& profile)
+{
+    for (QRadioButton* r : dlg.findChildren<QRadioButton*>())
+        if (r->text() == profile) return r;
+    return nullptr;
+}
+
+void TestProfileConfigDialog::everyRowStartsGreyed()
+{
+    // Nothing is selected to begin with, which means "let the daemon decide". The rows
+    // are greyed rather than hidden so the whole table is still readable.
+    ProfileConfigDialog dlg(nullptr, m_configPath);
+
+    for (const auto& profile : dlg.m_profiles) {
+        const auto btns = dlg.m_buttons.value(profile);
+        QVERIFY2(!btns.isEmpty(), qPrintable(profile));
+        for (QToolButton* b : btns)
+            QVERIFY2(!b->isEnabled(), qPrintable(profile + QStringLiteral(" should start greyed")));
+    }
+}
+
+void TestProfileConfigDialog::selectingAProfileAsksForThatModeAndUngreysOnlyThatRow()
+{
+    ProfileConfigDialog dlg(nullptr, m_configPath);
+    QSignalSpy spy(&dlg, &ProfileConfigDialog::modeRequested);
+
+    QRadioButton* balanced = toggleFor(dlg, QStringLiteral("balanced"));
+    QVERIFY(balanced);
+    balanced->setChecked(true);
+
+    // The machine is asked for that profile - which is what makes the option lists
+    // truthful - and only that row becomes editable.
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.first().first().toString(), QStringLiteral("Balanced"));
+
+    for (QToolButton* b : dlg.m_buttons.value(QStringLiteral("balanced")))
+        QVERIFY2(b->isEnabled(), "the selected row must be editable");
+    for (const auto& other : { QStringLiteral("powersave"), QStringLiteral("performance") }) {
+        for (QToolButton* b : dlg.m_buttons.value(other))
+            QVERIFY2(!b->isEnabled(), qPrintable(other + QStringLiteral(" must stay greyed")));
+    }
 }
 
 QTEST_MAIN(TestProfileConfigDialog)

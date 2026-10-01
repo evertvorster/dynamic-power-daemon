@@ -35,6 +35,13 @@ public:
     explicit ProfileConfigDialog(QWidget* parent = nullptr,
                                  const QString& configPath = DEFAULT_CONFIG_PATH);
     ~ProfileConfigDialog() override;   // make dtor public so stack allocation works
+
+signals:
+    // Asks to put the machine into a profile. It goes through the same override the mode
+    // button in the main window uses, so there is one mechanism and one piece of state.
+    // "Dynamic" means "let the daemon decide again".
+    void modeRequested(const QString& mode);
+
 private slots:
     void onSave();
     void onCancel();
@@ -53,6 +60,10 @@ private:
 
     // "[declared modes]", plus what the machine currently accepts when that differs.
     QString modesLabelText(const QString& key) const;
+
+    // Selecting a profile puts the machine into it and greys the other rows, so the
+    // option lists shown are read from the mode that is actually running.
+    void onProfileSelected(const QString& profile);
     
     // UI state
     QVBoxLayout* m_outer = nullptr;

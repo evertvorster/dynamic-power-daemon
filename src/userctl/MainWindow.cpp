@@ -41,8 +41,18 @@ MainWindow::MainWindow(DbusClient* dbus, UserConfig* config, QWidget* parent)
     auto* profileBtn = new QPushButton("Profile Configuration", this);
     layout->addWidget(profileBtn);
     connect(profileBtn, &QPushButton::clicked, this, [this] {
+        // The dialog switches the machine into whichever profile is being configured, using
+        // the same override the mode button uses, so the option lists it shows are read from
+        // the mode that is actually running. The previous mode is put back when the window
+        // closes: exec() returns however it closed, so this one line covers Save, Cancel,
+        // Escape and the title bar alike.
+        const QString previousMode = m_userMode;
         ProfileConfigDialog dlg(this, DEFAULT_CONFIG_PATH);
+        connect(&dlg, &ProfileConfigDialog::modeRequested, this, [this](const QString& mode) {
+            emit userOverrideSelected(mode, mode != QStringLiteral("Dynamic"));
+        });
         dlg.exec();
+        emit userOverrideSelected(previousMode, previousMode != QStringLiteral("Dynamic"));
     });
 
     auto* rootFeatBtn = new QPushButton("Power-saving Features…", this);

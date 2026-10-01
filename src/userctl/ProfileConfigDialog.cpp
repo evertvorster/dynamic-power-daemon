@@ -13,6 +13,8 @@
 #include <QProcess>
 #include <QMessageBox>
 #include <QScrollArea>
+#include <QRadioButton>
+#include <QButtonGroup>
 #include <QLineEdit>
 #include <QRegularExpression>
 #include <QFontMetrics>
@@ -245,9 +247,23 @@ void ProfileConfigDialog::buildProfilesUI() {
 
     // Load initial selections from YAML, fallback to first mode
     YAML::Node profs = (*m_root)["profiles"];
+
+    // One exclusive group, so selecting a profile clears the others without bookkeeping.
+    auto* group = new QButtonGroup(this);
+    group->setExclusive(true);
+
     int row = 1;
     for (const auto& profile : m_profiles) {
-        m_profilesGrid->addWidget(new QLabel(profile), row, 0);
+        // The toggle decides which profile the machine is put into, and that is what makes
+        // the option lists truthful: the accepted EPP values depend on the governor that is
+        // actually running. Nothing starts selected, which leaves the daemon deciding on
+        // its own until a profile is picked for editing.
+        auto* toggle = new QRadioButton(profile, area);
+        m_profilesGrid->addWidget(toggle, row, 0);
+        group->addButton(toggle);
+        connect(toggle, &QRadioButton::toggled, this, [this, profile](bool on) {
+            if (on) onProfileSelected(profile);
+        });
 
         QMap<QString, QToolButton*> btnMap;
         for (const auto& capKey : capKeys()) {
@@ -273,9 +289,7 @@ void ProfileConfigDialog::buildProfilesUI() {
                 m_profilesGrid->columnCount() - (int)capKeys().size() + capKeys().indexOf(capKey)
             );
             btnMap.insert(capKey, btn);
-
-            m_profilesGrid->addWidget(btn, row, m_profilesGrid->columnCount() - (int)capKeys().size() + capKeys().indexOf(capKey));
-            btnMap.insert(capKey, btn);
+            btn->setEnabled(false);   // until this profile is selected for editing
         }
         m_buttons.insert(profile, btnMap);
         row++;
@@ -287,6 +301,14 @@ void ProfileConfigDialog::buildProfilesUI() {
     auto* container = new QWidget(this);
     auto* v = new QVBoxLayout(container);
     v->addWidget(label);
+
+    // Said here rather than in a tooltip: the greyed rows look broken otherwise, and the
+    // machine really does change mode while this window is open.
+    auto* modeNote = new QLabel("Select a profile to configure it. The machine is switched into "
+                               "that profile while it is selected, and your previous mode is "
+                               "restored when this window closes.");
+    modeNote->setWordWrap(true);
+    v->addWidget(modeNote);
     v->addWidget(area);
     rowHBox->addWidget(container);
     rowHBox->addStretch(1);
@@ -309,6 +331,24 @@ void ProfileConfigDialog::updateButtonMenu(const QString& profile, const QString
     }
     btn->setMenu(menu);
 }
+
+// Selecting a profile puts the machine into it and greys every other row. Being in the
+// profile is the point: the accepted EPP values depend on the governor that is running,
+// so the lists can only be truthful for the mode the machine is actually in.
+void ProfileConfigDialog::onProfileSelected(const QString& profile)
+{
+    for (const auto& p : m_profiles) {
+        const bool selected = (p == profile);
+        for (QToolButton* btn : m_buttons.value(p)) {
+            if (btn) btn->setEnabled(selected);
+        }
+    }
+
+    emit modeRequested(profile.isEmpty()
+                           ? QStringLiteral("Dynamic")
+                           : profile.left(1).toUpper() + profile.mid(1));
+}
+
 
 // The declared list, plus what the machine accepts right now when that differs. Both
 // are shown because they answer different questions: the first is what this config may
