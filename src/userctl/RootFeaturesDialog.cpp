@@ -205,7 +205,12 @@ RootFeaturesDialog::RootFeaturesDialog(QWidget* parent, const QString& etcPath)
         connect(m_removeKernelBtn, &QPushButton::clicked, this, [this] { onRemoveKernelTuning(); });
         connect(m_saveBtn, &QPushButton::clicked, this, [this] { onSave(); });
 
-        loadState();
+        // Deferred, not called here. Loading walks /sys/devices and shells out to
+        // kscreen-doctor, and doing that from the constructor means the window cannot paint
+        // until it finishes - which is why the dialog used to appear with "(detecting...)"
+        // still on it. Queued once the event loop runs, so the dialog is on screen first and
+        // fills itself in when the answers arrive.
+        QTimer::singleShot(0, this, [this] { loadState(); });
         updateConfirmUI();
 }
 
@@ -637,6 +642,12 @@ void RootFeaturesDialog::loadState(){
         seedDefaults();
         rebuildTree();
         connectPowerRefresh();
+
+        // The user-features labels start out as "(detecting...)" and were previously only
+        // refreshed as a side effect of rebuildTree(), or by a power-state change arriving
+        // later. Refreshing once here means the dialog shows real values as soon as it
+        // opens, without tying a kscreen call to every tree rebuild.
+        refreshLiveState();
 }
 
 
@@ -816,10 +827,9 @@ void RootFeaturesDialog::rebuildTree(){
             }
             m_tree->setCurrentItem(firstMatch ? firstMatch : m_tree->topLevelItem(0));
         }
-        // Live status is deliberately not refreshed from here. rebuildTree() has no
-        // business running kscreen-doctor: it rebuilds a tree, and the status text it
-        // would update belongs to the user-features section, which refreshLiveState()
-        // refreshes when the power state actually changes.
+        // Live status is not refreshed from here: rebuildTree() rebuilds a tree, and the
+        // status text belongs to the user-features section. loadState() refreshes it once
+        // the tree is built, and refreshPowerState() again when the power state changes.
         m_updatingUi = false;
 }
 

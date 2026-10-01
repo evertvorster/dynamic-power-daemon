@@ -76,6 +76,13 @@ private:
     int m_seq = 0;
 };
 
+// The dialog defers detection until the event loop runs, so that it can appear before it
+// fills itself in. A test therefore has to let that happen.
+static void constructLoaded(RootFeaturesDialog& dialog)
+{
+    QCoreApplication::processEvents();
+}
+
 QString TestRootFeaturesDialog::write(const QByteArray& body)
 {
     const QString path = m_dir.filePath(QStringLiteral("etc-%1.yaml").arg(++m_seq));
@@ -92,6 +99,7 @@ void TestRootFeaturesDialog::keepsAnEnabledRule()
     const QString path = write(configWith("true", rule("node:/proc/sys/kernel/nmi_watchdog",
                                                         kNmiPath, true, "1", "0")));
     RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);   // detection is deferred until the event loop runs
     const RootState saved = dialog.stateToSave();
 
     QCOMPARE(countRule(saved, kNmiPath), 1);
@@ -110,6 +118,7 @@ void TestRootFeaturesDialog::keepsARuleThatIsSwitchedOff()
     const QString path = write(configWith("true", rule("node:/proc/sys/kernel/nmi_watchdog",
                                                         kNmiPath, false, "1", "0")));
     RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);   // detection is deferred until the event loop runs
     const RootState saved = dialog.stateToSave();
 
     QCOMPARE(countRule(saved, kNmiPath), 1);
@@ -128,6 +137,7 @@ void TestRootFeaturesDialog::writesNothingForUntouchedDetectedNodes()
     const QString path = write(configWith("true", rule("node:/proc/sys/kernel/nmi_watchdog",
                                                         kNmiPath, true, "1", "0")));
     RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);   // detection is deferred until the event loop runs
     const RootState saved = dialog.stateToSave();
 
     QCOMPARE(saved.nodes.size(), 1);
@@ -143,6 +153,7 @@ void TestRootFeaturesDialog::writesEverythingDisabledWhenTheDisclaimerIsNotAccep
                                         + rule("node:/proc/sys/vm/dirty_writeback_centisecs",
                                                kWritebackPath, true, "1000", "6000")));
     RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);   // detection is deferred until the event loop runs
     const RootState saved = dialog.stateToSave();
 
     QCOMPARE(saved.nodes.size(), 2);
@@ -165,6 +176,7 @@ void TestRootFeaturesDialog::dropsScaffoldingAndWritesRulesFlat()
     const QString path = write(configWith("true", nodes));
 
     RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);   // detection is deferred until the event loop runs
     const RootState saved = dialog.stateToSave();
 
     QCOMPARE(countRule(saved, kNmiPath), 1);
