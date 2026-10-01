@@ -143,3 +143,11 @@ install(FILES
     resources/dynamic_power.yaml
     DESTINATION "${SHARE_DIR}"
 )
+
+# Tests. BUILD_TESTING is on by default when this is included; Qt6::Test comes from
+# qt6-base, which is already a dependency, so nothing new is required to build them.
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_subdirectory(tests)
+endif()
