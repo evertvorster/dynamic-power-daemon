@@ -347,22 +347,13 @@ void ProfileConfigDialog::updateButtonMenu(const QString& profile, const QString
         });
     };
 
-    // What the machine accepts right now comes first. Anything the config declares but the
-    // running mode refuses follows below a separator, so it can still be set for another
-    // mode without being mistaken for something that works here. The union matters: a
-    // config whose declared list was narrowed by an earlier governor can be missing the
-    // very value a profile needs.
-    for (const auto& m : cap.accepted)
+    // The machine is the ground truth for what this knob can be set to. The config's own
+    // list is only a fallback for when the machine cannot be read at all - it used to be
+    // written *from* the machine, which made it a snapshot, and a stale snapshot mistaken
+    // for the truth is how the EPP list came to be narrowed to a single value.
+    const QStringList values = cap.accepted.isEmpty() ? cap.modes : cap.accepted;
+    for (const auto& m : values)
         add(m);
-
-    QStringList declaredOnly;
-    for (const auto& m : cap.modes)
-        if (!cap.accepted.contains(m)) declaredOnly << m;
-    if (!declaredOnly.isEmpty()) {
-        if (!cap.accepted.isEmpty()) menu->addSeparator();
-        for (const auto& m : declaredOnly)
-            add(m);
-    }
 
     btn->setMenu(menu);
 }
@@ -470,10 +461,12 @@ void ProfileConfigDialog::refreshDaemonWarnings()
 QString ProfileConfigDialog::modesLabelText(const QString& key) const
 {
     const CapabilityInfo cap = m_caps.value(key);
-    QString text = QString("[%1]").arg(cap.modes.join(", "));
-    if (!cap.accepted.isEmpty() && cap.accepted != cap.modes)
-        text += QString("   accepted now: [%1]").arg(cap.accepted.join(", "));
-    return text;
+    if (!cap.accepted.isEmpty())
+        return QString("[%1]").arg(cap.accepted.join(", "));
+    return cap.modes.isEmpty()
+               ? QString()
+               : QString("[%1]   (from the config: the machine's list is unreadable)")
+                     .arg(cap.modes.join(", "));
 }
 
 void ProfileConfigDialog::onSave() {
@@ -504,9 +497,10 @@ QByteArray ProfileConfigDialog::emitUpdatedYaml() const {
             YAML::Node h = hw[ks];
             h["path"] = cap.path.toStdString();
 
-            YAML::Node mm(YAML::NodeType::Sequence);
-            for (const auto& m : cap.modes) mm.push_back(m.toStdString());
-            h["modes"] = mm;
+            // Deliberately no persisted list of modes. The machine answers that, and a list
+            // previously written from the machine is a snapshot that can go stale - so any
+            // one still in the file is removed rather than left to be mistaken for truth.
+            h.remove("modes");
 
             // write options_path from UI if present; else preserve existing
             if (auto optEditWidget = this->findChild<QLineEdit*>(QString("opt_%1").arg(key))) {

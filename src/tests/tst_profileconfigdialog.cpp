@@ -60,7 +60,7 @@ private slots:
     void everyRowStartsGreyed();
     void selectingAProfileAsksForThatModeAndUngreysOnlyThatRow();
     void onlyTheSelectedProfilesValuesAreMarked();
-    void selectingAProfileOffersTheMachinesValuesToo();
+    void theMenuFollowsTheMachineNotTheConfig();
 
 private:
     QTemporaryDir m_dir;
@@ -183,11 +183,12 @@ void TestProfileConfigDialog::onlyTheSelectedProfilesValuesAreMarked()
              "balanced is no longer selected, so its marking must be cleared");
 }
 
-void TestProfileConfigDialog::selectingAProfileOffersTheMachinesValuesToo()
+void TestProfileConfigDialog::theMenuFollowsTheMachineNotTheConfig()
 {
-    // Evert's case: a config whose declared EPP list had been narrowed by an earlier
-    // governor cannot offer the value a profile needs. Selecting the profile re-reads the
-    // machine, and the menu offers those values alongside the declared ones.
+    // Evert's rule: the system is the ground truth for what a knob can be set to, not
+    // what was saved. The fixture's config declares [alpha, beta, disabled] while the
+    // "machine" reports [alpha, delta, disabled], so the menu must be the machine's -
+    // "delta" offered, "beta" gone, and no trace of the config's narrower list beyond it.
     ProfileConfigDialog dlg(nullptr, m_configPath);
     toggleFor(dlg, QStringLiteral("balanced"))->setChecked(true);
 
@@ -198,17 +199,13 @@ void TestProfileConfigDialog::selectingAProfileOffersTheMachinesValuesToo()
     QVERIFY(menu);
 
     QStringList items;
-    bool sawSeparator = false;
-    for (QAction* a : menu->actions()) {
-        if (a->isSeparator()) { sawSeparator = true; continue; }
-        items << a->text();
-    }
+    for (QAction* a : menu->actions())
+        if (!a->isSeparator()) items << a->text();
 
-    // "delta" is accepted by the machine but not declared in the config - the whole point.
-    QVERIFY2(items.contains(QStringLiteral("delta")), qPrintable(items.join(", ")));
-    // "beta" is declared but refused; it must still be reachable, below the separator.
-    QVERIFY2(items.contains(QStringLiteral("beta")), qPrintable(items.join(", ")));
-    QVERIFY2(sawSeparator, "accepted and merely-declared values must be separated");
+    QCOMPARE(items, QStringList({ QStringLiteral("alpha"), QStringLiteral("delta"),
+                                  QStringLiteral("disabled") }));
+    QVERIFY2(!items.contains(QStringLiteral("beta")),
+             "a value the machine refuses must not be offered");
 }
 
 QTEST_MAIN(TestProfileConfigDialog)
