@@ -372,23 +372,25 @@ void ProfileConfigDialog::onProfileSelected(const QString& profile)
 
     m_selectedProfile = profile;
 
-    // The machine has just been switched into this profile, so now is the moment to ask
-    // what it accepts - and to re-offer those values, since the menu is built from them.
+    // Switch the machine first. The accepted values follow the mode that is running, so
+    // reading them before this point answers for the governor that is still in effect -
+    // which is how the EPP list stayed narrowed to a single value no matter which profile
+    // was selected.
+    //
+    // This whole path is synchronous: signal to MainWindow, to App, to a blocking D-Bus
+    // call, and the daemon applies the profile before returning. So the reads below
+    // describe the profile that was just selected.
+    emit modeRequested(profile.isEmpty()
+                           ? QStringLiteral("Dynamic")
+                           : profile.left(1).toUpper() + profile.mid(1));
+
     detectAccepted();
     for (const auto& capKey : capKeys()) {
         refreshMenusForCap(capKey);
         if (auto* lbl = findChild<QLabel*>(QString("modes_%1").arg(capKey)))
             lbl->setText(modesLabelText(capKey));
     }
-
     refreshValueMarking();
-
-    emit modeRequested(profile.isEmpty()
-                           ? QStringLiteral("Dynamic")
-                           : profile.left(1).toUpper() + profile.mid(1));
-
-    // SetProfile applies synchronously, so by the time this returns the daemon has
-    // already applied the profile and any refusal is ready to read.
     refreshDaemonWarnings();
 }
 

@@ -61,10 +61,12 @@ private slots:
     void selectingAProfileAsksForThatModeAndUngreysOnlyThatRow();
     void onlyTheSelectedProfilesValuesAreMarked();
     void theMenuFollowsTheMachineNotTheConfig();
+    void detectionHappensAfterTheMachineIsSwitched();
 
 private:
     QTemporaryDir m_dir;
     QString m_configPath;
+    QString m_optionsPath;
 };
 
 void TestProfileConfigDialog::init()
@@ -72,6 +74,7 @@ void TestProfileConfigDialog::init()
     QVERIFY(m_dir.isValid());
 
     const QString optionsPath = m_dir.filePath(QStringLiteral("available"));
+    m_optionsPath = optionsPath;
     QFile o(optionsPath);
     QVERIFY(o.open(QIODevice::WriteOnly | QIODevice::Truncate));
     o.write("alpha\ndelta\n");
@@ -206,6 +209,30 @@ void TestProfileConfigDialog::theMenuFollowsTheMachineNotTheConfig()
                                   QStringLiteral("disabled") }));
     QVERIFY2(!items.contains(QStringLiteral("beta")),
              "a value the machine refuses must not be offered");
+}
+
+void TestProfileConfigDialog::detectionHappensAfterTheMachineIsSwitched()
+{
+    // The accepted set follows the mode that is running, so it must be read *after* the
+    // machine is switched - not before, which answers for the governor still in effect and
+    // leaves the list narrowed however many times you select a profile.
+    //
+    // The handler stands in for the daemon: it changes what the machine reports, exactly as
+    // a governor change would, at the moment the mode is requested.
+    ProfileConfigDialog dlg(nullptr, m_configPath);
+    connect(&dlg, &ProfileConfigDialog::modeRequested, this, [this](const QString&) {
+        QFile o(m_optionsPath);
+        if (o.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            o.write("mdelta\nmepsilon\n");
+            o.close();
+        }
+    });
+
+    toggleFor(dlg, QStringLiteral("balanced"))->setChecked(true);
+
+    QCOMPARE(dlg.m_caps.value(QStringLiteral("epp_profile")).accepted,
+             QStringList({ QStringLiteral("mdelta"), QStringLiteral("mepsilon"),
+                           QStringLiteral("disabled") }));
 }
 
 QTEST_MAIN(TestProfileConfigDialog)
