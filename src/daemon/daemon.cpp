@@ -195,7 +195,7 @@ bool Daemon::loadAvailableProfiles()
     }
 
     // Sanity: warn if our canonical trio are missing
-    for (const QString &role : { "performance", "balanced", "powersave" }) {
+    for (const char *role : { "performance", "balanced", "powersave" }) {
         if (!m_availableProfiles.contains(role)) {
             log_warning(QString("Missing profile '%1' in the config").arg(role).toUtf8().constData());
         } else {

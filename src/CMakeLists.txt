@@ -4,6 +4,8 @@ project(dynamic_power_cpp LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_compile_options(-Wall -Wextra)
+
 find_package(Qt6 REQUIRED COMPONENTS Core DBus)
 find_package(PkgConfig REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core DBus Widgets)

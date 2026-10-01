@@ -6,7 +6,8 @@
 #include <QMouseEvent>
 #include <QTextStream>
 #include <cmath>
-#include <QCursor> 
+#include <algorithm>
+#include <QCursor>
 
 LoadGraphWidget::LoadGraphWidget(QWidget* parent) : QWidget(parent) {
     m_timer = new QTimer(this);
@@ -69,16 +70,14 @@ double LoadGraphWidget::currentMaxY() const {
 double LoadGraphWidget::valueToY(double v) const {
     double maxY = currentMaxY();
     double h = height() - (m_padTop + m_padBottom);
-    double ratio = (maxY > 0.0) ? (v / maxY) : 0.0;
-    if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+    const double ratio = std::clamp(maxY > 0.0 ? (v / maxY) : 0.0, 0.0, 1.0);
     return m_padTop + (1.0 - ratio) * h;
 }
 
 double LoadGraphWidget::yToValue(double y) const {
     double maxY = currentMaxY();
     double h = height() - (m_padTop + m_padBottom);
-    double ratio = 1.0 - ((y - m_padTop) / h);
-    if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+    const double ratio = std::clamp(1.0 - ((y - m_padTop) / h), 0.0, 1.0);
     return ratio * maxY;
 }
 
