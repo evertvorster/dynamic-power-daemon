@@ -41,8 +41,11 @@ profiles:
   # Every option ships disabled. Which values a machine accepts cannot be known in
   # advance - the valid EPP set depends on the running governor, the driver and the
   # platform - so the template declares no mapping at all rather than shipping one
-  # that is wrong on most laptops. The hardware.*.modes lists above are the declared
-  # intent, and are what the profile editor offers.
+  # that is wrong on most laptops.
+  #
+  # The editor reads the accepted values from the machine itself, through each
+  # capability's options_path above. The hardware.*.modes lists are only a fallback for
+  # when that cannot be read, and are no longer written back on save.
   powersave:
     cpu_governor: disabled
     epp_profile: disabled
