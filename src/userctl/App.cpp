@@ -64,7 +64,6 @@ void App::start() {
     m_mainWindow = std::make_unique<MainWindow>(m_dbus.get(), m_config.get());
     connect(m_mainWindow.get(), &MainWindow::userOverrideSelected, this, &App::onUserOverrideChanged);
     connect(m_mainWindow.get(), &MainWindow::thresholdsAdjusted, this, &App::onThresholdsAdjusted);
-    connect(m_mainWindow.get(), &MainWindow::visibilityChanged, this, &App::onWindowVisibilityChanged);
     m_features = std::make_unique<dp::features::FeatureRegistry>();
     m_features->applyAll(m_lastOnBattery);   // <-- apply once on startup using current UPower state
     m_mainWindow->refreshProcessButtons();
@@ -246,10 +245,6 @@ void App::onThresholdsAdjusted(double low, double high) {
                                         stateLater.value("threshold_high").toDouble());
         }
     });
-}
-
-void App::onWindowVisibilityChanged(bool visible) {
-       // No-op for ProcessMonitor; it runs continuously.
 }
 
 void App::updateTrayFromState() {

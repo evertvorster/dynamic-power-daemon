@@ -30,11 +30,8 @@ public:
 signals:
     void userOverrideSelected(const QString& mode, bool boss);
     void thresholdsAdjusted(double low, double high);
-    void visibilityChanged(bool visible);
 
 protected:
-    void showEvent(QShowEvent* e) override;
-    void hideEvent(QHideEvent* e) override;
     void closeEvent(QCloseEvent* e) override;
 
 private slots:

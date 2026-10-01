@@ -1274,20 +1274,10 @@ void MainWindow::setProcessMatchState(const QSet<QString>& matches, const QStrin
     refreshProcessButtons();
 }
 
-void MainWindow::showEvent(QShowEvent* e) {
-    QMainWindow::showEvent(e);
-    emit visibilityChanged(true);
-}
-
-void MainWindow::hideEvent(QHideEvent* e) {
-    QMainWindow::hideEvent(e);
-    emit visibilityChanged(false);
-}
-
 void MainWindow::closeEvent(QCloseEvent* e) {
+    // Closing hides the window rather than quitting; the app lives in the tray.
     e->ignore();
     hide();
-    emit visibilityChanged(false);
 }
 
 void MainWindow::onOverrideButtonClicked() {

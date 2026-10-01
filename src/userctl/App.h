@@ -31,6 +31,5 @@ private:
     void onDaemonStateChanged();
     void onUserOverrideChanged(const QString& mode, bool boss);
     void onThresholdsAdjusted(double low, double high);
-    void onWindowVisibilityChanged(bool visible);
     void updateTrayFromState();
 };
