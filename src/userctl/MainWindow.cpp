@@ -211,10 +211,14 @@ public:
                 [this](QTreeWidgetItem* current, QTreeWidgetItem*) { loadInspector(current); });
         connect(m_tree, &QTreeWidget::itemChanged, this,
                 [this](QTreeWidgetItem* item, int column) { onTreeItemChanged(item, column); });
-        connect(m_overrideCheck, &QCheckBox::toggled, this, [this](bool) { onInspectorChanged(); });
-        connect(m_enabledCheck, &QCheckBox::toggled, this, [this](bool) { onInspectorChanged(); });
-        connect(m_acCombo, &QComboBox::currentTextChanged, this, [this](const QString&) { onInspectorChanged(); });
-        connect(m_batCombo, &QComboBox::currentTextChanged, this, [this](const QString&) { onInspectorChanged(); });
+        connect(m_overrideCheck, &QCheckBox::toggled, this,
+                [this](bool) { onInspectorChanged(BulkEnabled | BulkAc | BulkBat); });
+        connect(m_enabledCheck, &QCheckBox::toggled, this,
+                [this](bool) { onInspectorChanged(BulkEnabled); });
+        connect(m_acCombo, &QComboBox::currentTextChanged, this,
+                [this](const QString&) { onInspectorChanged(BulkAc); });
+        connect(m_batCombo, &QComboBox::currentTextChanged, this,
+                [this](const QString&) { onInspectorChanged(BulkBat); });
         connect(m_addKernelBtn, &QPushButton::clicked, this, [this] { onAddKernelTuning(); });
         connect(m_removeKernelBtn, &QPushButton::clicked, this, [this] { onRemoveKernelTuning(); });
         connect(m_saveBtn, &QPushButton::clicked, this, [this] { onSave(); });
@@ -260,6 +264,11 @@ private:
     QMap<QString, int> m_indexById;
     QMap<QString, QTreeWidgetItem*> m_treeItems;
     bool m_updatingUi = false;
+
+    // Which inspector field the user touched. A bulk edit must apply only that one: a container
+    // row shows an aggregate (typically Enabled=0 with mixed or empty values), so applying all
+    // three on any edit disabled the whole subtree and blanked its values.
+    enum BulkField { BulkEnabled = 1, BulkAc = 2, BulkBat = 4 };
 
 private slots:
     void refreshLiveState() {
@@ -461,7 +470,7 @@ private slots:
         std::function<void(const QString&)> walk = [&](const QString& id) {
             for (auto& child : m_state.nodes) {
                 if (child.parentId != id) continue;
-                if (isRealControlLeaf(child)) out.push_back(&child);
+                if (isRealControlLeaf(child) && child.supported) out.push_back(&child);
                 walk(child.id);
             }
         };
@@ -474,7 +483,10 @@ private slots:
         std::function<void(const QString&)> walk = [&](const QString& id) {
             for (const auto& child : m_state.nodes) {
                 if (child.parentId != id) continue;
-                if (isRealControlLeaf(child)) out.push_back(&child);
+                // Only leaves the user can actually see. The tree carries a control leaf for
+                // every device the kernel has, but the inert ones are hidden; letting a bulk
+                // edit reach them wrote rules for i2c/ALSA/DRM sub-nodes nobody can see.
+                if (isRealControlLeaf(child) && child.supported) out.push_back(&child);
                 walk(child.id);
             }
         };
@@ -482,12 +494,20 @@ private slots:
         return out;
     }
 
-    void applyBulkEditToLeaves(const RootNode& source, bool enabled, const QString& acValue, const QString& batteryValue) {
+    void applyBulkEditToLeaves(const RootNode& source, int fields, bool enabled,
+                               const QString& acValue, const QString& batteryValue) {
         for (RootNode* leaf : descendantControlLeaves(source.id)) {
+            bool touched = false;
+            if (fields & BulkEnabled) { leaf->enabled = enabled; touched = true; }
+            // Skip empty values. A container's combos show an aggregate, and mixed descendants
+            // make it empty; writing that down blanked every value in the subtree, and a rule
+            // with no value is not written at all - so the rules disappeared.
+            if ((fields & BulkAc) && !acValue.isEmpty()) { leaf->acValue = acValue; touched = true; }
+            if ((fields & BulkBat) && !batteryValue.isEmpty()) { leaf->batteryValue = batteryValue; touched = true; }
+            // Only leaves actually changed become rules. Touching a field that turns out to be
+            // empty is not an edit, and used to turn every device under the row into a rule.
+            if (!touched) continue;
             leaf->policyScope = QStringLiteral("override");
-            leaf->enabled = enabled;
-            leaf->acValue = acValue;
-            leaf->batteryValue = batteryValue;
             leaf->hasRule = true;
         }
     }
@@ -923,11 +943,22 @@ private slots:
         m_addKernelBtn->setEnabled(kernelGroup);
         m_removeKernelBtn->setEnabled(removableKernel);
         // A rule that is switched off is still a rule, so presence is shown separately from
-        // Enabled. The Delete button only appears when there is something to delete; deleting
-        // drops the rule, switching off keeps it.
-        m_ruleState->setText(node->hasRule ? QStringLiteral("· rule") : QString());
+        // Enabled. The marker also reports rules further down the branch, which a container
+        // row has no way of showing otherwise. Delete only appears when this node itself has
+        // one; deleting drops the rule, switching off keeps it.
+        const bool branchHasRule = node->isGroup && anyDescendantHasRule(node->id);
+        m_ruleState->setText(node->hasRule ? QStringLiteral("· rule")
+                            : branchHasRule ? QStringLiteral("· rules below")
+                                            : QString());
         m_deleteRuleBtn->setVisible(node->hasRule);
         m_updatingUi = false;
+    }
+
+    // True when any visible control leaf beneath this id carries a rule.
+    bool anyDescendantHasRule(const QString& parentId) const {
+        for (const RootNode* leaf : descendantControlLeavesConst(parentId))
+            if (leaf->hasRule) return true;
+        return false;
     }
 
     // Remove this node's stored rule. In memory only until Save, so closing without saving
@@ -954,7 +985,7 @@ private slots:
                 acValue = leaves.first()->acValue;
                 batteryValue = leaves.first()->batteryValue;
             }
-            applyBulkEditToLeaves(*node, enabled, acValue, batteryValue);
+            applyBulkEditToLeaves(*node, BulkEnabled | BulkAc | BulkBat, enabled, acValue, batteryValue);
         } else {
             node->policyScope = QStringLiteral("override");
             node->enabled = enabled;
@@ -964,13 +995,15 @@ private slots:
         if (m_tree->currentItem() == item) loadInspector(item);
     }
 
-    void onInspectorChanged() {
+    // `changed` is required: a bulk edit applies only the field the user touched. Passing a
+    // default would let a future caller re-apply all three from a container's aggregate state.
+    void onInspectorChanged(int changed) {
         if (m_updatingUi) return;
         RootNode* node = selectedNode();
         if (!node) return;
 
         if (isBulkEditableDeviceNode(*node)) {
-            applyBulkEditToLeaves(*node,
+            applyBulkEditToLeaves(*node, changed,
                                   m_enabledCheck->isChecked(),
                                   m_acCombo->currentText().trimmed(),
                                   m_batCombo->currentText().trimmed());
