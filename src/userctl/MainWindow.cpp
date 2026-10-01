@@ -113,7 +113,7 @@ public:
         m_advancedToggle = new QCheckBox("Advanced View", this);
         m_advancedToggle->setToolTip("Show non-PCI device tree entries and other advanced device nodes.");
         disclaimBox->addWidget(m_advancedToggle, 0);
-        m_confirmNote = new QLabel("Saving is blocked until you accept the disclaimer.", this);
+        m_confirmNote = new QLabel("Rules are saved disabled until you accept the disclaimer.", this);
         disclaimBox->addWidget(m_confirmNote, 1);
         groupLay->addLayout(disclaimBox);
         connect(m_confirmBtn, &QPushButton::clicked, this, [this] { showDisclaimer(); });
@@ -1034,20 +1034,31 @@ private slots:
         rebuildTree();
     }
 
-    // Only rules that will actually do something are written out. A node that is
-    // disabled, inherits a disabled parent, has no value to write, or points at
-    // hardware that is not present is indistinguishable from one the user never
-    // touched: the daemon skips it and the next load re-seeds it from the live
-    // sysfs reading. Writing just the active set keeps tree scaffolding, stale
-    // device paths and untouched devices out of the config file.
-    RootState activeRulesOnly() const {
+    // What a Save writes.
+    //
+    // A node becomes a rule if it is switched on, or if it is already a rule in the config
+    // file. That second half matters: without it, disabling a rule silently deletes it on the
+    // next save, which is how the template's entries and the kernel tunings kept vanishing.
+    // Nodes nobody has touched are still left out, so the file stays small, and rules for
+    // hardware that is no longer present are dropped.
+    //
+    // Without the disclaimer accepted the rules are still recorded but every one is switched
+    // off. The daemon refuses outright in that state anyway; this keeps the file inert too.
+    RootState stateToSave() const {
+        QSet<QString> alreadyRules;
+        {
+            dp::features::RootCompositeFeature existing(m_etcPath);
+            for (const auto& n : existing.read().nodes)
+                if (!n.absPath.isEmpty()) alreadyRules.insert(n.absPath);
+        }
+
         RootState out;
         out.disclaimerAccepted = m_disclaimerAccepted;
         out.acceptedAt = m_disclaimerAcceptedAt;
         for (const auto& node : m_state.nodes) {
             if (node.absPath.isEmpty()) continue;                 // groups and tree segments
             if (!QFileInfo::exists(node.absPath)) continue;       // hardware not present
-            if (!effectiveEnabled(node)) continue;                // disabled
+            if (!effectiveEnabled(node) && !alreadyRules.contains(node.absPath)) continue;
             const QString ac = effectiveValue(node, false);
             const QString battery = effectiveValue(node, true);
             if (ac.isEmpty() || battery.isEmpty()) continue;      // nothing the daemon could write
@@ -1059,15 +1070,13 @@ private slots:
             rule.batteryValue = battery;
             out.nodes.push_back(std::move(rule));
         }
+
+        if (!m_disclaimerAccepted)
+            for (auto& rule : out.nodes) rule.enabled = false;
         return out;
     }
 
     void onSave() {
-        if (!m_disclaimerAccepted) {
-            QMessageBox::warning(this, "Confirmation required",
-                                 "Saving is disabled until you click Confirm and agree to the disclaimer.");
-            return;
-        }
         // Deliberately no onInspectorChanged() here. Every inspector widget already calls it
         // on its own change signal, so nothing needs flushing. Calling it here made Save
         // destructive: any selected row that is a container (every bridge and segment row is
@@ -1077,7 +1086,7 @@ private slots:
         // aggregate — typically Enabled=0 with empty values — so opening the dialog and
         // hitting Save wiped every rule in the config.
         dp::features::RootCompositeFeature composite(m_etcPath);
-        const QByteArray data = composite.serialize(activeRulesOnly());
+        const QByteArray data = composite.serialize(stateToSave());
         if (pkexecWrite(data, m_etcPath)) {
             QMessageBox::information(this, "Saved", "Root features saved. The daemon will auto-reload.");
             accept();
