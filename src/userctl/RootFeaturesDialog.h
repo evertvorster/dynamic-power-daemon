@@ -37,6 +37,8 @@ private:
     bool m_disclaimerAccepted = false;
     QString m_disclaimerAcceptedAt;
     QPushButton* m_saveBtn{};
+    QPushButton* m_closeBtn{};
+    bool m_dirty = false;      // unsaved changes: drives the Save/Close highlighting
     QPushButton* m_confirmBtn{};
     QLineEdit* m_filterEdit{};
     QLabel* m_confirmNote{};
@@ -102,6 +104,11 @@ private slots:
     void rebuildTree();
     void adjustTreeColumns();
     void refreshCurrentValues();
+
+    // Unsaved work has to be visible. markDirty() sets the flag and refreshes the two buttons;
+    // only Save clears it.
+    void markDirty();
+    void updateDirtyIndicators();
     Qt::CheckState subtreeCheckState(const RootNode& node) const;
     void refreshTreeState();
     void populateCombo(QComboBox* combo, const QStringList& options, const QString& current);

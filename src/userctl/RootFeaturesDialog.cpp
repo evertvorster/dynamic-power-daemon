@@ -183,7 +183,10 @@ RootFeaturesDialog::RootFeaturesDialog(QWidget* parent, const QString& etcPath)
 
         auto* btnRow = new QHBoxLayout();
         m_saveBtn = new QPushButton("Save (Root)", group);
+        m_closeBtn = new QPushButton("Close", group);
+        m_closeBtn->setToolTip("Close this window. Anything unsaved is discarded.");
         btnRow->addStretch(1);
+        btnRow->addWidget(m_closeBtn);
         btnRow->addWidget(m_saveBtn);
         groupLay->addLayout(btnRow);
 
@@ -204,6 +207,8 @@ RootFeaturesDialog::RootFeaturesDialog(QWidget* parent, const QString& etcPath)
         connect(m_addKernelBtn, &QPushButton::clicked, this, [this] { onAddKernelTuning(); });
         connect(m_removeKernelBtn, &QPushButton::clicked, this, [this] { onRemoveKernelTuning(); });
         connect(m_saveBtn, &QPushButton::clicked, this, [this] { onSave(); });
+        connect(m_closeBtn, &QPushButton::clicked, this, [this] { close(); });
+        updateDirtyIndicators();
 
         // Deferred, not called here. Loading walks /sys/devices and shells out to
         // kscreen-doctor, and doing that from the constructor means the window cannot paint
@@ -1071,6 +1076,29 @@ void RootFeaturesDialog::markNodeAndAncestors(const RootNode& node) {
         m_updatingUi = false;
     }
 
+// Called by everything that changes a rule. Only Save clears it.
+void RootFeaturesDialog::markDirty(){
+        m_dirty = true;
+        updateDirtyIndicators();
+}
+
+void RootFeaturesDialog::updateDirtyIndicators(){
+        if (!m_saveBtn || !m_closeBtn) return;
+
+        // Save takes the system's highlight colour, so it reads as "this is what to do next".
+        // Close goes red, because it is the one that throws the work away. Both return to
+        // normal once there is nothing outstanding.
+        const QColor highlight = palette().color(QPalette::Highlight);
+        const QColor onHighlight = palette().color(QPalette::HighlightedText);
+
+        m_saveBtn->setStyleSheet(m_dirty
+                ? QStringLiteral("background-color:%1; color:%2;")
+                      .arg(highlight.name(), onHighlight.name())
+                : QString());
+        m_closeBtn->setStyleSheet(m_dirty
+                ? QStringLiteral("background-color:#c0392b; color:white;")
+                : QString());
+}
 void RootFeaturesDialog::onDeleteRule(){
 
         RootNode* node = selectedNode();
@@ -1082,6 +1110,7 @@ void RootFeaturesDialog::onDeleteRule(){
         markNodeAndAncestors(*node);
         refreshTreeState();
         loadInspector(m_tree->currentItem());
+        markDirty();
 }
 
 
@@ -1112,6 +1141,7 @@ void RootFeaturesDialog::onTreeItemChanged(QTreeWidgetItem* item, int column){
         // the panel came to disagree with the box you just ticked.
         m_tree->setCurrentItem(item);
         loadInspector(item);
+        markDirty();
 }
 
 
@@ -1148,6 +1178,7 @@ void RootFeaturesDialog::onInspectorChanged(int changed){
 
         refreshTreeState();
         loadInspector(m_tree->currentItem());
+        markDirty();
 }
 
 
@@ -1199,6 +1230,7 @@ void RootFeaturesDialog::onAddKernelTuning(){
         if (auto* item = m_treeItems.value(QString("node:%1").arg(canonical), nullptr)) {
             m_tree->setCurrentItem(item);
         }
+        markDirty();
 }
 
 
@@ -1216,6 +1248,7 @@ void RootFeaturesDialog::onRemoveKernelTuning(){
         m_indexById.clear();
         for (int i = 0; i < m_state.nodes.size(); ++i) m_indexById.insert(m_state.nodes[i].id, i);
         rebuildTree();
+        markDirty();
 }
 
 
@@ -1271,6 +1304,15 @@ void RootFeaturesDialog::onSave(){
         const QByteArray data = composite.serialize(stateToSave());
         if (pkexecWrite(data, m_etcPath)) {
             QMessageBox::information(this, "Saved", "Root features saved. The daemon will auto-reload.");
-            accept();
+                m_dirty = false;
+                updateDirtyIndicators();
+
+                // Deliberately not closing: the point of saving is to see the result. Re-read the
+                // live values so the Current column shows what the hardware now reports rather than
+                // what it reported when the window opened.
+                refreshCurrentValues();
+                // The daemon needs a moment to notice the file and re-apply the rules, so read again
+                // once it has had one.
+                QTimer::singleShot(400, this, [this] { refreshCurrentValues(); });
         }
 }

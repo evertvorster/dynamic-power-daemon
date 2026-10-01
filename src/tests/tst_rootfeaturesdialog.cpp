@@ -73,6 +73,7 @@ private slots:
     void dropsScaffoldingAndWritesRulesFlat();
     void theConfirmButtonReflectsTheSavedDisclaimer();
     void tickingANodeMarksItAndSelectsIt();
+    void changingSomethingMarksTheWorkUnsaved();
 
 private:
     QString write(const QByteArray& body);
@@ -246,6 +247,40 @@ void TestRootFeaturesDialog::tickingANodeMarksItAndSelectsIt()
     const QString parentText = parentItem->text(0);
     QVERIFY2(parentText.startsWith(QStringLiteral("* ")) || parentText.startsWith(QStringLiteral("@ ")),
              qPrintable(parentText));
+}
+
+void TestRootFeaturesDialog::changingSomethingMarksTheWorkUnsaved()
+{
+    // Unsaved work has to be visible, or the only clue that a change was not applied is that
+    // nothing happened. Save takes the system highlight colour; Close goes red.
+    const QString path = write(configWith("true", rule("node:/proc/sys/kernel/nmi_watchdog",
+                                                        kNmiPath, true, "1", "0")));
+    RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);
+
+    QVERIFY2(dialog.m_closeBtn, "the dialog needs a Close button");
+    QVERIFY2(!dialog.m_dirty, "nothing is outstanding on open");
+    QVERIFY2(dialog.m_saveBtn->styleSheet().isEmpty(), "Save should look normal on open");
+    QVERIFY2(dialog.m_closeBtn->styleSheet().isEmpty(), "so should Close");
+
+    QTreeWidgetItem* target = nullptr;
+    for (auto it = dialog.m_treeItems.constBegin(); it != dialog.m_treeItems.constEnd(); ++it) {
+        RootNode* n = dialog.nodeById(it.key());
+        if (n && !n->isGroup && !n->hasRule) { target = it.value(); break; }
+    }
+    QVERIFY(target);
+    target->setCheckState(0, Qt::Checked);
+
+    QVERIFY2(dialog.m_dirty, "ticking a box is an unsaved change");
+    QVERIFY2(!dialog.m_saveBtn->styleSheet().isEmpty(), "Save must stand out");
+    QVERIFY2(!dialog.m_closeBtn->styleSheet().isEmpty(), "Close must warn");
+
+    // Saving clears it. The write itself needs pkexec, so this drives the same helper the
+    // save path calls.
+    dialog.m_dirty = false;
+    dialog.updateDirtyIndicators();
+    QVERIFY2(dialog.m_saveBtn->styleSheet().isEmpty(), "Save returns to normal once saved");
+    QVERIFY2(dialog.m_closeBtn->styleSheet().isEmpty(), "so does Close");
 }
 
 QTEST_MAIN(TestRootFeaturesDialog)
