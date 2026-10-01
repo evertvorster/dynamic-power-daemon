@@ -518,6 +518,7 @@ void RootFeaturesDialog::applyBulkEditToLeaves(const RootNode& source, int field
             if (!touched) continue;
             leaf->policyScope = QStringLiteral("override");
             leaf->hasRule = true;
+            markNodeAndAncestors(*leaf);
         }
 }
 
@@ -1057,21 +1058,28 @@ void RootFeaturesDialog::refreshRowMarker(const RootNode& node){
 
     // Remove this node's stored rule. In memory only until Save, so closing without saving
     // undoes it.
+    // Redraw the marker on a node that has just become a rule, and on every ancestor: their
+    // "*" appears the first time a rule exists below them. Only the rows involved are
+    // touched, and refreshRowMarker ignores anything without a row.
+    //
+    // m_updatingUi must be set: setText() emits itemChanged, and onTreeItemChanged() would
+    // read that as the user ticking the row - setting hasRule straight back and leaving the
+    // marker disagreeing with the node.
+void RootFeaturesDialog::markNodeAndAncestors(const RootNode& node) {
+        m_updatingUi = true;
+        for (const RootNode* p = &node; p; p = parentNode(*p)) refreshRowMarker(*p);
+        m_updatingUi = false;
+    }
+
 void RootFeaturesDialog::onDeleteRule(){
 
         RootNode* node = selectedNode();
         if (!node || !node->hasRule) return;
         node->hasRule = false;
         node->enabled = false;
-        // This row's marker and every ancestor's "rules below" may have changed. Redraw just
-        // those, rather than rebuildTree(), which would collapse everything.
-        //
-        // m_updatingUi must be set: setText() emits itemChanged, and onTreeItemChanged() would
-        // read that as the user ticking the row - setting hasRule straight back and leaving
-        // the marker disagreeing with the node.
-        m_updatingUi = true;
-        for (const RootNode* p = node; p; p = parentNode(*p)) refreshRowMarker(*p);
-        m_updatingUi = false;
+        // This row and every ancestor may have changed. Redraw just those, rather than
+        // rebuildTree(), which would collapse everything.
+        markNodeAndAncestors(*node);
         refreshTreeState();
         loadInspector(m_tree->currentItem());
 }
@@ -1096,9 +1104,14 @@ void RootFeaturesDialog::onTreeItemChanged(QTreeWidgetItem* item, int column){
             node->policyScope = QStringLiteral("override");
             node->enabled = enabled;
             node->hasRule = true;
+            markNodeAndAncestors(*node);
         }
         refreshTreeState();
-        if (m_tree->currentItem() == item) loadInspector(item);
+        // Clicking a checkbox selects that row. It used to leave the selection where it was,
+        // so the inspector went on describing whatever had been selected before - which is how
+        // the panel came to disagree with the box you just ticked.
+        m_tree->setCurrentItem(item);
+        loadInspector(item);
 }
 
 
@@ -1130,6 +1143,7 @@ void RootFeaturesDialog::onInspectorChanged(int changed){
             // Touching anything here creates a rule, so the Delete button appears straight away.
             // Switching it off later keeps the rule rather than deleting it.
             node->hasRule = true;
+            markNodeAndAncestors(*node);
         }
 
         refreshTreeState();

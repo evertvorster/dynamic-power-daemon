@@ -21,6 +21,7 @@
 #include <QFile>
 #include <QString>
 #include <QPushButton>
+#include <QTreeWidgetItem>
 
 #include "userctl/RootFeaturesDialog.h"
 
@@ -71,6 +72,7 @@ private slots:
     void writesEverythingDisabledWhenTheDisclaimerIsNotAccepted();
     void dropsScaffoldingAndWritesRulesFlat();
     void theConfirmButtonReflectsTheSavedDisclaimer();
+    void tickingANodeMarksItAndSelectsIt();
 
 private:
     QString write(const QByteArray& body);
@@ -80,7 +82,7 @@ private:
 
 // The dialog defers detection until the event loop runs, so that it can appear before it
 // fills itself in. A test therefore has to let that happen.
-static void constructLoaded(RootFeaturesDialog& dialog)
+static void constructLoaded(RootFeaturesDialog&)
 {
     QCoreApplication::processEvents();
 }
@@ -201,6 +203,49 @@ void TestRootFeaturesDialog::theConfirmButtonReflectsTheSavedDisclaimer()
 
     QVERIFY2(dialog.m_confirmBtn->text().contains(QString::fromUtf8("\u2705")),
              qPrintable(dialog.m_confirmBtn->text()));
+}
+
+void TestRootFeaturesDialog::tickingANodeMarksItAndSelectsIt()
+{
+    // Two things clicking a checkbox must do immediately: mark the row, and select it - so the
+    // inspector describes what was just changed. Both used to wait for something else to
+    // happen, and the second never happened at all.
+    const QString path = write(configWith("true", rule("node:/proc/sys/kernel/nmi_watchdog",
+                                                        kNmiPath, true, "1", "0")));
+    RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);
+
+    // A row with no rule of its own, that has a parent, so the ancestor marker is testable.
+    QTreeWidgetItem* target = nullptr;
+    QString targetId;
+    for (auto it = dialog.m_treeItems.constBegin(); it != dialog.m_treeItems.constEnd(); ++it) {
+        RootNode* n = dialog.nodeById(it.key());
+        if (!n || n->isGroup || n->hasRule) continue;
+        if (!it.value()->parent()) continue;
+        target = it.value();
+        targetId = it.key();
+        break;
+    }
+    QVERIFY2(target, "no unruled row with a parent in the tree");
+    QVERIFY2(!target->text(0).startsWith(QStringLiteral("@ ")), "it should start unmarked");
+
+    RootNode* node = dialog.nodeById(targetId);
+    QVERIFY(node);
+    const RootNode* parent = dialog.parentNode(*node);
+    QVERIFY(parent);
+    const QString parentId = parent->id;
+
+    target->setCheckState(0, Qt::Checked);   // what clicking the box does
+
+    QVERIFY2(target->text(0).startsWith(QStringLiteral("@ ")), qPrintable(target->text(0)));
+    QVERIFY2(dialog.m_tree->currentItem() == target,
+             "ticking a box must select that row, or the inspector shows the old node");
+
+    QTreeWidgetItem* parentItem = dialog.m_treeItems.value(parentId);
+    QVERIFY(parentItem);
+    const QString parentText = parentItem->text(0);
+    QVERIFY2(parentText.startsWith(QStringLiteral("* ")) || parentText.startsWith(QStringLiteral("@ ")),
+             qPrintable(parentText));
 }
 
 QTEST_MAIN(TestRootFeaturesDialog)

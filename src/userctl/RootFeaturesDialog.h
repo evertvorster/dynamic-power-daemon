@@ -109,6 +109,9 @@ private slots:
     static QString markerText(bool own, bool below);
     bool subtreeHasRule(const RootNode& node) const;
     void refreshRowMarker(const RootNode& node);
+    // Redraws the marker on a node that has just become a rule, and on every ancestor, whose
+    // "*" appears the first time a rule exists below them.
+    void markNodeAndAncestors(const RootNode& node);
     void onDeleteRule();
     void onTreeItemChanged(QTreeWidgetItem* item, int column);
     void onInspectorChanged(int changed);
