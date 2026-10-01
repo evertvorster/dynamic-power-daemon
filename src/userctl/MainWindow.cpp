@@ -110,14 +110,10 @@ public:
         m_confirmBtn = new QPushButton(this);
         m_confirmBtn->setToolTip("Read and accept the disclaimer to enable saving.");
         disclaimBox->addWidget(m_confirmBtn, 0);
-        m_advancedToggle = new QCheckBox("Advanced View", this);
-        m_advancedToggle->setToolTip("Show non-PCI device tree entries and other advanced device nodes.");
-        disclaimBox->addWidget(m_advancedToggle, 0);
         m_confirmNote = new QLabel("Rules are saved disabled until you accept the disclaimer.", this);
         disclaimBox->addWidget(m_confirmNote, 1);
         groupLay->addLayout(disclaimBox);
         connect(m_confirmBtn, &QPushButton::clicked, this, [this] { showDisclaimer(); });
-        connect(m_advancedToggle, &QCheckBox::toggled, this, [this](bool) { rebuildTree(); });
 
         auto* filterRow = new QHBoxLayout();
         auto* filterLabel = new QLabel("Search", this);
@@ -233,7 +229,6 @@ private:
     QString m_disclaimerAcceptedAt;
     QPushButton* m_saveBtn{};
     QPushButton* m_confirmBtn{};
-    QCheckBox* m_advancedToggle{};
     QLineEdit* m_filterEdit{};
     QLabel* m_confirmNote{};
     UserFeaturesWidget* m_userWidget{};
@@ -263,25 +258,12 @@ private slots:
         refreshLiveState();
     }
 
-    bool isPciNode(const RootNode& node) const {
-        if (node.nodeClass != QStringLiteral("device")) return true;
-        if (node.id.contains("group:legacy")) return true;
-        if (node.absPath.contains("/sys/devices/pci")) return true;
-        if (node.id.contains("segment:/sys/devices/pci")) return true;
-        const RootNode* parent = parentNode(node);
-        return parent ? isPciNode(*parent) : false;
-    }
-
+    // Leave out runtime-PM knobs that cannot take effect. A device the kernel reports as
+    // "unsupported" has runtime PM disabled, so its power/control write is a no-op. Anything
+    // already enabled stays visible so a configured rule can always be found and turned off
+    // again. Everything else is shown - there is only one view now.
     bool isVisibleNode(const RootNode& node) const {
-        // Leave out runtime-PM knobs that cannot take effect. A device the kernel
-        // reports as "unsupported" has runtime PM disabled, so its power/control
-        // write is a no-op. Anything already enabled stays visible so a configured
-        // rule can always be found and turned off again.
-        if (isRealControlLeaf(node) && !node.supported && !node.enabled) return false;
-        if (m_advancedToggle && m_advancedToggle->isChecked()) return true;
-        if (node.id == QStringLiteral("group:devices")) return true;
-        if (node.nodeClass != QStringLiteral("device")) return true;
-        return isPciNode(node);
+        return !(isRealControlLeaf(node) && !node.supported && !node.enabled);
     }
 
     QString filterText() const {
