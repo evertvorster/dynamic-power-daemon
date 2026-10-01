@@ -38,7 +38,7 @@ The user application is responsible for:
 - Per-process overrides from the user session
 - Live load graph and tray controls
 - Root-required feature editor for sysfs power-saving knobs
-- Dynamic inspection of device runtime power controls under `/sys/devices`
+- A device tree discovered from the running kernel, with one named row per power knob
 
 Removed or not yet re-implemented:
 
@@ -49,12 +49,17 @@ Removed or not yet re-implemented:
 
 The root feature editor no longer relies only on static example paths in the config template.
 
-The GUI now scans `/sys/devices` for `power/control` nodes and builds a device tree from what the current machine actually exposes. Nodes belonging to devices where the kernel has runtime power management disabled are left out of the tree, since writing to their `power/control` cannot take effect. In practice this means:
+The GUI scans `/sys/devices` for power knobs and builds a tree from what the current machine actually exposes. Nodes belonging to devices where the kernel has runtime power management disabled are left out of the tree, since writing to their `power/control` cannot take effect. In practice this means:
 
-- PCI runtime power control entries are discovered dynamically
+- Each device shows the knobs it actually has, each named for itself:
+  - `Runtime PM` — `power/control`, offering `on` and `auto`
+  - `Autosuspend delay` — `power/autosuspend_delay_ms`, in milliseconds
+  - `Wake` — `power/wakeup`, offering `enabled` and `disabled`
+- A knob is only offered when the kernel says it is usable, so a device without autosuspend has no delay row and one that cannot wake the system has no wake row
+- PCI rows lead with the bus address and are ordered by it — which is also bus-topology order, since a bridge's secondary bus is always above its primary
+- A branch row carries the number of devices in it, such as `0000:00:01.1 (4)`, when there is more than the device's own
+- A row starting `@` has a rule; a row starting `*` has rules further down its branch. Neither is shown otherwise, and the addresses stay lined up
 - PCI devices are labeled from `lspci -D` when available
-- Non-PCI device nodes can also be shown in the advanced view
-- Detected nodes expose the values the kernel currently accepts, such as `on` and `auto`
 - Only devices that can actually be autosuspended are offered
 
 This makes the feature editor much more useful on real hardware, because the relevant paths often differ across machines and kernels.
@@ -80,7 +85,11 @@ Two config files are involved:
 - Process override rules
 - User-session feature settings
 
-Only rules that are enabled, point at hardware that is present, and have values to write are stored in `/etc/dynamic_power.yaml`. Everything else — disabled rules, untouched devices, tree scaffolding, and paths for hardware no longer in the machine — is omitted, because the daemon would skip it anyway and the next load re-seeds it from the live sysfs reading.
+A node is written to `/etc/dynamic_power.yaml` once it is either enabled, or already a rule in the file. Everything nobody has touched is left out, along with tree scaffolding and the intervening branch nodes, so the file stays small — a few dozen entries — instead of recording every device the machine exposes.
+
+Switching a rule off does not remove it: it stays in the file, and is applied again if you switch it back on. Use the inspector's `Delete rule` button to remove one. A rule whose hardware is no longer present is likewise kept rather than silently dropped, and is shown greyed out so you can see it and delete it deliberately.
+
+While the root feature disclaimer has not been accepted, rules are still saved but every one is written switched off, so the file records what you configured without anything being applied to the machine.
 
 The installed templates are:
 
@@ -146,7 +155,6 @@ Build and runtime requirements include:
 - `cmake`
 - `pkgconf`
 - `qt6-base`
-- `qt6-tools`
 - `yaml-cpp`
 - `systemd`
 - `upower`
@@ -172,13 +180,17 @@ Running multiple power-management stacks at once is a bad idea. This project exp
 - CPU governor and EPP writes are expanded across all detected CPU policy nodes, not just the single example path in the config.
 - Profile capability paths can be adjusted from the GUI if your sysfs layout differs from the template.
 
+## Versioning
+
+There is no version field in the build system. Releases are git tags of the form `v5.MM.P`: a minor bump for features, a patch bump for fixes. Each tag has a matching GitHub Release describing it, and the AUR package builds from that tag's source archive. `git describe --tags` therefore names any working tree exactly.
+
 ## Documentation
 
 Additional project documentation lives in [`docs/`](./docs):
 
 - [`docs/dynamic_power_user_manual.md`](./docs/dynamic_power_user_manual.md)
 - [`docs/dbus_interface_introspection.txt`](./docs/dbus_interface_introspection.txt)
-- [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)
+- [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) — historical, covering the 1.0 Python rewrite; releases since then are recorded as GitHub Releases
 
 ## License
 

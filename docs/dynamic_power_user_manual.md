@@ -123,7 +123,7 @@ Each rule can define:
 - The value to use on battery
 - Whether the node overrides or inherits policy from its parent
 
-The dialog blocks saving until you accept the disclaimer. That is intentional: a bad sysfs write can break device behavior, reduce stability, or increase power use instead of lowering it.
+The disclaimer is deliberate: a bad sysfs write can break device behavior, reduce stability, or increase power use instead of lowering it. Until you accept it, rules are still saved but every one is written switched off, so nothing reaches the machine.
 
 ## PCI And Device Runtime Power Controls
 
@@ -133,21 +133,30 @@ The app scans `/sys/devices` for `power/control` files and builds a device tree 
 
 This means:
 
-- PCI runtime power entries are discovered dynamically
-- PCI devices are labeled from `lspci -D` when `pciutils` is installed
-- The usual runtime power values, such as `on` and `auto`, are offered automatically
-- The default view is focused on PCI-related nodes
-- `Advanced View` reveals non-PCI and other lower-level device nodes
+- Every device shows the power knobs it actually has, each named for itself:
+  - `Runtime PM` — whether the device may autosuspend (`on` or `auto`)
+  - `Autosuspend delay` — how long it waits before suspending, in milliseconds
+  - `Wake` — whether it may wake the system (`enabled` or `disabled`)
+- A knob is only offered when the kernel says it is usable, so the rows you see are the rows that can take a value
+- PCI devices are labeled from `lspci -D` when `pciutils` is installed, and their rows lead with the bus address
+- Rows are ordered by bus address, which is also bus order, so a bridge always sits above the devices behind it
+- A branch row shows how many devices are in it, such as `0000:00:01.1 (4)`
+- A row starting `@` has a rule; a row starting `*` has rules further down its branch
+- Devices that cannot autosuspend at all are left out
 
 This is the practical workflow for device runtime power tuning:
 
 1. Open the Power Saving Features dialog.
 2. Accept the disclaimer if you have not already done so.
-3. Browse or search for the target device.
-4. Select the `Runtime Power Control` node for that device.
+3. Browse or search for the target device. The `@` and `*` marks show which parts of the tree are already configured.
+4. Expand the device and pick the knob you want — usually `Runtime PM`.
 5. Set `Enabled`, then choose AC and battery values.
 6. Save the root configuration.
 7. Test the result on your own hardware.
+
+To remove a rule, select its row and use `Delete rule` in the inspector. Switching a rule off is not the same thing: a rule that is switched off is kept, and comes back if you switch it on again.
+
+Saving only writes the nodes you have actually configured. Devices nobody has touched, and the tree scaffolding between them, are not stored — so the config file stays a short list of rules rather than a copy of the whole device tree. A rule whose hardware has since gone is kept and shown greyed out, so you can see it and delete it rather than have it vanish silently.
 
 The GUI helps you discover valid nodes, but the daemon still persists and applies the final rules from `/etc/dynamic_power.yaml`.
 
