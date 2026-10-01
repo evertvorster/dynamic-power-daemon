@@ -31,7 +31,11 @@ public:
     double getLowThreshold() const { return m_actualThresholds.low; }
     double getHighThreshold() const { return m_actualThresholds.high; }
     QString getPowerSource() const { return m_powerSource; }
-    QString getBatteryState() const { return m_batteryState; }    
+    QString getBatteryState() const { return m_batteryState; }
+    // Knobs the kernel refused on the last profile apply, as "knob = value" pairs.
+    // Empty when the last apply was clean, so this heals itself. The user session
+    // shows it; it is not persisted.
+    QString getLastSkipped() const { return m_lastSkipped; }
     // setters.
     void setRequestedThresholds(double low, double high) {
         m_requestedThresholds.low  = low;
@@ -60,6 +64,7 @@ private:
     QString m_overrideProfile;            // Optional override profile
     QString m_activeProfile;              // Variable for dbus interface
     QString m_batteryState;             // "charging", "discharging", "charged", etc.
+    QString m_lastSkipped;              // knob = value pairs refused by the kernel
     bool m_isBossOverride = false;        // Override flag
     bool m_graceActive = false;           // Whether we're currently in the grace period
     int graceSeconds;                     // Number of seconds for grace period

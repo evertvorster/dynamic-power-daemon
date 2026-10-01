@@ -28,6 +28,7 @@ QVariantMap DaemonDBusInterface::GetDaemonState() {
     state.insert("timestamp", QDateTime::currentDateTimeUtc().toSecsSinceEpoch());
     state.insert("power_source",   daemon->getPowerSource());
     state.insert("battery_state",  daemon->getBatteryState());
+    state.insert("last_skipped",   daemon->getLastSkipped());
     return state;
 }
 

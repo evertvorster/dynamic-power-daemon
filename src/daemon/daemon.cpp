@@ -310,12 +310,25 @@ bool Daemon::setProfile(const QString& internalName)
     };
 
 
-    bool ok = true;
+    // A knob the kernel refuses is a warning, not a failure. The valid values for one
+    // knob can depend on another - EPP follows the governor - so a mapping can be
+    // partly invalid on one machine and entirely fine on another. No shipped default
+    // can be right everywhere, which is why one refused knob must not mark the whole
+    // profile as failed. Only a profile that achieved nothing is an error.
+    bool anyApplied = false;
+    QStringList skipped;
+
+    auto noteSkipped = [&skipped](const char* label, const std::string& value) {
+        skipped << QStringLiteral("%1 = %2").arg(QString::fromUtf8(label),
+                                                  QString::fromStdString(value));
+    };
+
     if (!is_disabled(ps.cpu_governor)) {
         const auto rejected = write_all(hardware.cpu_governor.path, ps.cpu_governor,
                                         "scaling_governor", "cpu_governor");
         report_rejections(rejected, ps.cpu_governor, "scaling_governor");
-        ok &= rejected.empty();
+        if (rejected.empty()) anyApplied = true;
+        else noteSkipped("cpu_governor", ps.cpu_governor);
     } else
         log_info("cpu_governor disabled in profile; skipping write");
 
@@ -323,24 +336,39 @@ bool Daemon::setProfile(const QString& internalName)
         const auto rejected = write_all(hardware.epp_profile.path, ps.epp_profile,
                                         "energy_performance_preference", "epp_profile");
         report_rejections(rejected, ps.epp_profile, "energy_performance_preference");
-        ok &= rejected.empty();
+        if (rejected.empty()) anyApplied = true;
+        else noteSkipped("epp_profile", ps.epp_profile);
     } else
         log_info("epp_profile disabled in profile; skipping write");
 
-    if (!is_disabled(ps.acpi_platform_profile))
-        ok &= write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile");
-    else
+    if (!is_disabled(ps.acpi_platform_profile)) {
+        if (write_value(hardware.acpi_platform_profile.path, ps.acpi_platform_profile, "acpi_platform_profile"))
+            anyApplied = true;
+        else
+            noteSkipped("acpi_platform_profile", ps.acpi_platform_profile);
+    } else
         log_info("acpi_platform_profile disabled in profile; skipping write");
 
-    if (!is_disabled(ps.aspm))
-        ok &= write_value(hardware.aspm.path,                  ps.aspm,                  "aspm");
-    else
+    if (!is_disabled(ps.aspm)) {
+        if (write_value(hardware.aspm.path, ps.aspm, "aspm"))
+            anyApplied = true;
+        else
+            noteSkipped("aspm", ps.aspm);
+    } else
         log_info("aspm disabled in profile; skipping write");
-    if (!ok) {
-        log_error(QString("setProfile(): one or more hardware writes failed for '%1'")
+
+    // What was refused, for the user session to show. Cleared whenever a profile
+    // applies cleanly, so it heals itself rather than going stale.
+    m_lastSkipped = skipped.join(QStringLiteral("; "));
+
+    if (!anyApplied) {
+        log_error(QString("setProfile(): no setting could be applied for '%1'")
                   .arg(internalName).toUtf8().constData());
         return false;
     }
+    if (!skipped.isEmpty())
+        log_warning(QString("setProfile(): applied '%1', but %2 setting(s) were refused by the kernel: %3")
+                    .arg(internalName).arg(skipped.size()).arg(m_lastSkipped).toUtf8().constData());
 
     // Summarise what was applied (collapsing repeated writes like per-CPU governor/EPP)
     for (auto it = appliedCount.constBegin(); it != appliedCount.constEnd(); ++it) {
