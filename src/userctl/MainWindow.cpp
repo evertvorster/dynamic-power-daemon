@@ -127,6 +127,7 @@ public:
 
         auto* splitter = new QSplitter(Qt::Horizontal, group);
         m_tree = new QTreeWidget(splitter);
+        m_tree->viewport()->installEventFilter(this);
         m_tree->setHeaderLabels({"Target", "Current", "Class"});
         m_tree->setAlternatingRowColors(true);
         m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -225,14 +226,14 @@ public:
     }
 
 protected:
-    void showEvent(QShowEvent* event) override {
-        QDialog::showEvent(event);
-        QTimer::singleShot(0, this, [this] { adjustTreeColumns(); });
-    }
-
-    void resizeEvent(QResizeEvent* event) override {
-        QDialog::resizeEvent(event);
-        adjustTreeColumns();
+    // The Target column is sized from the tree's viewport, so recompute whenever that viewport
+    // changes size. That is the one place every cause meets: the dialog being resized, the
+    // splitter being dragged, and the initial layout. Watching the dialog's own resize missed
+    // the splitter, because moving an internal splitter does not resize the dialog.
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (m_tree && watched == m_tree->viewport() && event->type() == QEvent::Resize)
+            adjustTreeColumns();
+        return QDialog::eventFilter(watched, event);
     }
 
 private:
