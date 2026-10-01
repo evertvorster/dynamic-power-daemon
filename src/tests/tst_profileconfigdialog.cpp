@@ -19,6 +19,8 @@
 #include <QRadioButton>
 #include <QToolButton>
 #include <QSignalSpy>
+#include <QMenu>
+#include <QAction>
 #include <QString>
 
 #include "userctl/ProfileConfigDialog.h"
@@ -58,6 +60,7 @@ private slots:
     void everyRowStartsGreyed();
     void selectingAProfileAsksForThatModeAndUngreysOnlyThatRow();
     void onlyTheSelectedProfilesValuesAreMarked();
+    void selectingAProfileOffersTheMachinesValuesToo();
 
 private:
     QTemporaryDir m_dir;
@@ -178,6 +181,34 @@ void TestProfileConfigDialog::onlyTheSelectedProfilesValuesAreMarked()
              "beta is refused by the running mode and must be marked");
     QVERIFY2(eppButtonStyle(dlg, QStringLiteral("balanced")).isEmpty(),
              "balanced is no longer selected, so its marking must be cleared");
+}
+
+void TestProfileConfigDialog::selectingAProfileOffersTheMachinesValuesToo()
+{
+    // Evert's case: a config whose declared EPP list had been narrowed by an earlier
+    // governor cannot offer the value a profile needs. Selecting the profile re-reads the
+    // machine, and the menu offers those values alongside the declared ones.
+    ProfileConfigDialog dlg(nullptr, m_configPath);
+    toggleFor(dlg, QStringLiteral("balanced"))->setChecked(true);
+
+    QToolButton* btn = dlg.m_buttons.value(QStringLiteral("balanced"))
+                          .value(QStringLiteral("epp_profile"));
+    QVERIFY(btn);
+    QMenu* menu = btn->menu();
+    QVERIFY(menu);
+
+    QStringList items;
+    bool sawSeparator = false;
+    for (QAction* a : menu->actions()) {
+        if (a->isSeparator()) { sawSeparator = true; continue; }
+        items << a->text();
+    }
+
+    // "delta" is accepted by the machine but not declared in the config - the whole point.
+    QVERIFY2(items.contains(QStringLiteral("delta")), qPrintable(items.join(", ")));
+    // "beta" is declared but refused; it must still be reachable, below the separator.
+    QVERIFY2(items.contains(QStringLiteral("beta")), qPrintable(items.join(", ")));
+    QVERIFY2(sawSeparator, "accepted and merely-declared values must be separated");
 }
 
 QTEST_MAIN(TestProfileConfigDialog)

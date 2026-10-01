@@ -156,6 +156,7 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
         optEdit->setPlaceholderText("/sys/.../options_file");
         optEdit->setObjectName(QString("opt_%1").arg(key));
         optEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_optEdits.insert(key, optEdit);        // so detection can be re-run on selection
         grid->addWidget(optEdit, row, 1);
 
         auto* optCheck = new QPushButton("Check", area); // checks file and loads options
@@ -331,16 +332,38 @@ void ProfileConfigDialog::buildProfilesUI() {
 
 void ProfileConfigDialog::updateButtonMenu(const QString& profile, const QString& capKey, QToolButton* btn) {
     auto* menu = new QMenu(btn);
-    const auto& cap = m_caps.value(capKey);
-    const auto modes = cap.modes;
+    const CapabilityInfo cap = m_caps.value(capKey);
 
-    for (const auto& m : modes) {
+    auto add = [&](const QString& m) {
         QAction* act = menu->addAction(m);
         connect(act, &QAction::triggered, this, [this, profile, capKey, m, btn]() {
             m_selection[profile][capKey] = m;
             btn->setText(m);
+            // The available EPP values follow the governor, and edits are not applied until
+            // Save, so the lists follow the *saved* governor. Say so once.
+            if (capKey == QStringLiteral("cpu_governor"))
+                maybeShowGovernorNote();
+            refreshValueMarking();
         });
+    };
+
+    // What the machine accepts right now comes first. Anything the config declares but the
+    // running mode refuses follows below a separator, so it can still be set for another
+    // mode without being mistaken for something that works here. The union matters: a
+    // config whose declared list was narrowed by an earlier governor can be missing the
+    // very value a profile needs.
+    for (const auto& m : cap.accepted)
+        add(m);
+
+    QStringList declaredOnly;
+    for (const auto& m : cap.modes)
+        if (!cap.accepted.contains(m)) declaredOnly << m;
+    if (!declaredOnly.isEmpty()) {
+        if (!cap.accepted.isEmpty()) menu->addSeparator();
+        for (const auto& m : declaredOnly)
+            add(m);
     }
+
     btn->setMenu(menu);
 }
 
@@ -357,6 +380,16 @@ void ProfileConfigDialog::onProfileSelected(const QString& profile)
     }
 
     m_selectedProfile = profile;
+
+    // The machine has just been switched into this profile, so now is the moment to ask
+    // what it accepts - and to re-offer those values, since the menu is built from them.
+    detectAccepted();
+    for (const auto& capKey : capKeys()) {
+        refreshMenusForCap(capKey);
+        if (auto* lbl = findChild<QLabel*>(QString("modes_%1").arg(capKey)))
+            lbl->setText(modesLabelText(capKey));
+    }
+
     refreshValueMarking();
 
     emit modeRequested(profile.isEmpty()
@@ -392,6 +425,21 @@ void ProfileConfigDialog::refreshValueMarking()
                       .arg(value, cap.accepted.join(QStringLiteral(", ")))
                 : QString());
         }
+    }
+}
+
+// Re-reads each capability's options file. Called when a profile is selected, because the
+// accepted set follows the mode the machine is in, so it only becomes right once the
+// machine has been switched into the profile being configured.
+void ProfileConfigDialog::detectAccepted()
+{
+    for (const auto& key : capKeys()) {
+        auto* optEdit = m_optEdits.value(key, nullptr);
+        if (!optEdit) continue;
+        const QString optPath = optEdit->text().trimmed();
+        if (optPath.isEmpty() || !QFileInfo::exists(optPath)) continue;
+        const QStringList modes = readModesFromFile(optPath);
+        if (!modes.isEmpty()) m_caps[key].accepted = modes;
     }
 }
 
@@ -573,32 +621,15 @@ QStringList ProfileConfigDialog::readModesFromFile(const QString& path) const {
 }
 
 void ProfileConfigDialog::refreshMenusForCap(const QString& capKey) {
-    const auto modes = m_caps.value(capKey).modes;
-
     for (const auto& profile : m_profiles) {
         auto* btn = m_buttons.value(profile).value(capKey, nullptr);
         if (!btn) continue;
 
-        // Rebuild menu
-        auto* menu = new QMenu(btn);
-        for (const auto& m : modes) {
-            QAction* act = menu->addAction(m);
-            connect(act, &QAction::triggered, this, [this, profile, capKey, m, btn]() {
-                m_selection[profile][capKey] = m;
-                btn->setText(m);
-                // The available EPP values follow the governor, and edits are not applied
-                // until Save, so the lists follow the *saved* governor. Say so once.
-                if (capKey == QStringLiteral("cpu_governor"))
-                    maybeShowGovernorNote();
-                refreshValueMarking();
-            });
-        }
-        btn->setMenu(menu);
+        updateButtonMenu(profile, capKey, btn);
 
-        // A stored value that is not in the declared list is shown as it is rather than
-        // silently replaced with the first entry. Rewriting a setting because a list
-        // changed is how values went missing before; whether the machine will accept it
-        // is a separate question, and that is what the accepted list is for.
+        // A stored value that is not in any list is shown as it is rather than silently
+        // replaced with the first entry. Rewriting a setting because a list changed is how
+        // values went missing before.
         const QString sel = m_selection.value(profile).value(capKey);
         btn->setText(sel.isEmpty() ? QStringLiteral("<unset>") : sel);
     }

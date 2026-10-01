@@ -56,6 +56,7 @@ private:
     QStringList m_profiles = {"powersave","balanced","performance"};
     // NEW: per-capability path editor and status
     QMap<QString, class QLineEdit*> m_pathEdits;       // capKey -> QLineEdit*
+    QMap<QString, class QLineEdit*> m_optEdits;        // capKey -> options path editor
     QMap<QString, class QLabel*>    m_statusLabels;    // capKey -> QLabel*
     void validateAndReload(const QString& capKey);     // check path exists, read modes, refresh menus
     QStringList readModesFromFile(const QString& path) const;
@@ -67,6 +68,11 @@ private:
     // Selecting a profile puts the machine into it and greys the other rows, so the
     // option lists shown are read from the mode that is actually running.
     void onProfileSelected(const QString& profile);
+
+    // Re-reads what the machine accepts, for every capability. Called when a profile is
+    // selected: the accepted set follows the mode the machine is in, and it has just been
+    // put into the selected profile, so that is the first moment the answer is right.
+    void detectAccepted();
 
     // Marks a value the profile in effect will refuse. Only the selected profile can be
     // judged: the accepted set is read from the mode that is running, so it says nothing
