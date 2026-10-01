@@ -112,10 +112,23 @@ void ScreenRefreshFeature::refreshStatus() const {
 // Helpers (ported from UserFeatures.cpp anon namespace)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// kscreen-doctor answers in tens of milliseconds when it works at all -- 25 ms on
+// this machine. These limits exist only so that a hung or missing kscreen-doctor
+// cannot freeze the window, which is why they are far shorter than the three to
+// five seconds the QProcess calls here used to allow.
+//
+// ponytail: the calls are still synchronous, because every caller in this class
+// returns a value by contract (statusText(), readState(), applyForPowerState()).
+// Making the reads asynchronous means changing those to callbacks or signals;
+// until then a short timeout is what keeps a hung kscreen-doctor from freezing the UI.
+static constexpr int kStartTimeoutMs = 500;    // fork and exec
+static constexpr int kQueryTimeoutMs = 500;    // kscreen-doctor -j, a read
+static constexpr int kApplyTimeoutMs = 2000;   // output.N.mode.M, a deliberate change
+
 QList<ScreenRefreshFeature::Output> ScreenRefreshFeature::readOutputs() {
     QList<Output> outs;
     QProcess p; p.start(QStringLiteral("kscreen-doctor"), {QStringLiteral("-j")});
-    if (!p.waitForStarted(2000) || !p.waitForFinished(3000) ||
+    if (!p.waitForStarted(kStartTimeoutMs) || !p.waitForFinished(kQueryTimeoutMs) ||
         p.exitStatus()!=QProcess::NormalExit || p.exitCode()!=0) return outs;
 
     const QJsonDocument doc = QJsonDocument::fromJson(p.readAllStandardOutput());
@@ -187,8 +200,8 @@ bool ScreenRefreshFeature::applyMode(const QString& outId, const QString& modeId
     if (outId.isEmpty() || modeId.isEmpty()) return false;
     QProcess p;
     p.start(QStringLiteral("kscreen-doctor"), { QStringLiteral("output.%1.mode.%2").arg(outId, modeId) });
-    if (!p.waitForStarted(2000)) return false;
-    if (!p.waitForFinished(5000)) return false;
+    if (!p.waitForStarted(kStartTimeoutMs)) return false;
+    if (!p.waitForFinished(kApplyTimeoutMs)) return false;
     return p.exitStatus()==QProcess::NormalExit && p.exitCode()==0;
 }
 
@@ -196,7 +209,7 @@ bool ScreenRefreshFeature::applyMode(const QString& outId, const QString& modeId
 QStringList ScreenRefreshFeature::probeCurrentRefreshStrings() {
     QStringList out;
     QProcess p; p.start(QStringLiteral("kscreen-doctor"), {QStringLiteral("-j")});
-    if (!p.waitForStarted(2000) || !p.waitForFinished(3000) ||
+    if (!p.waitForStarted(kStartTimeoutMs) || !p.waitForFinished(kQueryTimeoutMs) ||
         p.exitStatus()!=QProcess::NormalExit || p.exitCode()!=0) return out;
 
     const QJsonDocument doc = QJsonDocument::fromJson(p.readAllStandardOutput());

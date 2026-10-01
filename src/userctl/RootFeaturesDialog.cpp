@@ -816,7 +816,10 @@ void RootFeaturesDialog::rebuildTree(){
             }
             m_tree->setCurrentItem(firstMatch ? firstMatch : m_tree->topLevelItem(0));
         }
-        if (m_userWidget) m_userWidget->refreshLiveStatus();
+        // Live status is deliberately not refreshed from here. rebuildTree() has no
+        // business running kscreen-doctor: it rebuilds a tree, and the status text it
+        // would update belongs to the user-features section, which refreshLiveState()
+        // refreshes when the power state actually changes.
         m_updatingUi = false;
 }
 
