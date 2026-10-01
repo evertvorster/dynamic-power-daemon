@@ -162,35 +162,6 @@ void Daemon::onConfigFileChanged(const QString &path)
 }
 
 
-void Daemon::handlePropertiesChanged(const QDBusMessage &message) {
-    const auto args = message.arguments();
-    if (args.size() < 2) return;
-
-    QString interface = args.at(0).toString();
-    QVariantMap changedProps = qdbus_cast<QVariantMap>(args.at(1));
-
-    if (DEBUG_MODE) {
-        log_info(QString("DBus PropertiesChanged from interface: %1").arg(interface).toUtf8().constData());
-    }
-
-    for (auto it = changedProps.begin(); it != changedProps.end(); ++it) {
-        const QString &key = it.key();
-        const QVariant &value = it.value();
-
-        if (DEBUG_MODE) {
-            QString val = value.toString();
-            log_info(QString("  %1 → %2").arg(key, val).toUtf8().constData());
-        }
-
-        // ✅ you can still act on the key/value here regardless of mode
-        if (key == "ActiveProfile") {
-            QString newProfile = value.toString();
-            m_currentProfile = newProfile;
-            log_info(QString("Confirmed active profile: %1").arg(newProfile).toUtf8().constData());
-        }
-    }
-}
-
 void Daemon::handleUPowerChanged(const QDBusMessage &message) {
     const auto args = message.arguments();
     if (args.size() < 2) return;
@@ -216,20 +187,19 @@ void Daemon::handleUPowerChanged(const QDBusMessage &message) {
 
 bool Daemon::loadAvailableProfiles()
 {
-    m_profileMap.clear();
+    m_availableProfiles.clear();
 
     // Populate from YAML-defined profiles (config.h globals)
     for (const auto &kv : profiles) {
-        const QString name = QString::fromStdString(kv.first);
-        m_profileMap[name] = name; // internal → same name
+        m_availableProfiles.insert(QString::fromStdString(kv.first));
     }
 
     // Sanity: warn if our canonical trio are missing
     for (const QString &role : { "performance", "balanced", "powersave" }) {
-        if (!m_profileMap.contains(role)) {
-            log_warning(QString("Missing mapping for internal role '%1'").arg(role).toUtf8().constData());
+        if (!m_availableProfiles.contains(role)) {
+            log_warning(QString("Missing profile '%1' in the config").arg(role).toUtf8().constData());
         } else {
-            log_debug(QString("Mapped internal profile '%1'").arg(role).toUtf8().constData());
+            log_debug(QString("Profile '%1' is configured").arg(role).toUtf8().constData());
         }
     }
     return true;

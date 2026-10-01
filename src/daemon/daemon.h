@@ -5,7 +5,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QStringList>
-#include <QMap>
+#include <QSet>
 #include "config/config.h"  // for Thresholds struct
 #include <QFileSystemWatcher>
 
@@ -43,7 +43,6 @@ public:
     }
     
 private Q_SLOTS:
-    void handlePropertiesChanged(const QDBusMessage &message);
     void handleUPowerChanged(const QDBusMessage &message);
     void checkLoadAverage();              // New slot: called every 5 seconds to check system load
     void onConfigFileChanged(const QString &path);
@@ -53,7 +52,7 @@ private:
     Thresholds m_thresholds;              // Low/high thresholds from config
     Thresholds m_actualThresholds;        // Low/high thresholds actually used.
     Thresholds m_requestedThresholds;     // Low/high thresholds requested from user.
-    QMap<QString, QString> m_profileMap;  // Internal → actual DBus profile name
+    QSet<QString> m_availableProfiles;     // Profile names defined in the config
     QTimer* m_timer = nullptr;            // Polling timer for load average
     QTimer* m_graceTimer = nullptr;       // Timer used for the grace period
     QString m_powerSource = "Unknown";                // "AC" or "battery" (or "Unknown at startup")
