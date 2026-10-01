@@ -34,6 +34,16 @@ target_include_directories(tst_rootcompositefeature PRIVATE ${DP_SRC})
 target_link_libraries(tst_rootcompositefeature PRIVATE Qt6::Test Qt6::Core yaml-cpp)
 add_test(NAME tst_rootcompositefeature COMMAND tst_rootcompositefeature)
 
+# --- the capability lists, which were previously one list ----------------------
+add_executable(tst_profileconfigdialog
+    tst_profileconfigdialog.cpp
+    ${DP_SRC}/userctl/ProfileConfigDialog.cpp
+)
+target_include_directories(tst_profileconfigdialog PRIVATE ${DP_SRC})
+target_compile_options(tst_profileconfigdialog PRIVATE -fno-access-control)
+target_link_libraries(tst_profileconfigdialog PRIVATE Qt6::Test Qt6::Widgets Qt6::Gui Qt6::Core yaml-cpp)
+add_test(NAME tst_profileconfigdialog COMMAND tst_profileconfigdialog)
+
 # --- the rule deciding what gets written back ---------------------------------
 # -fno-access-control because stateToSave() is private. The alternative is
 # including the .cpp with private and public swapped, which breaks the libstdc++

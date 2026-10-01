@@ -106,11 +106,14 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
                 }
             }
         }
-        // If options_path present and readable, prefer modes from there
+        // The machine's current list is read for display only. It is deliberately not
+        // copied into ci.modes: that is the declared intent, and it is what save writes
+        // back. Replacing it here is what narrowed the config's EPP list down to whatever
+        // governor happened to be running when the dialog was last opened.
         if (hw && hw[ks] && hw[ks]["options_path"]) {
             const QString optPath = QString::fromStdString(hw[ks]["options_path"].as<std::string>());
             if (!optPath.isEmpty() && QFileInfo::exists(optPath)) {
-                ci.modes = readModesFromFile(optPath);
+                ci.accepted = readModesFromFile(optPath);
             }
         }
         ci.exists = !ci.path.isEmpty() && QFileInfo::exists(ci.path);
@@ -165,11 +168,11 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
         // Wiring
         connect(edit, &QLineEdit::editingFinished, this, [this, key, modesLbl]() {
             validateAndReload(key); // only validates Set Path
-            modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
+            modesLbl->setText(modesLabelText(key));
         });
         connect(checkBtn, &QPushButton::clicked, this, [this, key, modesLbl]() {
             validateAndReload(key);
-            modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
+            modesLbl->setText(modesLabelText(key));
         });
 
         auto checkOptions = [this, key, optEdit, modesLbl]() {
@@ -177,8 +180,8 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
             if (!op.isEmpty() && QFileInfo::exists(op)) {
                 const QStringList modes = readModesFromFile(op);
                 if (!modes.isEmpty()) {
-                    m_caps[key].modes = modes;
-                    modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
+                    m_caps[key].accepted = modes;   // live list: display only, never persisted
+                    modesLbl->setText(modesLabelText(key));
                     refreshMenusForCap(key);
                 }
             }
@@ -200,12 +203,12 @@ void ProfileConfigDialog::buildCapabilitiesUI() {
         if (optEdit && QFileInfo::exists(optEdit->text().trimmed())) {
             const QStringList modes = readModesFromFile(optEdit->text().trimmed());
             if (!modes.isEmpty()) {
-                m_caps[key].modes = modes;
-                if (modesLbl) modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
+                m_caps[key].accepted = modes;   // live list: display only, never persisted
+                if (modesLbl) modesLbl->setText(modesLabelText(key));
                 refreshMenusForCap(key);
             }
         } else if (modesLbl) {
-            modesLbl->setText(QString("[%1]").arg(m_caps.value(key).modes.join(", ")));
+            modesLbl->setText(modesLabelText(key));
         }
     }
 }
@@ -305,6 +308,18 @@ void ProfileConfigDialog::updateButtonMenu(const QString& profile, const QString
         });
     }
     btn->setMenu(menu);
+}
+
+// The declared list, plus what the machine accepts right now when that differs. Both
+// are shown because they answer different questions: the first is what this config may
+// be set to, the second is what the running governor will actually take.
+QString ProfileConfigDialog::modesLabelText(const QString& key) const
+{
+    const CapabilityInfo cap = m_caps.value(key);
+    QString text = QString("[%1]").arg(cap.modes.join(", "));
+    if (!cap.accepted.isEmpty() && cap.accepted != cap.modes)
+        text += QString("   accepted now: [%1]").arg(cap.accepted.join(", "));
+    return text;
 }
 
 void ProfileConfigDialog::onSave() {
@@ -469,12 +484,11 @@ void ProfileConfigDialog::refreshMenusForCap(const QString& capKey) {
         }
         btn->setMenu(menu);
 
-        // Ensure current selection is valid
-        QString sel = m_selection.value(profile).value(capKey);
-        if (!modes.contains(sel)) {
-            sel = modes.isEmpty() ? QString() : modes.first();
-            m_selection[profile][capKey] = sel;
-            btn->setText(sel.isEmpty() ? "<unset>" : sel);
-        }
+        // A stored value that is not in the declared list is shown as it is rather than
+        // silently replaced with the first entry. Rewriting a setting because a list
+        // changed is how values went missing before; whether the machine will accept it
+        // is a separate question, and that is what the accepted list is for.
+        const QString sel = m_selection.value(profile).value(capKey);
+        btn->setText(sel.isEmpty() ? QStringLiteral("<unset>") : sel);
     }
 }

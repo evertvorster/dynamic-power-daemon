@@ -18,7 +18,14 @@ namespace YAML { class Node; }
 struct CapabilityInfo {
     QString key;       // e.g. "cpu_governor"
     QString path;      // sysfs path
-    QStringList modes; // detected/declared modes
+    // What the config declares this knob may be set to: the intent, and what gets
+    // written back on save.
+    QStringList modes;
+    // What the machine accepts right now, read from options_path. For display and
+    // diagnostics only - never persisted, or the config ends up holding a snapshot of
+    // one moment's governor, which is how the EPP list came to be narrowed to
+    // "performance" alone.
+    QStringList accepted;
     bool exists = false;
 };
 
@@ -42,7 +49,10 @@ private:
     QMap<QString, class QLabel*>    m_statusLabels;    // capKey -> QLabel*
     void validateAndReload(const QString& capKey);     // check path exists, read modes, refresh menus
     QStringList readModesFromFile(const QString& path) const;
-    void refreshMenusForCap(const QString& capKey);    // rebuild menus for all profiles for this cap
+    void refreshMenusForCap(const QString& capKey);      // rebuild menus for all profiles for this cap
+
+    // "[declared modes]", plus what the machine currently accepts when that differs.
+    QString modesLabelText(const QString& key) const;
     
     // UI state
     QVBoxLayout* m_outer = nullptr;
