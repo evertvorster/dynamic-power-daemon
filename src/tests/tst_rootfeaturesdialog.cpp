@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QString>
+#include <QPushButton>
 
 #include "userctl/RootFeaturesDialog.h"
 
@@ -69,6 +70,7 @@ private slots:
     void writesNothingForUntouchedDetectedNodes();
     void writesEverythingDisabledWhenTheDisclaimerIsNotAccepted();
     void dropsScaffoldingAndWritesRulesFlat();
+    void theConfirmButtonReflectsTheSavedDisclaimer();
 
 private:
     QString write(const QByteArray& body);
@@ -185,6 +187,20 @@ void TestRootFeaturesDialog::dropsScaffoldingAndWritesRulesFlat()
         QVERIFY2(node.parentId.isEmpty(), qPrintable(node.parentId));
         QCOMPARE(node.policyScope, QStringLiteral("override"));
     }
+}
+
+void TestRootFeaturesDialog::theConfirmButtonReflectsTheSavedDisclaimer()
+{
+    // The button was set only from the constructor, which now runs before the saved state is
+    // read - so it read "not accepted" for the life of the dialog, even with accepted: true
+    // on disk. Nothing was lost; the button just lied.
+    const QString path = write(configWith("true", rule("node:/proc/sys/kernel/nmi_watchdog",
+                                                        kNmiPath, true, "1", "0")));
+    RootFeaturesDialog dialog(nullptr, path);
+    constructLoaded(dialog);
+
+    QVERIFY2(dialog.m_confirmBtn->text().contains(QString::fromUtf8("\u2705")),
+             qPrintable(dialog.m_confirmBtn->text()));
 }
 
 QTEST_MAIN(TestRootFeaturesDialog)

@@ -211,7 +211,9 @@ RootFeaturesDialog::RootFeaturesDialog(QWidget* parent, const QString& etcPath)
         // still on it. Queued once the event loop runs, so the dialog is on screen first and
         // fills itself in when the answers arrive.
         QTimer::singleShot(0, this, [this] { loadState(); });
-        updateConfirmUI();
+        // Deliberately not calling updateConfirmUI() here: the saved state has not been read
+        // yet, so it would report "not accepted" for a moment and then never correct itself.
+        // loadState() sets it once the answer is known.
 }
 
     // The Target column is sized from the tree's viewport, so recompute whenever that viewport
@@ -642,6 +644,11 @@ void RootFeaturesDialog::loadState(){
         seedDefaults();
         rebuildTree();
         connectPowerRefresh();
+
+        // The disclaimer state only becomes known here, so this is where the button can
+        // first be right. It used to be set only from the constructor, which is now before
+        // the state exists.
+        updateConfirmUI();
 
         // The user-features labels start out as "(detecting...)" and were previously only
         // refreshed as a side effect of rebuildTree(), or by a power-state change arriving
