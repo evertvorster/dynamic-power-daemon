@@ -45,8 +45,8 @@ add_executable(dynamic_power_user
     userctl/App.h
     userctl/DbusClient.cpp
     userctl/DbusClient.h
-    userctl/Config.cpp
-    userctl/Config.h
+    userctl/UserConfig.cpp
+    userctl/UserConfig.h
     userctl/TrayController.cpp
     userctl/TrayController.h
     userctl/MainWindow.cpp

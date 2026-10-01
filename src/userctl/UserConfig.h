@@ -13,10 +13,10 @@ struct ProcessRule {
     int priority = 0;
 };
 
-class Config : public QObject {         // derive from QObject
+class UserConfig : public QObject {         // derive from QObject
     Q_OBJECT
 public:
-    Config();
+    UserConfig();
     // ~/.config/dynamic_power/config.yaml. The one definition: the user features
     // and the settings dialog both need it, and it was previously built in three
     // places, two of which used a different QStandardPaths enum.

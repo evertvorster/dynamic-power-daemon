@@ -1,6 +1,6 @@
 #include "MainWindow.h"
 #include "DbusClient.h"
-#include "Config.h"
+#include "UserConfig.h"
 #include "LoadGraphWidget.h"
 #include "ProcessRuleEditor.h"
 #include "ProfileConfigDialog.h"
@@ -20,7 +20,7 @@
 #include <QVBoxLayout>
 #include "common/config_paths.h"
 
-MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
+MainWindow::MainWindow(DbusClient* dbus, UserConfig* config, QWidget* parent)
     : QMainWindow(parent), m_dbus(dbus), m_config(config)
 {
     auto* central = new QWidget(this);

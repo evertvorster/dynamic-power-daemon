@@ -1,14 +1,14 @@
 // File: src/userctl/features/FeatureBase.cpp
 #include "FeatureBase.h"
 
-#include "../Config.h"
+#include "../UserConfig.h"
 
 namespace dp::features {
 
 QString FeatureBase::configPath() {
-    // Delegated so there is only one definition of the user config path. Config is
+    // Delegated so there is only one definition of the user config path. UserConfig is
     // the natural owner: it is what opens and watches that file.
-    return Config::userConfigPath();
+    return UserConfig::userConfigPath();
 }
 
 QString FeatureBase::normalizePolicy(const QString& s) {

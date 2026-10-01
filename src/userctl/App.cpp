@@ -1,7 +1,7 @@
 
 #include "App.h"
 #include "DbusClient.h"
-#include "Config.h"
+#include "UserConfig.h"
 #include "TrayController.h"
 #include "MainWindow.h"
 #include "ProcessMonitor.h"
@@ -19,10 +19,10 @@ App::~App() = default;
 App::App(QObject* parent) : QObject(parent) {}
 
 void App::start() {
-    m_config = std::make_unique<Config>();
+    m_config = std::make_unique<UserConfig>();
     m_config->ensureExists();
     m_config->load();
-    connect(m_config.get(), &Config::reloaded, this, [this]() {
+    connect(m_config.get(), &UserConfig::reloaded, this, [this]() {
         // Update UI lists + process monitor rules
         if (m_mainWindow) m_mainWindow->refreshProcessButtons();
         if (m_procMon)    m_procMon->setRules(m_config->processRules());
@@ -221,7 +221,7 @@ void App::onUserOverrideChanged(const QString& mode, bool /*bossParamIgnored*/) 
 
 void App::onThresholdsAdjusted(double low, double high) {
     // Sanity-check & normalize thresholds
-    Config::normalizeThresholds(low, high);
+    UserConfig::normalizeThresholds(low, high);
     
     // Persist to config
     m_config->setThresholds(low, high);

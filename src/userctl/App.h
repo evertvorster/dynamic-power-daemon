@@ -3,7 +3,7 @@
 #include <QObject>
 #include <memory>
 class DbusClient;
-class Config;
+class UserConfig;
 class TrayController;
 class MainWindow;
 class ProcessMonitor;
@@ -19,7 +19,7 @@ public:
 
 private:
     std::unique_ptr<DbusClient> m_dbus;
-    std::unique_ptr<Config> m_config;
+    std::unique_ptr<UserConfig> m_config;
     std::unique_ptr<TrayController> m_tray;
     std::unique_ptr<MainWindow> m_mainWindow;
     std::unique_ptr<ProcessMonitor> m_procMon;

@@ -1,5 +1,5 @@
 
-#include "Config.h"
+#include "UserConfig.h"
 #include <QStandardPaths>
 #include <QDir>
 #include <QFileInfo>
@@ -12,18 +12,18 @@
 
 static const char* FILENAME_PRIMARY = "config.yaml";
 
-QString Config::userConfigPath() {
+QString UserConfig::userConfigPath() {
     return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
            + "/dynamic_power/" + FILENAME_PRIMARY;
 }
 
-Config::Config() {
+UserConfig::UserConfig() {
     m_path = userConfigPath();
     QDir().mkpath(QFileInfo(m_path).absolutePath());
     startWatching();
 }
 
-void Config::ensureExists() {
+void UserConfig::ensureExists() {
     if (QFile::exists(m_path)) return;
     // Try to copy from template: /usr/share/dynamic-power/dynamic-power-user.yaml
     QString tmpl = "/usr/share/dynamic-power/dynamic-power-user.yaml";
@@ -48,7 +48,7 @@ void Config::ensureExists() {
     }
 }
 
-bool Config::load() {
+bool UserConfig::load() {
     try {
         YAML::Node root = YAML::LoadFile(m_path.toStdString());
         if (root["power"] && root["power"]["load_thresholds"]) {
@@ -73,7 +73,7 @@ bool Config::load() {
     }
 }
 
-void Config::startWatching() {
+void UserConfig::startWatching() {
     m_watch.addPath(m_path);
     connect(&m_watch, &QFileSystemWatcher::fileChanged, [this](const QString&) {
         if (m_saving) {                 // we triggered it — ignore once
@@ -92,7 +92,7 @@ void Config::startWatching() {
     });
 }
 
-bool Config::save() const {
+bool UserConfig::save() const {
     // Load existing YAML so we preserve unrelated sections (e.g. features.user.*)
     YAML::Node root;
     try {
@@ -111,7 +111,7 @@ bool Config::save() const {
         try { f.remove("screen_refresh"); } catch (...) {}
     }
 
-    // Update only what Config owns
+    // Update only what UserConfig owns
     root["power"]["load_thresholds"]["low"]  = m_thresholds.first;
     root["power"]["load_thresholds"]["high"] = m_thresholds.second;
 
@@ -140,7 +140,7 @@ bool Config::save() const {
     }
 }
 
-void Config::normalizeThresholds(double& low, double& high, double minGap) {
+void UserConfig::normalizeThresholds(double& low, double& high, double minGap) {
     if (low > high)
         std::swap(low, high);
     if ((high - low) < minGap)

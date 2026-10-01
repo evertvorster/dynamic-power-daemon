@@ -9,7 +9,7 @@
 #include <QDialog>
 
 class DbusClient;
-class Config;
+class UserConfig;
 class LoadGraphWidget;
 class QPushButton;
 class QWidget;
@@ -19,7 +19,7 @@ class QLabel;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    MainWindow(DbusClient* dbus, Config* config, QWidget* parent = nullptr);
+    MainWindow(DbusClient* dbus, UserConfig* config, QWidget* parent = nullptr);
     void setThresholds(double low, double high);
     void setActiveProfile(const QString& profile);
     QString currentUserMode() const { return m_userMode; }
@@ -40,7 +40,7 @@ private slots:
 
 private:
     DbusClient* m_dbus;
-    Config* m_config;
+    UserConfig* m_config;
     LoadGraphWidget* m_graph;
     QPushButton* m_overrideBtn;
     QString m_activeProfile = "balanced";
