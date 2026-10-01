@@ -164,7 +164,11 @@ public:
         m_enabledCheck = new QCheckBox("Enabled", inspector);
         enableRow->addWidget(m_enabledCheck);
         m_ruleState = new QLabel(inspector);
-        m_ruleState->setToolTip("A rule for this node is stored in the config file.");
+        // @ marks a rule on this node, * that rules exist further down the branch. Text-sized
+        // and bold on purpose - a lone middle dot was too easy to miss.
+        QFont ruleFont = m_ruleState->font();
+        ruleFont.setBold(true);
+        m_ruleState->setFont(ruleFont);
         enableRow->addWidget(m_ruleState);
         m_deleteRuleBtn = new QPushButton("Delete rule", inspector);
         m_deleteRuleBtn->setToolTip("Remove this node's rule from the config.\nA rule that is merely switched off is kept.");
@@ -872,6 +876,7 @@ private slots:
             m_addKernelBtn->setEnabled(false);
             m_removeKernelBtn->setEnabled(false);
             m_ruleState->clear();
+            m_ruleState->setToolTip(QString());
             m_deleteRuleBtn->setVisible(false);
             m_updatingUi = false;
             return;
@@ -947,9 +952,14 @@ private slots:
         // row has no way of showing otherwise. Delete only appears when this node itself has
         // one; deleting drops the rule, switching off keeps it.
         const bool branchHasRule = node->isGroup && anyDescendantHasRule(node->id);
-        m_ruleState->setText(node->hasRule ? QStringLiteral("· rule")
-                            : branchHasRule ? QStringLiteral("· rules below")
+        m_ruleState->setText(node->hasRule ? QStringLiteral("@")
+                            : branchHasRule ? QStringLiteral("*")
                                             : QString());
+        m_ruleState->setToolTip(node->hasRule
+                                    ? QStringLiteral("@ - this node has a rule")
+                                : branchHasRule
+                                    ? QStringLiteral("* - rules exist further down this branch")
+                                    : QString());
         m_deleteRuleBtn->setVisible(node->hasRule);
         m_updatingUi = false;
     }
