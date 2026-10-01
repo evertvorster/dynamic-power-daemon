@@ -49,6 +49,8 @@ add_executable(dynamic_power_user
     userctl/TrayController.h
     userctl/MainWindow.cpp
     userctl/MainWindow.h
+    userctl/RootFeaturesDialog.cpp
+    userctl/RootFeaturesDialog.h
     userctl/LoadGraphWidget.cpp
     userctl/LoadGraphWidget.h
     userctl/ProcessMonitor.cpp
