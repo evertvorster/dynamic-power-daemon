@@ -163,13 +163,6 @@ public:
         auto* enableRow = new QHBoxLayout();
         m_enabledCheck = new QCheckBox("Enabled", inspector);
         enableRow->addWidget(m_enabledCheck);
-        m_ruleState = new QLabel(inspector);
-        // @ marks a rule on this node, * that rules exist further down the branch. Text-sized
-        // and bold on purpose - a lone middle dot was too easy to miss.
-        QFont ruleFont = m_ruleState->font();
-        ruleFont.setBold(true);
-        m_ruleState->setFont(ruleFont);
-        enableRow->addWidget(m_ruleState);
         m_deleteRuleBtn = new QPushButton("Delete rule", inspector);
         m_deleteRuleBtn->setToolTip("Remove this node's rule from the config.\nA rule that is merely switched off is kept.");
         enableRow->addWidget(m_deleteRuleBtn);
@@ -258,7 +251,6 @@ private:
     QLabel* m_currentValue{};
     QCheckBox* m_overrideCheck{};
     QCheckBox* m_enabledCheck{};
-    QLabel* m_ruleState{};
     QPushButton* m_deleteRuleBtn{};
     QComboBox* m_acCombo{};
     QComboBox* m_batCombo{};
@@ -710,9 +702,7 @@ private slots:
             // "@" this node has a rule, "*" rules exist further down. Always two characters so
             // the addresses below stay lined up. The tooltip names the symbol.
             const bool underRule = ruleBranch.contains(node.id);
-            item->setText(0, (node.hasRule ? QStringLiteral("@ ")
-                            : underRule    ? QStringLiteral("* ")
-                                           : QStringLiteral("  ")) + text);
+            item->setText(0, markerText(node.hasRule, underRule) + text);
             if (node.hasRule)
                 item->setToolTip(0, QStringLiteral("@ - this node has a rule"));
             else if (underRule)
@@ -892,8 +882,6 @@ private slots:
             m_batCombo->setEnabled(false);
             m_addKernelBtn->setEnabled(false);
             m_removeKernelBtn->setEnabled(false);
-            m_ruleState->clear();
-            m_ruleState->setToolTip(QString());
             m_deleteRuleBtn->setVisible(false);
             m_updatingUi = false;
             return;
@@ -964,28 +952,44 @@ private slots:
         const bool removableKernel = isKernelNode(*node) && !node->isGroup;
         m_addKernelBtn->setEnabled(kernelGroup);
         m_removeKernelBtn->setEnabled(removableKernel);
-        // A rule that is switched off is still a rule, so presence is shown separately from
-        // Enabled. The marker also reports rules further down the branch, which a container
-        // row has no way of showing otherwise. Delete only appears when this node itself has
+        // Rule presence is shown in the tree, not here: the inspector only ever describes the
+        // selected node, so it cannot help find rules. Delete appears only when this node has
         // one; deleting drops the rule, switching off keeps it.
-        const bool branchHasRule = node->isGroup && anyDescendantHasRule(node->id);
-        m_ruleState->setText(node->hasRule ? QStringLiteral("@")
-                            : branchHasRule ? QStringLiteral("*")
-                                            : QString());
-        m_ruleState->setToolTip(node->hasRule
-                                    ? QStringLiteral("@ - this node has a rule")
-                                : branchHasRule
-                                    ? QStringLiteral("* - rules exist further down this branch")
-                                    : QString());
         m_deleteRuleBtn->setVisible(node->hasRule);
         m_updatingUi = false;
     }
 
-    // True when any visible control leaf beneath this id carries a rule.
-    bool anyDescendantHasRule(const QString& parentId) const {
-        for (const RootNode* leaf : descendantControlLeavesConst(parentId))
-            if (leaf->hasRule) return true;
+    // The two-character marker in front of a row's text: "@" this node has a rule, "*" rules
+    // exist further down, two spaces for neither so the addresses stay lined up.
+    static QString markerText(bool own, bool below) {
+        return own   ? QStringLiteral("@ ")
+               : below ? QStringLiteral("* ")
+                       : QStringLiteral("  ");
+    }
+
+    // True when this node or anything beneath it carries a rule.
+    bool subtreeHasRule(const RootNode& node) const {
+        if (node.hasRule) return true;
+        for (const auto& n : m_state.nodes) {
+            if (!n.hasRule) continue;
+            for (const RootNode* p = &n; p; p = parentNode(*p))
+                if (p->id == node.id) return true;
+        }
         return false;
+    }
+
+    // Redraw one row's marker without rebuilding the tree, which would collapse it and lose
+    // the selection.
+    void refreshRowMarker(const RootNode& node) {
+        QTreeWidgetItem* item = m_treeItems.value(node.id);
+        if (!item) return;
+        QString text = item->text(0);
+        if (text.size() < 2) return;
+        const bool below = subtreeHasRule(node);
+        item->setText(0, markerText(node.hasRule, below) + text.mid(2));
+        item->setToolTip(0, node.hasRule ? QStringLiteral("@ - this node has a rule")
+                            : below      ? QStringLiteral("* - rules exist further down this branch")
+                                         : QString());
     }
 
     // Remove this node's stored rule. In memory only until Save, so closing without saving
@@ -995,6 +999,15 @@ private slots:
         if (!node || !node->hasRule) return;
         node->hasRule = false;
         node->enabled = false;
+        // This row's marker and every ancestor's "rules below" may have changed. Redraw just
+        // those, rather than rebuildTree(), which would collapse everything.
+        //
+        // m_updatingUi must be set: setText() emits itemChanged, and onTreeItemChanged() would
+        // read that as the user ticking the row - setting hasRule straight back and leaving
+        // the marker disagreeing with the node.
+        m_updatingUi = true;
+        for (const RootNode* p = node; p; p = parentNode(*p)) refreshRowMarker(*p);
+        m_updatingUi = false;
         refreshTreeState();
         loadInspector(m_tree->currentItem());
     }
