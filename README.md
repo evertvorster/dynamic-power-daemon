@@ -75,6 +75,11 @@ Two config files are involved:
 
 `/etc/dynamic_power.yaml` contains:
 
+The shipped version applies nothing. Every profile option and every root rule starts
+disabled, because which values a machine accepts cannot be known in advance - the
+valid EPP set depends on the running governor, the driver and the platform. So a
+fresh install switches between profiles that do nothing until you configure them.
+
 - Load thresholds used by the daemon
 - Profile-to-hardware mappings
 - Root-required power feature rules

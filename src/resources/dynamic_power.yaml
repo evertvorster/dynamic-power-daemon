@@ -38,21 +38,26 @@ hardware:
       - powersupersave
       - disabled
 profiles:
+  # Every option ships disabled. Which values a machine accepts cannot be known in
+  # advance - the valid EPP set depends on the running governor, the driver and the
+  # platform - so the template declares no mapping at all rather than shipping one
+  # that is wrong on most laptops. The hardware.*.modes lists above are the declared
+  # intent, and are what the profile editor offers.
   powersave:
-    cpu_governor: powersave
-    epp_profile: power
-    acpi_platform_profile: low-power
-    aspm: powersave
+    cpu_governor: disabled
+    epp_profile: disabled
+    acpi_platform_profile: disabled
+    aspm: disabled
   balanced:
-    cpu_governor: performance
-    epp_profile: balance_power
-    acpi_platform_profile: balanced
-    aspm: default
+    cpu_governor: disabled
+    epp_profile: disabled
+    acpi_platform_profile: disabled
+    aspm: disabled
   performance:
-    cpu_governor: performance
-    epp_profile: performance
-    acpi_platform_profile: performance
-    aspm: performance
+    cpu_governor: disabled
+    epp_profile: disabled
+    acpi_platform_profile: disabled
+    aspm: disabled
 features:
   root:
     disclaimer:
