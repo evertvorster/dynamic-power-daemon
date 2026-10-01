@@ -689,6 +689,13 @@ private slots:
             }
         }
 
+        // Every row from a rule up to the root, so a row can say "rules live under here".
+        QSet<QString> ruleBranch;
+        for (const auto& node : m_state.nodes) {
+            if (!node.hasRule) continue;
+            for (const RootNode* p = &node; p; p = parentNode(*p)) ruleBranch.insert(p->id);
+        }
+
         for (const auto& node : m_state.nodes) {
             if (node.id == QStringLiteral("group:legacy") && !hasLegacyChildren) continue;
             if (!shown.contains(node.id)) continue;
@@ -697,9 +704,19 @@ private slots:
             // is more than the device's own, otherwise every device row carries a
             // meaningless "(1)".
             const int under = deviceCount.value(node.id);
-            item->setText(0, node.isGroup && under > 1
-                             ? QStringLiteral("%1 (%2)").arg(node.label).arg(under)
-                             : node.label);
+            QString text = node.isGroup && under > 1
+                               ? QStringLiteral("%1 (%2)").arg(node.label).arg(under)
+                               : node.label;
+            // "@" this node has a rule, "*" rules exist further down. Always two characters so
+            // the addresses below stay lined up. The tooltip names the symbol.
+            const bool underRule = ruleBranch.contains(node.id);
+            item->setText(0, (node.hasRule ? QStringLiteral("@ ")
+                            : underRule    ? QStringLiteral("* ")
+                                           : QStringLiteral("  ")) + text);
+            if (node.hasRule)
+                item->setToolTip(0, QStringLiteral("@ - this node has a rule"));
+            else if (underRule)
+                item->setToolTip(0, QStringLiteral("* - rules exist further down this branch"));
             // A rule whose hardware is no longer present stays visible but faded, so it can be
             // seen and deleted rather than vanishing silently. Not keyed on `legacy` alone:
             // unmatched is normal for kernel tunings, whose paths the detector never emits.
