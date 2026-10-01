@@ -57,24 +57,34 @@ features:
   root:
     disclaimer:
       accepted: false
-      accepted_at: 
-    features:
-      - enabled: false
+      accepted_at:
+    nodes:
+      - id: node:/proc/sys/kernel/nmi_watchdog
         path: /proc/sys/kernel/nmi_watchdog
+        enabled: false
         ac_value: 1
         battery_value: 0
-      - enabled: false
+        policy_scope: override
+      - id: node:/sys/module/snd_hda_intel/parameters/power_save
         path: /sys/module/snd_hda_intel/parameters/power_save
+        enabled: false
         ac_value: 10
         battery_value: 1
-      - enabled: false
+        policy_scope: override
+      - id: node:/proc/sys/vm/dirty_writeback_centisecs
         path: /proc/sys/vm/dirty_writeback_centisecs
+        enabled: false
         ac_value: 1000
         battery_value: 6000
-      - enabled: false
+        policy_scope: override
+      - id: node:/sys/devices/pci0000:00/0000:00:01.2/0000:02:00.0/power/control
         path: /sys/devices/pci0000:00/0000:00:01.2/0000:02:00.0/power/control
+        enabled: false
         ac_value: on
         battery_value: auto
-      - enabled: false
+        policy_scope: override
+      - id: node:/sys/devices/pci0000:00/0000:00:02.2/0000:07:00.0/power/control
         path: /sys/devices/pci0000:00/0000:00:02.2/0000:07:00.0/power/control
+        enabled: false
         ac_value: on
+        policy_scope: override
