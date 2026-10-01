@@ -1036,7 +1036,14 @@ private slots:
                                  "Saving is disabled until you click Confirm and agree to the disclaimer.");
             return;
         }
-        onInspectorChanged();
+        // Deliberately no onInspectorChanged() here. Every inspector widget already calls it
+        // on its own change signal, so nothing needs flushing. Calling it here made Save
+        // destructive: any selected row that is a container (every bridge and segment row is
+        // class "device" + isGroup, so isBulkEditableDeviceNode() is true for all of them)
+        // took the bulk-edit path and overwrote enabled/AC/battery on every rule beneath it
+        // with whatever the inspector happened to display. For a container that display is an
+        // aggregate — typically Enabled=0 with empty values — so opening the dialog and
+        // hitting Save wiped every rule in the config.
         dp::features::RootCompositeFeature composite(m_etcPath);
         const QByteArray data = composite.serialize(activeRulesOnly());
         if (pkexecWrite(data, m_etcPath)) {
