@@ -159,8 +159,19 @@ public:
 
         m_overrideCheck = new QCheckBox("Override inherited policy", inspector);
         inspectorLay->addWidget(m_overrideCheck);
+
+        auto* enableRow = new QHBoxLayout();
         m_enabledCheck = new QCheckBox("Enabled", inspector);
-        inspectorLay->addWidget(m_enabledCheck);
+        enableRow->addWidget(m_enabledCheck);
+        m_ruleState = new QLabel(inspector);
+        m_ruleState->setToolTip("A rule for this node is stored in the config file.");
+        enableRow->addWidget(m_ruleState);
+        m_deleteRuleBtn = new QPushButton("Delete rule", inspector);
+        m_deleteRuleBtn->setToolTip("Remove this node's rule from the config.\nA rule that is merely switched off is kept.");
+        enableRow->addWidget(m_deleteRuleBtn);
+        enableRow->addStretch(1);
+        inspectorLay->addLayout(enableRow);
+        connect(m_deleteRuleBtn, &QPushButton::clicked, this, [this] { onDeleteRule(); });
 
         auto* acRow = new QHBoxLayout();
         acRow->addWidget(new QLabel("On AC", inspector));
@@ -239,6 +250,8 @@ private:
     QLabel* m_currentValue{};
     QCheckBox* m_overrideCheck{};
     QCheckBox* m_enabledCheck{};
+    QLabel* m_ruleState{};
+    QPushButton* m_deleteRuleBtn{};
     QComboBox* m_acCombo{};
     QComboBox* m_batCombo{};
     QPushButton* m_addKernelBtn{};
@@ -475,6 +488,7 @@ private slots:
             leaf->enabled = enabled;
             leaf->acValue = acValue;
             leaf->batteryValue = batteryValue;
+            leaf->hasRule = true;
         }
     }
 
@@ -532,17 +546,19 @@ private slots:
                 target.acValue = savedNode.acValue;
                 target.batteryValue = savedNode.batteryValue;
                 target.policyScope = savedNode.policyScope;
+                target.hasRule = true;
                 if (!savedNode.label.isEmpty() && !isRealControlLeaf(target)) target.label = savedNode.label;
                 continue;
             }
 
-            // A saved rule whose path is gone is not worth resurrecting: it can never
-            // be applied, the next save would discard it anyway, and showing it would
-            // offer a rule that saving immediately throws away. Scaffolding whose
-            // devices are all gone has no path at all and drops out here too.
-            if (!QFileInfo::exists(savedNode.absPath)) continue;
+            // Scaffolding carries no rule of its own - only a path does. A rule whose hardware
+            // is gone is kept and shown faded rather than dropped, so it can be seen and
+            // deleted instead of vanishing silently.
+            if (savedNode.absPath.isEmpty()) continue;
 
             auto legacy = savedNode;
+            legacy.hasRule = true;
+            legacy.policyScope = QStringLiteral("override");   // nothing to inherit from
             if (isRealControlLeaf(legacy)) legacy.label = QStringLiteral("Runtime PM");
             legacy.detected = false;
             legacy.legacy = true;
@@ -660,6 +676,11 @@ private slots:
             item->setText(0, node.isGroup && under > 1
                              ? QStringLiteral("%1 (%2)").arg(node.label).arg(under)
                              : node.label);
+            // A rule whose hardware is no longer present stays visible but faded, so it can be
+            // seen and deleted rather than vanishing silently. Not keyed on `legacy` alone:
+            // unmatched is normal for kernel tunings, whose paths the detector never emits.
+            if (!node.detected && !QFileInfo::exists(node.absPath))
+                item->setForeground(0, QApplication::palette().brush(QPalette::Disabled, QPalette::Text));
             item->setText(1, node.isGroup ? QString() : (node.currentValue.isEmpty() ? "-" : node.currentValue));
             item->setText(2, node.nodeClass);
             item->setData(0, Qt::UserRole, node.id);
@@ -830,6 +851,8 @@ private slots:
             m_batCombo->setEnabled(false);
             m_addKernelBtn->setEnabled(false);
             m_removeKernelBtn->setEnabled(false);
+            m_ruleState->clear();
+            m_deleteRuleBtn->setVisible(false);
             m_updatingUi = false;
             return;
         }
@@ -899,7 +922,23 @@ private slots:
         const bool removableKernel = isKernelNode(*node) && !node->isGroup;
         m_addKernelBtn->setEnabled(kernelGroup);
         m_removeKernelBtn->setEnabled(removableKernel);
+        // A rule that is switched off is still a rule, so presence is shown separately from
+        // Enabled. The Delete button only appears when there is something to delete; deleting
+        // drops the rule, switching off keeps it.
+        m_ruleState->setText(node->hasRule ? QStringLiteral("· rule") : QString());
+        m_deleteRuleBtn->setVisible(node->hasRule);
         m_updatingUi = false;
+    }
+
+    // Remove this node's stored rule. In memory only until Save, so closing without saving
+    // undoes it.
+    void onDeleteRule() {
+        RootNode* node = selectedNode();
+        if (!node || !node->hasRule) return;
+        node->hasRule = false;
+        node->enabled = false;
+        refreshTreeState();
+        loadInspector(m_tree->currentItem());
     }
 
     void onTreeItemChanged(QTreeWidgetItem* item, int column) {
@@ -919,6 +958,7 @@ private slots:
         } else {
             node->policyScope = QStringLiteral("override");
             node->enabled = enabled;
+            node->hasRule = true;
         }
         refreshTreeState();
         if (m_tree->currentItem() == item) loadInspector(item);
@@ -946,6 +986,9 @@ private slots:
             node->enabled = m_enabledCheck->isChecked();
             node->acValue = m_acCombo->currentText().trimmed();
             node->batteryValue = m_batCombo->currentText().trimmed();
+            // Touching anything here creates a rule, so the Delete button appears straight away.
+            // Switching it off later keeps the rule rather than deleting it.
+            node->hasRule = true;
         }
 
         refreshTreeState();
@@ -1027,20 +1070,14 @@ private slots:
     // Without the disclaimer accepted the rules are still recorded but every one is switched
     // off. The daemon refuses outright in that state anyway; this keeps the file inert too.
     RootState stateToSave() const {
-        QSet<QString> alreadyRules;
-        {
-            dp::features::RootCompositeFeature existing(m_etcPath);
-            for (const auto& n : existing.read().nodes)
-                if (!n.absPath.isEmpty()) alreadyRules.insert(n.absPath);
-        }
-
         RootState out;
         out.disclaimerAccepted = m_disclaimerAccepted;
         out.acceptedAt = m_disclaimerAcceptedAt;
         for (const auto& node : m_state.nodes) {
             if (node.absPath.isEmpty()) continue;                 // groups and tree segments
-            if (!QFileInfo::exists(node.absPath)) continue;       // hardware not present
-            if (!effectiveEnabled(node) && !alreadyRules.contains(node.absPath)) continue;
+            if (!node.enabled && !node.hasRule) continue;         // not on, and never stored
+            // Note: no existence check. A rule whose hardware is gone is kept until the user
+            // deletes it, so nothing disappears without them seeing it happen.
             const QString ac = effectiveValue(node, false);
             const QString battery = effectiveValue(node, true);
             if (ac.isEmpty() || battery.isEmpty()) continue;      // nothing the daemon could write

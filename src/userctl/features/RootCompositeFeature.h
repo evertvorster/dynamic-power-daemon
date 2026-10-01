@@ -21,6 +21,10 @@ public:
         bool supported = true;
         bool detected = false;
         bool legacy = false;
+        // True when a rule for this node is stored in the config file. Set on load, never
+        // serialized, and cleared to delete the rule. Distinguishes "a rule that is switched
+        // off" from "a node nobody has touched", which are otherwise identical.
+        bool hasRule = false;
         bool isGroup = false;
         QString currentValue;
         QStringList allowedValues;
