@@ -43,6 +43,7 @@ add_executable(tst_rootfeaturesdialog
     tst_rootfeaturesdialog.cpp
     ${DP_SRC}/userctl/RootFeaturesDialog.cpp
     ${DP_SRC}/userctl/UserFeatures.cpp
+    ${DP_SRC}/userctl/Config.cpp
     ${DP_SRC}/userctl/features/FeatureBase.cpp
     ${DP_SRC}/userctl/features/ScreenRefreshFeature.cpp
     ${DP_SRC}/userctl/features/PanelAutohideFeature.cpp

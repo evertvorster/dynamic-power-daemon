@@ -7,7 +7,6 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QPushButton>
-#include <QStandardPaths>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(dpUser, "dp.userfeatures")
@@ -63,11 +62,6 @@ UserFeaturesWidget::UserFeaturesWidget(QWidget* parent)
 
 }
 
-QString UserFeaturesWidget::configPath() {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    return base + "/dynamic_power/config.yaml";
-}
-
 QString UserFeaturesWidget::cycle3(const QString& cur) {
     if (cur.compare("Unchanged", Qt::CaseInsensitive) == 0) return "Min";
     if (cur.compare("Min", Qt::CaseInsensitive) == 0)       return "Max";
@@ -88,12 +82,6 @@ QString UserFeaturesWidget::cyclePanelMode(const QString& cur) {
     if (cur.compare("Autohide", Qt::CaseInsensitive) == 0) return "DodgeWindows";
     if (cur.compare("DodgeWindows", Qt::CaseInsensitive) == 0) return "WindowsGoBelow";
     return "Unchanged";
-}
-
-QString UserFeaturesWidget::normalizePolicy(const QString& s) {
-    const QString t = s.trimmed().toLower();
-    if (t == "min" || t == "max") return t;
-    return "unchanged";
 }
 
 void UserFeaturesWidget::load() {

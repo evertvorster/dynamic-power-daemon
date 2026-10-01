@@ -32,9 +32,7 @@ private:
     QLabel*     m_panelStatus{};
 
     // Helpers
-    static QString configPath();           // ~/.config/dynamic_power/config.yaml
     static QString cycle3(const QString&); // Unchanged -> Min -> Max -> Unchanged
-    static QString normalizePolicy(const QString&); // "min"/"max"/"unchanged" (lower)
     static QString cycleOnOff(const QString&); // Unchanged -> On -> Off -> Unchanged
     static QString cyclePanelMode(const QString&); // Unchanged -> None -> Autohide -> DodgeWindows -> WindowsGoBelow -> Unchanged
 };

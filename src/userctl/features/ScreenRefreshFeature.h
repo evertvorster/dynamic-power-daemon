@@ -35,8 +35,6 @@ private:
     static QString selectSameResModeId(const Output& o, const QString& policyLower);
     static bool applyMode(const QString& outId, const QString& modeId);
     static QStringList probeCurrentRefreshStrings();
-
-    static QString normalizePolicy(const QString& s);
 };
 
 } // namespace dp::features

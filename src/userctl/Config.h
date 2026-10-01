@@ -17,6 +17,10 @@ class Config : public QObject {         // derive from QObject
     Q_OBJECT
 public:
     Config();
+    // ~/.config/dynamic_power/config.yaml. The one definition: the user features
+    // and the settings dialog both need it, and it was previously built in three
+    // places, two of which used a different QStandardPaths enum.
+    static QString userConfigPath();
     static void normalizeThresholds(double& low, double& high, double minGap = 0.5);
     void ensureExists();
     bool load();

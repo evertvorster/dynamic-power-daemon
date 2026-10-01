@@ -2,6 +2,7 @@
 #include "Config.h"
 #include <QStandardPaths>
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QTextStream>
 #include <yaml-cpp/yaml.h>
@@ -11,11 +12,14 @@
 
 static const char* FILENAME_PRIMARY = "config.yaml";
 
+QString Config::userConfigPath() {
+    return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+           + "/dynamic_power/" + FILENAME_PRIMARY;
+}
+
 Config::Config() {
-    QString cfgDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/dynamic_power";
-    QDir().mkpath(cfgDir);
-    QString primary = cfgDir + "/" + FILENAME_PRIMARY;
-    m_path = primary;  // Always use ~/.config/dynamic_power/config.yaml
+    m_path = userConfigPath();
+    QDir().mkpath(QFileInfo(m_path).absolutePath());
     startWatching();
 }
 

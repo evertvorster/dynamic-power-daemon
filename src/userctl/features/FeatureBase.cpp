@@ -1,13 +1,14 @@
 // File: src/userctl/features/FeatureBase.cpp
 #include "FeatureBase.h"
 
-#include <QStandardPaths>
+#include "../Config.h"
 
 namespace dp::features {
 
 QString FeatureBase::configPath() {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    return base + "/dynamic_power/config.yaml";
+    // Delegated so there is only one definition of the user config path. Config is
+    // the natural owner: it is what opens and watches that file.
+    return Config::userConfigPath();
 }
 
 QString FeatureBase::normalizePolicy(const QString& s) {

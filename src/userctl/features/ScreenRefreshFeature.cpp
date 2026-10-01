@@ -60,8 +60,8 @@ bool ScreenRefreshFeature::writeState(const State& s) const {
     if (!sr || !sr.IsMap()) sr = YAML::Node(YAML::NodeType::Map);
 
     sr[K::enabled] = s.enabled;
-    sr[K::ac]      = normalizePolicy(s.ac).toStdString();
-    sr[K::battery] = normalizePolicy(s.battery).toStdString();
+    sr[K::ac]      = FB::normalizePolicy(s.ac).toStdString();
+    sr[K::battery] = FB::normalizePolicy(s.battery).toStdString();
 
     user[K::screen_refresh] = sr;
     features[K::user] = user;
@@ -86,7 +86,7 @@ QString ScreenRefreshFeature::statusText() const {
 
 void ScreenRefreshFeature::applyForPowerState(bool onBattery) const {
     const auto st = readState();
-    const QString policy = normalizePolicy(onBattery ? st.battery : st.ac); // "min"|"max"|"unchanged"
+    const QString policy = FB::normalizePolicy(onBattery ? st.battery : st.ac); // "min"|"max"|"unchanged"
     if (st.enabled && policy != QStringLiteral("unchanged")) {
         const auto outs = readOutputs();
         for (const auto& o : outs) {
@@ -236,10 +236,6 @@ QStringList ScreenRefreshFeature::probeCurrentRefreshStrings() {
         if (hz > 0.0) out << QStringLiteral("%1 %2 Hz").arg(name).arg(hz, 0, 'f', 1);
     }
     return out;
-}
-
-QString ScreenRefreshFeature::normalizePolicy(const QString& s) {
-    return FeatureBase::normalizePolicy(s);
 }
 
 } // namespace dp::features
