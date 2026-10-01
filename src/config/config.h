@@ -5,7 +5,7 @@
 #include <vector>
 #include <map>
 
-static const inline QString DEFAULT_CONFIG_PATH = "/etc/dynamic_power.yaml";
+#include "common/config_paths.h"   // DEFAULT_CONFIG_PATH
 
 struct Thresholds {
     double low = 0.0;

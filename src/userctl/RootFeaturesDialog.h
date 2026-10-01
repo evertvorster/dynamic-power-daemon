@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/config_paths.h"
+
 #include <QDialog>
 #include <QMap>
 #include <QString>
@@ -27,7 +29,7 @@ class RootFeaturesDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit RootFeaturesDialog(QWidget* parent, const QString& etcPath = "/etc/dynamic_power.yaml");
+    explicit RootFeaturesDialog(QWidget* parent, const QString& etcPath = DEFAULT_CONFIG_PATH);
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 private:

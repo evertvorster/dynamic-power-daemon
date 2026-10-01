@@ -1,4 +1,6 @@
 #pragma once
+
+#include "common/config_paths.h"
 #include <QDialog>
 #include <QMap>
 #include <QString>
@@ -24,7 +26,7 @@ class ProfileConfigDialog : public QDialog {
     Q_OBJECT
 public:
     explicit ProfileConfigDialog(QWidget* parent = nullptr,
-                                 const QString& configPath = "/etc/dynamic_power.yaml");
+                                 const QString& configPath = DEFAULT_CONFIG_PATH);
     ~ProfileConfigDialog() override;   // make dtor public so stack allocation works
 private slots:
     void onSave();

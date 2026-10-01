@@ -3,6 +3,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include "common/config_paths.h"
 
 namespace dp::features {
 
@@ -35,7 +36,7 @@ public:
         QVector<Node> nodes;
     };
 
-    explicit RootCompositeFeature(const QString& etcPath = QStringLiteral("/etc/dynamic_power.yaml"));
+    explicit RootCompositeFeature(const QString& etcPath = DEFAULT_CONFIG_PATH);
     const QString& etcPath() const { return m_etcPath; }
 
     State read() const;

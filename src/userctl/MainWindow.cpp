@@ -18,6 +18,7 @@
 #include <QSizePolicy>
 #include <QSpacerItem>
 #include <QVBoxLayout>
+#include "common/config_paths.h"
 
 MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     : QMainWindow(parent), m_dbus(dbus), m_config(config)
@@ -40,7 +41,7 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
     auto* profileBtn = new QPushButton("Profile Configuration", this);
     layout->addWidget(profileBtn);
     connect(profileBtn, &QPushButton::clicked, this, [this] {
-        ProfileConfigDialog dlg(this, "/etc/dynamic_power.yaml");
+        ProfileConfigDialog dlg(this, DEFAULT_CONFIG_PATH);
         dlg.exec();
     });
 
@@ -52,7 +53,7 @@ MainWindow::MainWindow(DbusClient* dbus, Config* config, QWidget* parent)
             m_rootDialog->activateWindow();
             return;
         }
-        m_rootDialog = new RootFeaturesDialog(this, "/etc/dynamic_power.yaml");
+        m_rootDialog = new RootFeaturesDialog(this, DEFAULT_CONFIG_PATH);
         m_rootDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         connect(m_rootDialog, &QObject::destroyed, this, [this] { m_rootDialog = nullptr; });
         m_rootDialog->show();

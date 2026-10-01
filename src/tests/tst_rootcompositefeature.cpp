@@ -141,7 +141,8 @@ void TestRootCompositeFeature::writingLeavesTheOtherSectionsAlone()
 
     const QString after = QString::fromUtf8([&] {
         QFile f(path);
-        f.open(QIODevice::ReadOnly);
+        if (!f.open(QIODevice::ReadOnly))
+            return QByteArray();
         return f.readAll();
     }());
 
@@ -169,7 +170,8 @@ void TestRootCompositeFeature::writingReplacesTheLegacyListWithNodes()
 
     const QString after = QString::fromUtf8([&] {
         QFile f(path);
-        f.open(QIODevice::ReadOnly);
+        if (!f.open(QIODevice::ReadOnly))
+            return QByteArray();
         return f.readAll();
     }());
 
